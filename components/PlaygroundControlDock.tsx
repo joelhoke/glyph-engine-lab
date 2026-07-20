@@ -1,13 +1,13 @@
 'use client'
 
-import { ReactNode, useEffect, useId, useRef, useState } from 'react'
+import { cloneElement, isValidElement, ReactElement, ReactNode, useEffect, useId, useRef, useState } from 'react'
 import { BorderBeam } from 'border-beam'
 
 type PlaygroundDockState = 'invitation' | 'controls'
 
 type PlaygroundControlDockProps = {
   invitation: ReactNode
-  controls: ReactNode
+  controls: ReactElement<any>
 }
 
 /**
@@ -70,11 +70,10 @@ export default function PlaygroundControlDock({ invitation, controls }: Playgrou
                 {invitation}
               </PlaygroundInvitation>
             ) : (
-              <PlaygroundControlsPane
-                firstControlRef={firstControlRef}
-                onClose={handleClose}
-              >
-                {controls}
+              <PlaygroundControlsPane onClose={handleClose}>
+                {isValidElement(controls)
+                  ? cloneElement(controls, { ref: firstControlRef } as any)
+                  : controls}
               </PlaygroundControlsPane>
             )}
           </div>
@@ -110,11 +109,10 @@ function PlaygroundInvitation({ children, startCreatingRef, onOpen }: Playground
 
 type PlaygroundControlsPaneProps = {
   children: ReactNode
-  firstControlRef: React.RefObject<HTMLTextAreaElement>
   onClose: () => void
 }
 
-function PlaygroundControlsPane({ children, firstControlRef, onClose }: PlaygroundControlsPaneProps) {
+function PlaygroundControlsPane({ children, onClose }: PlaygroundControlsPaneProps) {
   const paneRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {

@@ -11,6 +11,11 @@ import {
   APPROVED_PLAYGROUND_DEFAULTS,
   PlaygroundConfig,
 } from '../engine/playgroundConfig'
+import {
+  DEFAULT_UPLOADED_SVG_FILENAME,
+  readUploadedSvg,
+  SvgUploadSuccessResult,
+} from '../engine/svgUpload'
 import PlaygroundControls from './PlaygroundControls'
 import {
   APPROVED_SCENE_DEFAULTS,
@@ -110,6 +115,9 @@ export default function PortfolioExperience({ mode = 'portfolio' }: PortfolioExp
   const [playgroundConfig, setPlaygroundConfig] = useState<PlaygroundConfig>(() => ({
     ...APPROVED_PLAYGROUND_DEFAULTS,
   }))
+
+  const [uploadedSvg, setUploadedSvg] = useState<SvgUploadSuccessResult | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
   // Animation-facing sequence state: updated every RAF tick for smooth progress.
   const sequenceRef = useRef<IntroSequenceSnapshot>(
@@ -480,6 +488,18 @@ export default function PortfolioExperience({ mode = 'portfolio' }: PortfolioExp
 
   const handleResetPlaygroundConfig = () => {
     setPlaygroundConfig({ ...APPROVED_PLAYGROUND_DEFAULTS })
+    setUploadedSvg(null)
+    setUploadError(null)
+  }
+
+  const handleUploadSvg = async (file: File) => {
+    const result = await readUploadedSvg(file)
+    if (result.ok) {
+      setUploadedSvg(result)
+      setUploadError(null)
+    } else {
+      setUploadError(result.error)
+    }
   }
 
   return (
@@ -491,6 +511,7 @@ export default function PortfolioExperience({ mode = 'portfolio' }: PortfolioExp
         particleRepel={sceneConfig.particleRepel}
         weatherRepelMult={sceneConfig.weatherRepelMult}
         sourceLayout={sourceLayout}
+        uploadedSvgUrl={uploadedSvg?.url}
         playgroundConfig={playgroundConfig}
         onDiagnosticsUpdate={(patch) => {
           if (typeof patch.targetCount === 'number') {
@@ -524,8 +545,11 @@ export default function PortfolioExperience({ mode = 'portfolio' }: PortfolioExp
           controls={
             <PlaygroundControls
               config={playgroundConfig}
+              uploadedFilename={uploadedSvg?.filename ?? DEFAULT_UPLOADED_SVG_FILENAME}
+              uploadError={uploadError}
               onChange={handlePlaygroundConfigChange}
               onReset={handleResetPlaygroundConfig}
+              onUpload={handleUploadSvg}
             />
           }
         />
