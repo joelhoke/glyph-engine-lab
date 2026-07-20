@@ -96,7 +96,7 @@ export function sampleRowBand(paletteLength: number, normalizedY: number): numbe
  * so the field still has a deterministic color pattern.
  */
 export const DEFAULT_WORD_CYCLE_TEXT =
-  "Voilà! In View, a humble Vaudevillian Veteran, cast Vicariously as both Victim and Villain by the Vicissitudes of fate."
+  "Voilà! In view, a humble vaudevillian veteran cast vicariously as both victim and villain by the vicissitudes of Fate... you may call me 'V'."
 
 export function buildWordColorIndices(
   sourceText: string,

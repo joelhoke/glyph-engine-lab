@@ -11,6 +11,7 @@ export type PlaygroundConfig = {
   backgroundColor2: string
   glyphFont: string
   glyphColorMode: GlyphColorMode
+  glyphScale: number
 }
 
 export const GLYPH_COLOR_MODE_OPTIONS: { value: GlyphColorMode; label: string }[] = [
@@ -33,7 +34,7 @@ export const MAX_GLYPH_PALETTE_SIZE = 6
 
 export const APPROVED_PLAYGROUND_DEFAULTS: PlaygroundConfig = {
   glyphText:
-    "Voilà! In View, a humble Vaudevillian Veteran, cast Vicariously as both Victim and Villain by the Vicissitudes of fate. This Visage, no mere Veneer of Vanity, is a Vestige of the Vox populi, now Vacant, Vanished.",
+    "Voilà! In view, a humble vaudevillian veteran cast vicariously as both victim and villain by the vicissitudes of Fate... you may call me 'V'.",
   glyphPalette: [
     '#ff0000',
     '#ff8800',
@@ -46,4 +47,5 @@ export const APPROVED_PLAYGROUND_DEFAULTS: PlaygroundConfig = {
   backgroundColor2: '#12121a',
   glyphFont: "'Cutive Mono', monospace",
   glyphColorMode: 'image-gradient',
+  glyphScale: 1,
 }
