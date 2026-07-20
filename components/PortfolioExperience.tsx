@@ -6,6 +6,7 @@ import PrimaryActions, { ExperienceKey, PRIMARY_ACTION_COUNT } from './PrimaryAc
 import {
   evaluateIntroSequence,
   getPhaseStartTime,
+  getPrimaryActionProgresses,
   getStaggeredItemProgress,
   getTotalDuration,
   IntroPhase,
@@ -136,27 +137,33 @@ export default function PortfolioExperience() {
 
       const optionsVisible = sequence.optionsVisible
       const optionsReady = sequence.optionsReady
-      const phaseElapsedMs = sequence.phaseElapsedMs
       const { optionsTransitionDuration, optionStagger } = portfolioIntroPreset.timing
 
-      let timingFallbackActive = false
-      const itemProgresses: number[] = []
+      const itemProgresses = getPrimaryActionProgresses(
+        sequence,
+        PRIMARY_ACTION_COUNT,
+        portfolioIntroPreset.timing,
+      )
+
+      const { effectiveStaggerMs, itemDurationMs } = getStaggeredItemProgress({
+        phaseElapsedMs: sequence.phaseElapsedMs,
+        groupDurationMs: optionsTransitionDuration,
+        staggerMs: optionStagger,
+        itemIndex: 0,
+        itemCount: PRIMARY_ACTION_COUNT,
+      })
+      const timingFallbackActive =
+        effectiveStaggerMs !== optionStagger ||
+        itemDurationMs !==
+          Math.max(
+            0,
+            optionsTransitionDuration - optionStagger * (PRIMARY_ACTION_COUNT - 1),
+          )
 
       for (let i = 0; i < PRIMARY_ACTION_COUNT; i += 1) {
-        const { progress, effectiveStaggerMs, itemDurationMs } = getStaggeredItemProgress({
-          phaseElapsedMs,
-          groupDurationMs: optionsTransitionDuration,
-          staggerMs: optionStagger,
-          itemIndex: i,
-          itemCount: PRIMARY_ACTION_COUNT,
-        })
-        if (i === 0) {
-          timingFallbackActive =
-            effectiveStaggerMs !== optionStagger || itemDurationMs !== Math.max(0, optionsTransitionDuration - optionStagger * (PRIMARY_ACTION_COUNT - 1))
-        }
+        const progress = itemProgresses[i] ?? 0
         const eased = optionsVisible ? easeOutCubic(progress) : 0
         node.style.setProperty(`--option-progress-${i}`, String(eased))
-        itemProgresses.push(progress)
       }
 
       const groupHidden = !optionsVisible || itemProgresses.every((p) => p <= 0)
@@ -332,20 +339,18 @@ export default function PortfolioExperience() {
     }
 
     const actionsNode = actionsRef.current
+    const optionItemProgress = getPrimaryActionProgresses(
+      next,
+      PRIMARY_ACTION_COUNT,
+      portfolioIntroPreset.timing,
+    )
+
     if (actionsNode) {
-      const itemProgresses: number[] = []
       for (let i = 0; i < PRIMARY_ACTION_COUNT; i += 1) {
-        const { progress } = getStaggeredItemProgress({
-          phaseElapsedMs: next.phaseElapsedMs,
-          groupDurationMs: portfolioIntroPreset.timing.optionsTransitionDuration,
-          staggerMs: portfolioIntroPreset.timing.optionStagger,
-          itemIndex: i,
-          itemCount: PRIMARY_ACTION_COUNT,
-        })
+        const progress = optionItemProgress[i] ?? 0
         actionsNode.style.setProperty(`--option-progress-${i}`, String(easeOutCubic(next.optionsVisible ? progress : 0)))
-        itemProgresses.push(progress)
       }
-      const groupHidden = !next.optionsVisible || itemProgresses.every((p) => p <= 0)
+      const groupHidden = !next.optionsVisible || optionItemProgress.every((p) => p <= 0)
       actionsNode.classList.toggle('options-hidden', groupHidden)
       actionsNode.classList.toggle('options-inert', !next.optionsReady)
       actionsNode.setAttribute('aria-hidden', String(!next.optionsVisible))
@@ -362,15 +367,7 @@ export default function PortfolioExperience() {
       optionsProgress: next.optionsVisible ? next.optionsProgress : 0,
       optionsVisible: next.optionsVisible,
       optionsReady: next.optionsReady,
-      optionItemProgress: Array(PRIMARY_ACTION_COUNT).fill(0).map((_, i) =>
-        getStaggeredItemProgress({
-          phaseElapsedMs: next.phaseElapsedMs,
-          groupDurationMs: portfolioIntroPreset.timing.optionsTransitionDuration,
-          staggerMs: portfolioIntroPreset.timing.optionStagger,
-          itemIndex: i,
-          itemCount: PRIMARY_ACTION_COUNT,
-        }).progress,
-      ),
+      optionItemProgress,
       actionsInert: !next.optionsReady,
     }))
   }

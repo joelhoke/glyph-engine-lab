@@ -92,6 +92,17 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   transform: translateY(var(--option-translate));
   will-change: opacity, transform;
 }
+
+/* Map per-item progress to stable action indices from authored action data. */
+.primary-action-beam[data-action-index="0"] {
+  --option-progress: var(--option-progress-0, 0);
+}
+.primary-action-beam[data-action-index="1"] {
+  --option-progress: var(--option-progress-1, 0);
+}
+.primary-action-beam[data-action-index="2"] {
+  --option-progress: var(--option-progress-2, 0);
+}
 .primary-action-beam {
   display: inline-flex;
   width: 100%;
