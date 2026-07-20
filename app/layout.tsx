@@ -1,7 +1,11 @@
 import './globals.css'
 
 export const metadata = {
-  title: 'Pretext Animated Landing',
+  title: 'joel hoke design – speak softly and carry great work',
+  icons: {
+    icon: { url: '/favicon-32x32.png', type: 'image/png', sizes: '28x32' },
+    apple: { url: '/apple-icon-180x180.png', type: 'image/png', sizes: '161x180' },
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
