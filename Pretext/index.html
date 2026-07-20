@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pretext Animated Landing</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cutive+Mono&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a0a0a; overflow-x: hidden; font-family: 'Cutive Mono', monospace; }
+    canvas { display: block; }
+    #controls {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 12px; z-index: 10;
+    }
+    #controls button {
+      padding: 8px 16px; border: 1px solid #444; border-radius: 6px;
+      background: #1a1a1a; color: #ccc; cursor: pointer; font-size: 14px;
+    }
+    #controls button:hover { background: #333; }
+    #controls button.active { border-color: #8af; color: #8af; }
+    #controls label { color: #888; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+    #controls input[type=range] { width: 100px; accent-color: #8af; }
+    #controls select {
+      padding: 4px 8px; border: 1px solid #444; border-radius: 6px;
+      background: #1a1a1a; color: #ccc; font-size: 13px; cursor: pointer;
+    }
+    .control-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
+    .control-row + .control-row { margin-top: 8px; }
+    .repel-object {
+      position: fixed; width: 100px; height: 100px;
+      border: 2px solid rgba(140, 170, 255, 0.5); border-radius: 8px;
+      background: rgba(140, 170, 255, 0.08);
+      cursor: grab; z-index: 5; user-select: none;
+    }
+    .repel-object:active { cursor: grabbing; border-color: rgba(140, 170, 255, 0.8); }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="repelSquare" class="repel-object" style="top:200px;left:200px"></div>
+  <div id="controls">
+    <div class="control-row">
+      <button id="btnShuffle">Shuffle</button>
+      <button id="btnMatrix">Matrix Off</button>
+      <button id="btnWeather">Weather Off</button>
+      <select id="weatherPreset">
+        <option value="clear">Clear</option>
+        <option value="rain" selected>Rain</option>
+        <option value="storm">Storm</option>
+        <option value="snow">Snow</option>
+        <option value="blizzard">Blizzard</option>
+        <option value="fog">Fog</option>
+        <option value="wind">Wind</option>
+      </select>
+      <button id="btnLive">Live Weather</button>
+      <label>Size <input id="sizeSlider" type="range" min="12" max="72" value="24"> <span id="sizeVal">24px</span></label>
+      <label>Text <input id="textSlider" type="range" min="1" max="100" value="100"> <span id="textVal">100%</span></label>
+      <label>Repel <input id="repelSlider" type="range" min="20" max="300" value="100"> <span id="repelVal">100</span></label>
+    </div>
+    <div class="control-row" id="matrixControls" style="display:none">
+      <label>Spread <input id="spreadSlider" type="range" min="50" max="200" value="100"> <span id="spreadVal">100</span></label>
+      <label>Speed <input id="speedSlider" type="range" min="30" max="220" value="100"> <span id="speedVal">100</span></label>
+      <label>Volume <input id="volumeSlider" type="range" min="20" max="200" value="100"> <span id="volumeVal">100</span></label>
+    </div>
+    <div class="control-row" id="weatherControls" style="display:none">
+      <label>Wind <input id="windSlider" type="range" min="0" max="200" value="50"> <span id="windVal">50</span></label>
+      <label>Intensity <input id="intensitySlider" type="range" min="0" max="200" value="100"> <span id="intensityVal">100</span></label>
+      <label>Turbulence <input id="turbulenceSlider" type="range" min="0" max="200" value="60"> <span id="turbulenceVal">60</span></label>
+      <label>Blur <input id="blurSlider" type="range" min="0" max="500" value="25"> <span id="blurVal">25</span></label>
+    </div>
+  </div>
+
+  <script type="module">
+    import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+    // ── Config ──────────────────────────────────────────────
+    const QUOTE = "Voilà! In View, a humble Vaudevillian Veteran, cast Vicariously as both Victim and Villain by the Vicissitudes of fate. This Visage, no mere Veneer of Vanity, is a Vestige of the Vox populi, now Vacant, Vanished. However, this Valorous Visitation of a bygone Vexation stands Vivified, and has Vowed to Vanquish these Venal and Virulent Vermin Vanguarding Vice and Vouchsafing the Violently Vicious and Voracious Violation of Volition. The only Verdict is Vengeance; a Vendetta held as a Votive, not in Vain, for the Value and Veracity of such shall one day Vindicate the Vigilant and the Virtuous. Verily, this Vichyssoise of Verbiage Veers most Verbose, so let me simply add that it's my very good honor to meet you and you may call me V."
+    const FULL_TEXT = Array(25).fill(QUOTE).join(' ')
+
+    let fontSize = 24
+    let lineHeight = 34
+    let font = `400 ${fontSize}px 'Cutive Mono'`
+
+    // Shared spring physics for both modes
+    const SPRING = 0.03
+    const DAMP = 0.85
+    let MOUSE_R = 100
+    const MOUSE_F = 4
+
+    // Matrix controls
+    let matrixSpread = 100
+    let matrixSpeed = 100
+    let matrixVolume = 100
+    const FALL_SPEED_MIN = 0.35
+    const FALL_SPEED_MAX = 1.45
+    const HEAD_GLOW_BOOST = 0.45
+
+    // Weather state
+    let weatherEnabled = false
+    let liveWeatherActive = false
+    let liveWeatherTimer = null
+    let weatherPreset = 'rain'
+    let weatherWindSlider = 50
+    let weatherIntensity = 100
+    let weatherTurbulence = 60
+    let lightningFlash = 0
+    let weatherBlurRadius = 25
+    let weatherParticles = [] // dedicated scene particles
+
+    const TYPEWRITER_CPS = 140
+
+    // ── State ───────────────────────────────────────────────
+    const canvas = document.getElementById('c')
+    const ctx = canvas.getContext('2d')
+
+    // Offscreen buffer for fog — draw chars here, then blit with ctx.filter = 'blur()'
+    // to create an organic, GPU-accelerated haze. Sized to viewport on resize.
+    const fogBuf = document.createElement('canvas')
+    const fogBufCtx = fogBuf.getContext('2d')
+    function sizeFogBuf() {
+      const W = window.innerWidth, H = window.innerHeight
+      fogBuf.width = W
+      fogBuf.height = H
+    }
+    sizeFogBuf()
+
+    // Trail buffer — particles draw here, layer fades via destination-out so
+    // the mesh background underneath stays untouched. Reused across any mode
+    // that wants ghost trails over a static gradient.
+    const trailBuf = document.createElement('canvas')
+    const trailBufCtx = trailBuf.getContext('2d')
+    function sizeTrailBuf() {
+      trailBuf.width = window.innerWidth
+      trailBuf.height = window.innerHeight
+    }
+    sizeTrailBuf()
+
+    // Pre-rendered mesh gradient backgrounds.
+    // Built once per resize, then blitted as the background — zero per-frame cost.
+    const meshBgs = {} // { presetName: canvas }
+
+    function buildMeshBg(colorA, colorB, base) {
+      const W = window.innerWidth, H = window.innerHeight
+      const cv = document.createElement('canvas')
+      cv.width = W
+      cv.height = H
+      const c = cv.getContext('2d')
+      c.fillStyle = base
+      c.fillRect(0, 0, W, H)
+      const blobs = [
+        { x: W * 0.15, y: H * 0.20, r: Math.max(W, H) * 0.7, color: colorA },
+        { x: W * 0.85, y: H * 0.10, r: Math.max(W, H) * 0.6, color: colorB },
+        { x: W * 0.75, y: H * 0.85, r: Math.max(W, H) * 0.8, color: colorB },
+        { x: W * 0.10, y: H * 0.95, r: Math.max(W, H) * 0.55, color: colorA },
+        { x: W * 0.50, y: H * 0.50, r: Math.max(W, H) * 0.45, color: base },
+      ]
+      for (const b of blobs) {
+        const g = c.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r)
+        g.addColorStop(0, b.color)
+        g.addColorStop(1, b.color + '00')
+        c.fillStyle = g
+        c.fillRect(0, 0, W, H)
+      }
+      return cv
+    }
+
+    function buildAllMeshBgs() {
+      meshBgs.clear    = buildMeshBg('#DDEBEE', '#F2E6D8', '#EAE2DC')
+      meshBgs.rain     = buildMeshBg('#012840', '#364F59', '#1A3A4A')
+      meshBgs.storm    = buildMeshBg('#070926', '#281259', '#170E40')
+      meshBgs.wind     = buildMeshBg('#6D808C', '#BDAC89', '#94968C')
+      meshBgs.fog      = buildMeshBg('#6E6E6E', '#222222', '#454545')
+      meshBgs.snow     = buildMeshBg('#0D0D0D', '#1C2B3E', '#141C2A')
+    }
+    buildAllMeshBgs()
+    let mouseX = -9999, mouseY = -9999
+    let textAmount = 1.0
+    let typewriterStart = 0
+    let totalChars = 0
+    let matrixEnabled = false
+    let preparedText = null
+    let sourceChars = []
+
+    // Runtime buffers
+    let paragraphTargets = []
+    let matrixSlots = []
+    let columns = []
+    // { char, tx, ty, x, y, vx, vy, hue, row, head }
+    let particles = []
+
+    // ── Controls ────────────────────────────────────────────
+    const matrixControlsEl = document.getElementById('matrixControls')
+    const weatherControlsEl = document.getElementById('weatherControls')
+
+    function updateControlVisibility() {
+      matrixControlsEl.style.display = matrixEnabled ? 'flex' : 'none'
+      weatherControlsEl.style.display = weatherEnabled ? 'flex' : 'none'
+    }
+
+    btnShuffle.onclick = () => {
+      typewriterStart = performance.now()
+      if (matrixEnabled) buildMatrixStructure()
+    }
+
+    btnMatrix.onclick = () => {
+      matrixEnabled = !matrixEnabled
+      if (matrixEnabled) weatherEnabled = false
+      btnMatrix.textContent = matrixEnabled ? 'Matrix On' : 'Matrix Off'
+      btnMatrix.classList.toggle('active', matrixEnabled)
+      btnWeather.textContent = 'Weather Off'
+      btnWeather.classList.remove('active')
+      if (matrixEnabled) buildMatrixStructure()
+      resize()
+      updateControlVisibility()
+    }
+
+    btnWeather.onclick = () => {
+      weatherEnabled = !weatherEnabled
+      if (weatherEnabled) matrixEnabled = false
+      btnWeather.textContent = weatherEnabled ? 'Weather On' : 'Weather Off'
+      btnWeather.classList.toggle('active', weatherEnabled)
+      btnMatrix.textContent = 'Matrix Off'
+      btnMatrix.classList.remove('active')
+      if (weatherEnabled) applyWeatherPreset(weatherPreset)
+      resize()
+      updateControlVisibility()
+    }
+
+    weatherPreset = document.getElementById('weatherPreset').value
+    document.getElementById('weatherPreset').onchange = (e) => {
+      weatherPreset = e.target.value
+      if (liveWeatherActive) {
+        liveWeatherActive = false
+        btnLive.classList.remove('active')
+        btnLive.textContent = 'Live Weather'
+        if (liveWeatherTimer) { clearInterval(liveWeatherTimer); liveWeatherTimer = null }
+      }
+      applyWeatherPreset(weatherPreset)
+    }
+
+    btnLive.onclick = () => {
+      liveWeatherActive = !liveWeatherActive
+      btnLive.classList.toggle('active', liveWeatherActive)
+      btnLive.textContent = liveWeatherActive ? 'Live ✓' : 'Live Weather'
+      if (liveWeatherActive) {
+        if (!weatherEnabled) { btnWeather.click() }
+        fetchLiveWeather()
+        liveWeatherTimer = setInterval(fetchLiveWeather, 5 * 60 * 1000)
+      } else {
+        if (liveWeatherTimer) { clearInterval(liveWeatherTimer); liveWeatherTimer = null }
+        applyWeatherPreset(weatherPreset)
+      }
+    }
+
+    function applyWeatherPreset(name) {
+      weatherPreset = name
+      buildWeatherParticles()
+    }
+
+    async function fetchLiveWeather() {
+      try {
+        const pos = await new Promise((res, rej) =>
+          navigator.geolocation.getCurrentPosition(
+            p => res(p.coords),
+            () => res({ latitude: 40.71, longitude: -74.01 }),
+            { timeout: 5000 }
+          )
+        )
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${pos.latitude}&longitude=${pos.longitude}&current=temperature_2m,wind_speed_10m,wind_direction_10m,precipitation,cloud_cover,weather_code`
+        const resp = await fetch(url)
+        const data = await resp.json()
+        const c = data.current
+        const wc = c.weather_code
+
+        let base
+        if (wc >= 95) base = 'storm'
+        else if (wc >= 71 && wc <= 77) base = 'snow'
+        else if (wc >= 51 && wc <= 67) base = 'rain'
+        else if (wc >= 45 && wc <= 48) base = 'fog'
+        else if ((c.wind_speed_10m || 0) > 30) base = 'wind'
+        else base = 'clear'
+
+        document.getElementById('weatherPreset').value = base
+        applyWeatherPreset(base)
+      } catch (e) {
+        console.warn('Live weather fetch failed:', e)
+      }
+    }
+
+    function buildWeatherParticles() {
+      const W = window.innerWidth
+      const H = window.innerHeight
+      const intFactor = weatherIntensity / 100
+      const volFactor = weatherTurbulence / 60
+      weatherParticles = []
+
+      if (weatherPreset === 'rain' || weatherPreset === 'storm') {
+        const count = weatherPreset === 'rain'
+          ? Math.floor(120 * volFactor * intFactor)
+          : Math.floor(300 * volFactor * intFactor)
+        for (let i = 0; i < count; i++) {
+          const speed = weatherPreset === 'rain'
+            ? 1.5 + Math.random() * 2.5 * intFactor
+            : 2.5 + Math.random() * 5 * intFactor
+          const drift = weatherPreset === 'storm'
+            ? 1.5 + Math.random() * 2.5
+            : (Math.random() - 0.45) * 0.4
+          weatherParticles.push({
+            x: Math.random() * W,
+            y: -Math.random() * H * 1.5,
+            homeX: Math.random() * W,
+            speed, drift,
+            vx: 0, vy: 0,
+            char: sourceChars[Math.floor(Math.random() * sourceChars.length)] || '|',
+            alpha: 0.2 + Math.random() * 0.55,
+          })
+        }
+      } else if (weatherPreset === 'snow') {
+        const count = Math.floor(300 * volFactor * intFactor)
+        for (let i = 0; i < count; i++) {
+          weatherParticles.push({
+            x: Math.random() * W, y: Math.random() * H,
+            homeX: Math.random() * W,
+            speed: 0.3 + Math.random() * 0.7,
+            drift: 0, vx: 0, vy: 0,
+            sway: Math.random() * Math.PI * 2,
+            swaySpeed: 0.3 + Math.random() * 0.5,
+            swayAmp: 20 + Math.random() * 40,
+            char: sourceChars[Math.floor(Math.random() * sourceChars.length)] || '*',
+            alpha: 0.3 + Math.random() * 0.6,
+            size: 0.6 + Math.random() * 0.8,
+          })
+        }
+      } else if (weatherPreset === 'blizzard') {
+        // Blizzard: lots of fast snow + storm diagonal wind
+        const count = Math.floor(200 * volFactor * intFactor)
+        for (let i = 0; i < count; i++) {
+          weatherParticles.push({
+            x: Math.random() * W, y: -Math.random() * H,
+            homeX: Math.random() * W,
+            speed: 1.5 + Math.random() * 3,
+            drift: 1.2 + Math.random() * 2,
+            vx: 0, vy: 0,
+            sway: Math.random() * Math.PI * 2,
+            swaySpeed: 0.5 + Math.random() * 1.0,
+            swayAmp: 15 + Math.random() * 30,
+            char: sourceChars[Math.floor(Math.random() * sourceChars.length)] || '*',
+            alpha: 0.25 + Math.random() * 0.55,
+            size: 0.5 + Math.random() * 0.7,
+          })
+        }
+      } else if (weatherPreset === 'fog') {
+        const layers = 4
+        const perLayer = Math.floor(60 * volFactor)
+        for (let l = 0; l < layers; l++) {
+          const speed = (0.1 + l * 0.15) * (weatherWindSlider / 50)
+          const baseAlpha = 0.06 + l * 0.04
+          for (let i = 0; i < perLayer; i++) {
+            weatherParticles.push({
+              x: Math.random() * W * 1.5 - W * 0.25,
+              y: Math.random() * H,
+              homeX: 0, speed, drift: 0, vx: 0, vy: 0,
+              char: sourceChars[Math.floor(Math.random() * sourceChars.length)] || '~',
+              alpha: baseAlpha + Math.random() * 0.08,
+              layer: l,
+              size: 1 + l * 0.3,
+            })
+          }
+        }
+      } else if (weatherPreset === 'wind') {
+        const count = Math.floor(200 * volFactor * intFactor)
+        for (let i = 0; i < count; i++) {
+          weatherParticles.push({
+            x: Math.random() * W * 1.5, y: Math.random() * H,
+            homeX: 0, speed: 3 + Math.random() * 6,
+            drift: (Math.random() - 0.5) * 0.5,
+            vx: 0, vy: 0,
+            char: sourceChars[Math.floor(Math.random() * sourceChars.length)] || '-',
+            alpha: 0.2 + Math.random() * 0.5,
+            streak: 1 + Math.random() * 2,
+          })
+        }
+      } else { // clear
+        const count = Math.floor(120 * volFactor)
+        for (let i = 0; i < count; i++) {
+          weatherParticles.push({
+            x: Math.random() * W, y: Math.random() * H,
+            homeX: Math.random() * W, homeY: Math.random() * H,
+            speed: 0.1 + Math.random() * 0.3,
+            drift: 0, vx: 0, vy: 0,
+            phase: Math.random() * Math.PI * 2,
+            char: sourceChars[Math.floor(Math.random() * sourceChars.length)] || '.',
+            alpha: 0.15 + Math.random() * 0.3,
+          })
+        }
+      }
+    }
+
+    const sizeSlider = document.getElementById('sizeSlider')
+    const sizeVal = document.getElementById('sizeVal')
+    sizeSlider.oninput = () => {
+      fontSize = parseInt(sizeSlider.value)
+      lineHeight = Math.round(fontSize * 1.42)
+      font = `400 ${fontSize}px 'Cutive Mono'`
+      sizeVal.textContent = fontSize + 'px'
+      fullRebuild()
+    }
+
+    const textSlider = document.getElementById('textSlider')
+    const textVal = document.getElementById('textVal')
+    textSlider.oninput = () => {
+      textAmount = parseInt(textSlider.value) / 100
+      textVal.textContent = textSlider.value + '%'
+      fullRebuild()
+    }
+
+    const repelSlider = document.getElementById('repelSlider')
+    const repelVal = document.getElementById('repelVal')
+    repelSlider.oninput = () => {
+      MOUSE_R = parseInt(repelSlider.value)
+      repelVal.textContent = repelSlider.value
+    }
+
+    const spreadSlider = document.getElementById('spreadSlider')
+    const spreadVal = document.getElementById('spreadVal')
+    spreadSlider.oninput = () => {
+      matrixSpread = parseInt(spreadSlider.value)
+      spreadVal.textContent = spreadSlider.value
+      buildMatrixStructure()
+    }
+
+    const speedSlider = document.getElementById('speedSlider')
+    const speedVal = document.getElementById('speedVal')
+    speedSlider.oninput = () => {
+      matrixSpeed = parseInt(speedSlider.value)
+      speedVal.textContent = speedSlider.value
+    }
+
+    const volumeSlider = document.getElementById('volumeSlider')
+    const volumeVal = document.getElementById('volumeVal')
+    volumeSlider.oninput = () => {
+      matrixVolume = parseInt(volumeSlider.value)
+      volumeVal.textContent = volumeSlider.value
+      buildMatrixStructure()
+    }
+
+    // ── Weather sliders ─────────────────────────────────────
+    const windSlider = document.getElementById('windSlider')
+    const windValEl = document.getElementById('windVal')
+    windSlider.oninput = () => {
+      weatherWindSlider = parseInt(windSlider.value)
+      windValEl.textContent = windSlider.value
+    }
+
+    const intensitySlider = document.getElementById('intensitySlider')
+    const intensityValEl = document.getElementById('intensityVal')
+    intensitySlider.oninput = () => {
+      weatherIntensity = parseInt(intensitySlider.value)
+      intensityValEl.textContent = intensitySlider.value
+      if (weatherEnabled) buildWeatherParticles()
+    }
+
+    const turbulenceSlider = document.getElementById('turbulenceSlider')
+    const turbulenceValEl = document.getElementById('turbulenceVal')
+    turbulenceSlider.oninput = () => {
+      weatherTurbulence = parseInt(turbulenceSlider.value)
+      turbulenceValEl.textContent = turbulenceSlider.value
+      if (weatherEnabled) buildWeatherParticles()
+    }
+
+    function getActiveText() {
+      const len = Math.max(1, Math.round(FULL_TEXT.length * textAmount))
+      return FULL_TEXT.substring(0, len)
+    }
+
+    function ensureParticleCount(count) {
+      while (particles.length < count) {
+        const i = particles.length
+        const fallback = paragraphTargets[i % Math.max(1, paragraphTargets.length)]
+        const tx = fallback ? fallback.tx : window.innerWidth * 0.5
+        const ty = fallback ? fallback.ty : window.innerHeight * 0.5
+        particles.push({
+          char: sourceChars[i % sourceChars.length] || ' ',
+          tx,
+          ty,
+          x: tx + (Math.random() - 0.5) * 20,
+          y: ty + (Math.random() - 0.5) * 20,
+          vx: 0,
+          vy: 0,
+          hue: 120,
+          row: 0,
+          head: false,
+        })
+      }
+      if (particles.length > count) particles.length = count
+    }
+
+    function buildParagraphTargets() {
+      paragraphTargets = []
+      if (!preparedText) return
+
+      const W = window.innerWidth
+      const baseWidth = W * 0.78
+      const marginLeft = W * 0.11
+      const startY = 40
+
+      let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+      const lines = []
+      while (true) {
+        const line = layoutNextLine(preparedText, cursor, baseWidth)
+        if (!line) break
+        lines.push(line)
+        cursor = line.end
+        if (lines.length > 600) break
+      }
+
+      ctx.font = font
+      for (let li = 0; li < lines.length; li++) {
+        const line = lines[li]
+        const y = startY + li * lineHeight
+        let xOffset = 0
+        for (let ci = 0; ci < line.text.length; ci++) {
+          const ch = line.text[ci]
+          const charW = ctx.measureText(ch).width
+          const tx = marginLeft + xOffset + charW * 0.5
+          const ty = y + lineHeight * 0.5
+          paragraphTargets.push({
+            char: ch,
+            tx,
+            ty,
+            row: li,
+            hue: (li * 18 + ci * 0.75) % 360,
+          })
+          xOffset += charW
+        }
+      }
+    }
+
+    function buildMatrixStructure() {
+      matrixSlots = []
+      columns = []
+      if (sourceChars.length === 0) return
+
+      const W = window.innerWidth
+      const H = window.innerHeight
+      ctx.font = font
+
+      const glyphW = Math.max(1, ctx.measureText('M').width)
+      const spreadFactor = matrixSpread / 100
+      const colStep = Math.max(glyphW * 1.05 * spreadFactor, glyphW * 0.7)
+      const columnCount = Math.max(6, Math.floor((W * 0.9) / colStep))
+      const startX = (W - (columnCount - 1) * colStep) / 2
+      const rowsPerColumn = Math.max(14, Math.ceil(H / lineHeight) + 8)
+
+      for (let c = 0; c < columnCount; c++) {
+        columns.push({
+          x: startX + c * colStep,
+          speed: FALL_SPEED_MIN + Math.random() * (FALL_SPEED_MAX - FALL_SPEED_MIN),
+          phase: Math.random() * rowsPerColumn,
+          sway: (Math.random() - 0.5) * 0.12,
+          headRow: 0,
+          rowsPerColumn,
+        })
+      }
+
+      for (let c = 0; c < columnCount; c++) {
+        for (let r = 0; r < rowsPerColumn; r++) {
+          matrixSlots.push({ stream: c, row: r })
+        }
+      }
+
+      const baseCount = Math.max(1, paragraphTargets.length)
+      const desired = Math.min(matrixSlots.length, Math.floor(baseCount * (matrixVolume / 100)))
+      ensureParticleCount(Math.max(paragraphTargets.length, desired))
+    }
+
+    function rebuildAll(resetTypewriter) {
+      const text = getActiveText()
+      totalChars = text.length
+      sourceChars = Array.from(text)
+      preparedText = prepareWithSegments(text, font)
+      if (resetTypewriter) typewriterStart = performance.now()
+      buildParagraphTargets()
+      buildMatrixStructure()
+      ensureParticleCount(Math.max(paragraphTargets.length, matrixSlots.length > 0 ? Math.min(matrixSlots.length, Math.floor(Math.max(1, paragraphTargets.length) * (matrixVolume / 100))) : paragraphTargets.length))
+    }
+
+    // ── Resize ──────────────────────────────────────────────
+    function resize() {
+      const W = window.innerWidth
+      const H = window.innerHeight
+      // Weather and matrix use viewport; paragraph extends beyond
+      let contentH = H
+      if (!matrixEnabled && !weatherEnabled && paragraphTargets.length > 0) {
+        const lastTarget = paragraphTargets[paragraphTargets.length - 1]
+        contentH = Math.max(H, lastTarget.ty + lineHeight * 2)
+      }
+      canvas.width = W * devicePixelRatio
+      canvas.height = contentH * devicePixelRatio
+      canvas.style.width = W + 'px'
+      canvas.style.height = contentH + 'px'
+      ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0)
+      document.body.style.overflow = (matrixEnabled || weatherEnabled) ? 'hidden' : 'hidden auto'
+    }
+    function fullRebuild() {
+      rebuildAll(false)
+      if (weatherEnabled) buildWeatherParticles()
+      sizeFogBuf()
+      sizeTrailBuf()
+      buildAllMeshBgs()
+      resize()
+    }
+    window.addEventListener('resize', fullRebuild)
+
+    // ── Mouse ───────────────────────────────────────────────
+    canvas.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY })
+    canvas.addEventListener('mouseleave', () => { mouseX = -9999; mouseY = -9999 })
+
+    // ── Draggable repel objects ──────────────────────────
+    const repelObjects = [document.getElementById('repelSquare')]
+    let dragTarget = null, dragOffX = 0, dragOffY = 0
+
+    for (const el of repelObjects) {
+      el.addEventListener('mousedown', e => {
+        dragTarget = el
+        dragOffX = e.clientX - el.offsetLeft
+        dragOffY = e.clientY - el.offsetTop
+        e.preventDefault()
+      })
+    }
+    window.addEventListener('mousemove', e => {
+      if (dragTarget) {
+        dragTarget.style.left = (e.clientX - dragOffX) + 'px'
+        dragTarget.style.top = (e.clientY - dragOffY) + 'px'
+      }
+    })
+    window.addEventListener('mouseup', () => { dragTarget = null })
+
+    function getRepelObjectBounds() {
+      const bounds = []
+      for (const el of repelObjects) {
+        const r = el.getBoundingClientRect()
+        bounds.push({ cx: r.left + r.width / 2, cy: r.top + r.height / 2, hw: r.width / 2, hh: r.height / 2 })
+      }
+      return bounds
+    }
+
+    function applyObjectRepel(p, objBounds) {
+      for (const obj of objBounds) {
+        const closestX = Math.max(obj.cx - obj.hw, Math.min(p.x, obj.cx + obj.hw))
+        const closestY = Math.max(obj.cy - obj.hh, Math.min(p.y, obj.cy + obj.hh))
+        const dx = p.x - closestX
+        const dy = p.y - closestY
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        if (dist < MOUSE_R * 0.6 && dist > 0) {
+          const nx = dx / dist, ny = dy / dist
+          const tx = -ny, ty = nx
+          const vn = p.vx * nx + p.vy * ny
+          const vt = p.vx * tx + p.vy * ty
+          const proximity = (1 - dist / (MOUSE_R * 0.6)) ** 2
+          // Gentle normal push
+          p.vx += nx * proximity * MOUSE_F * 0.4
+          p.vy += ny * proximity * MOUSE_F * 0.4
+          // Deflect into tangent — slide along surface
+          const slideDir = vt >= 0 ? 1 : -1
+          const tangentBoost = proximity * Math.abs(vn) * 0.8 + proximity * MOUSE_F * 0.3
+          p.vx += tx * tangentBoost * slideDir
+          p.vy += ty * tangentBoost * slideDir
+        } else if (dist === 0) {
+          const toRight = (obj.cx + obj.hw) - p.x
+          const toLeft = p.x - (obj.cx - obj.hw)
+          const toBottom = (obj.cy + obj.hh) - p.y
+          const toTop = p.y - (obj.cy - obj.hh)
+          const minDist = Math.min(toRight, toLeft, toBottom, toTop)
+          if (minDist === toRight) p.x = obj.cx + obj.hw + 2
+          else if (minDist === toLeft) p.x = obj.cx - obj.hw - 2
+          else if (minDist === toBottom) p.y = obj.cy + obj.hh + 2
+          else p.y = obj.cy - obj.hh - 2
+        }
+      }
+    }
+
+    function applyObjectRepelPos(p, objBounds) {
+      for (const obj of objBounds) {
+        const closestX = Math.max(obj.cx - obj.hw, Math.min(p.x, obj.cx + obj.hw))
+        const closestY = Math.max(obj.cy - obj.hh, Math.min(p.y, obj.cy + obj.hh))
+        const dx = p.x - closestX
+        const dy = p.y - closestY
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        if (dist < MOUSE_R * 0.6 && dist > 0) {
+          const nx = dx / dist, ny = dy / dist       // normal (away from surface)
+          const tx = -ny, ty = nx                     // tangent (along surface)
+          // Project particle's velocity onto normal and tangent
+          const vn = (p.vx || 0) * nx + (p.vy || 0) * ny
+          const vt = (p.vx || 0) * tx + (p.vy || 0) * ty
+          const proximity = (1 - dist / (MOUSE_R * 0.6)) ** 2
+          // Gentle normal push (just enough to keep off the surface)
+          const normalForce = proximity * MOUSE_F * 0.4
+          // Deflect: boost tangential velocity so particles slide along
+          const tangentBoost = proximity * Math.abs(vn) * 0.8 + proximity * MOUSE_F * 0.3
+          const slideDir = vt >= 0 ? 1 : -1
+          p.x += nx * normalForce + tx * tangentBoost * slideDir
+          p.y += ny * normalForce + ty * tangentBoost * slideDir
+        } else if (dist === 0) {
+          // Inside — slide toward nearest edge
+          const toRight = (obj.cx + obj.hw) - p.x
+          const toLeft = p.x - (obj.cx - obj.hw)
+          const toBottom = (obj.cy + obj.hh) - p.y
+          const toTop = p.y - (obj.cy - obj.hh)
+          const minDist = Math.min(toRight, toLeft, toBottom, toTop)
+          if (minDist === toRight) p.x = obj.cx + obj.hw + 2
+          else if (minDist === toLeft) p.x = obj.cx - obj.hw - 2
+          else if (minDist === toBottom) p.y = obj.cy + obj.hh + 2
+          else p.y = obj.cy - obj.hh - 2
+        }
+      }
+    }
+
+    function simulateParticle(p) {
+      p.vx += (p.tx - p.x) * SPRING
+      p.vy += (p.ty - p.y) * SPRING
+
+      const dx = p.x - mouseX
+      const dy = p.y - mouseY
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      if (dist < MOUSE_R && dist > 0) {
+        const force = ((1 - dist / MOUSE_R) ** 2) * MOUSE_F
+        p.vx += (dx / dist) * force
+        p.vy += (dy / dist) * force
+      }
+
+      applyObjectRepel(p, frameObjBounds)
+
+      p.vx *= DAMP
+      p.vy *= DAMP
+      p.x += p.vx
+      p.y += p.vy
+    }
+
+    function drawParagraph(now, revealedChars) {
+      const cW = canvas.width / devicePixelRatio
+      const cH = canvas.height / devicePixelRatio
+      ctx.fillStyle = 'rgba(10, 10, 10, 1)'
+      ctx.fillRect(0, 0, cW, cH)
+
+      const visible = Math.min(revealedChars, paragraphTargets.length, particles.length)
+      for (let i = 0; i < visible; i++) {
+        const t = paragraphTargets[i]
+        const p = particles[i]
+        p.char = t.char
+        p.tx = t.tx
+        p.ty = t.ty
+        p.row = t.row
+        p.hue = t.hue
+        p.head = false
+        simulateParticle(p)
+
+        const homeDist = Math.sqrt((p.x - p.tx) ** 2 + (p.y - p.ty) ** 2)
+        const alpha = Math.max(0.35, 1 - homeDist / 280)
+        const hue = (p.hue + now * 0.015) % 360
+        ctx.fillStyle = `hsla(${hue}, 70%, 75%, ${alpha})`
+        ctx.fillText(p.char, p.x, p.y)
+      }
+
+      if (revealedChars < paragraphTargets.length && revealedChars > 0 && Math.floor(now / 500) % 2 === 0) {
+        const last = paragraphTargets[revealedChars - 1]
+        ctx.fillStyle = 'hsla(0, 0%, 85%, 0.85)'
+        ctx.fillRect(last.tx + fontSize * 0.25, last.ty - lineHeight * 0.5 + 2, 2, lineHeight - 4)
+      }
+    }
+
+    function drawMatrix(now, revealedChars) {
+      ctx.fillStyle = 'rgba(5, 12, 8, 0.22)'
+      ctx.fillRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio)
+
+      if (matrixSlots.length === 0) return
+
+      const elapsed = now - typewriterStart
+      const rowsPerColumn = columns[0] ? columns[0].rowsPerColumn : 1
+      const speedFactor = matrixSpeed / 100
+
+      for (let c = 0; c < columns.length; c++) {
+        const col = columns[c]
+        col.headRow = ((elapsed / 16.666) * col.speed * speedFactor + col.phase) % rowsPerColumn
+      }
+
+      const desired = Math.min(matrixSlots.length, Math.floor(Math.max(1, revealedChars) * (matrixVolume / 100)))
+      const visible = Math.min(desired, particles.length)
+
+      for (let i = 0; i < visible; i++) {
+        const slot = matrixSlots[i]
+        const col = columns[slot.stream]
+        const p = particles[i]
+        const rainOffset = ((elapsed / 16.666) * col.speed * speedFactor * lineHeight) % ((rowsPerColumn + 4) * lineHeight)
+        const baseY = (slot.row - 4) * lineHeight
+        p.tx = col.x + Math.sin(elapsed * 0.0015 + slot.row * 0.35) * (fontSize * 0.08) + col.sway * elapsed * 0.01
+        p.ty = ((baseY + rainOffset) % ((rowsPerColumn + 4) * lineHeight)) - lineHeight * 2
+        p.row = slot.row
+        p.head = Math.abs(slot.row - col.headRow) < 0.9
+        if (Math.random() < 0.02) {
+          p.char = sourceChars[(i + Math.floor(elapsed / 70)) % sourceChars.length] || p.char
+        }
+
+        simulateParticle(p)
+
+        const homeDist = Math.sqrt((p.x - p.tx) ** 2 + (p.y - p.ty) ** 2)
+        const alpha = Math.max(0.18, 0.9 - homeDist / 260)
+        const hue = 115 + (i % 24)
+        const lightness = p.head ? 86 : 54 + Math.sin(now * 0.002 + p.row * 0.4) * 8
+        const glow = p.head ? HEAD_GLOW_BOOST : 0
+        ctx.shadowBlur = p.head ? fontSize * 0.9 : 0
+        ctx.shadowColor = `hsla(${hue}, 90%, 70%, ${0.55 + glow})`
+        ctx.fillStyle = `hsla(${hue}, 88%, ${lightness}%, ${alpha})`
+        ctx.fillText(p.char, p.x, p.y)
+      }
+
+      ctx.shadowBlur = 0
+    }
+
+    // ── Simple hash noise for weather turbulence ────────────
+    function noise2d(x, y) {
+      let n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453
+      n = n - Math.floor(n)
+      return n * 2 - 1
+    }
+    function smoothNoise(x, y) {
+      const ix = Math.floor(x), iy = Math.floor(y)
+      const fx = x - ix, fy = y - iy
+      const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy)
+      const a = noise2d(ix, iy), b = noise2d(ix + 1, iy)
+      const c = noise2d(ix, iy + 1), d = noise2d(ix + 1, iy + 1)
+      return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy
+    }
+
+    // ── Weather scene renderer ──────────────────────────────
+    function drawWeather(now) {
+      const W = window.innerWidth
+      const H = window.innerHeight
+      const intMul = weatherIntensity / 100
+      const windMul = weatherWindSlider / 50
+      const turbMul = weatherTurbulence / 60
+
+      if (weatherPreset === 'rain' || weatherPreset === 'storm') {
+        // ── RAIN / STORM ──────────────────────────────────
+        if (weatherPreset === 'rain') {
+          ctx.drawImage(meshBgs.rain, 0, 0, W, H)
+          ctx.fillStyle = 'rgba(5, 8, 18, 0.3)'
+          ctx.fillRect(0, 0, W, H)
+        } else {
+          ctx.drawImage(meshBgs.storm, 0, 0, W, H)
+          ctx.fillStyle = 'rgba(3, 6, 12, 0.28)'
+          ctx.fillRect(0, 0, W, H)
+        }
+
+        // Storm lightning
+        if (weatherPreset === 'storm' && Math.random() < 0.005 * intMul) lightningFlash = 1
+        if (lightningFlash > 0) {
+          ctx.fillStyle = `rgba(180, 200, 255, ${lightningFlash * 0.35})`
+          ctx.fillRect(0, 0, W, H)
+          lightningFlash *= 0.78
+          if (lightningFlash < 0.015) lightningFlash = 0
+        }
+
+        for (const p of weatherParticles) {
+          p.y += p.speed * intMul
+          p.x += p.drift * windMul
+
+          // Storm: strong diagonal push
+          if (weatherPreset === 'storm') {
+            p.x += 1.8 * windMul * intMul
+          }
+
+          // Turbulence
+          const t = now * 0.0003
+          p.x += smoothNoise(p.x * 0.005 + t, p.y * 0.005) * turbMul * 0.4
+
+          // Wrap — respawn at top with new random X
+          if (p.y > H + lineHeight) {
+            p.y = -lineHeight
+            p.x = Math.random() * W
+            p.homeX = p.x
+            p.char = sourceChars[Math.floor(Math.random() * sourceChars.length)] || p.char
+          }
+          if (p.x < -40) p.x = W + 20
+          if (p.x > W + 40) p.x = -20
+
+          // Mouse repel
+          const dx = p.x - mouseX, dy = p.y - mouseY
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          if (dist < MOUSE_R && dist > 0) {
+            const force = ((1 - dist / MOUSE_R) ** 2) * MOUSE_F * 1.5
+            p.x += (dx / dist) * force
+            p.y += (dy / dist) * force
+          }
+          applyObjectRepelPos(p, frameObjBounds)
+
+          // Streak trail
+          const streakLen = p.speed * intMul * 2.5
+          const streakDriftX = p.drift * windMul * 1.5 + (weatherPreset === 'storm' ? 1.8 * windMul * intMul * 2 : 0)
+          const hue = weatherPreset === 'storm' ? 220 + Math.random() * 30 : 200 + Math.random() * 20
+          ctx.strokeStyle = `hsla(${hue}, 60%, 70%, ${p.alpha * 0.3})`
+          ctx.lineWidth = 1
+          ctx.beginPath()
+          ctx.moveTo(p.x, p.y)
+          ctx.lineTo(p.x - streakDriftX, p.y - streakLen)
+          ctx.stroke()
+
+          // Character
+          ctx.fillStyle = `hsla(${hue}, 55%, 72%, ${p.alpha})`
+          ctx.fillText(p.char, p.x, p.y)
+
+          // Randomize char occasionally
+          if (Math.random() < 0.008) p.char = sourceChars[Math.floor(Math.random() * sourceChars.length)] || p.char
+        }
+
+      } else if (weatherPreset === 'snow') {
+        // ── SNOW ──────────────────────────────────────────
+        ctx.drawImage(meshBgs.snow, 0, 0, W, H)
+
+        // Fade the trail layer (removes ~6% of existing alpha each frame)
+        trailBufCtx.globalCompositeOperation = 'destination-out'
+        trailBufCtx.fillStyle = 'rgba(0, 0, 0, 0.06)'
+        trailBufCtx.fillRect(0, 0, W, H)
+        trailBufCtx.globalCompositeOperation = 'source-over'
+        trailBufCtx.textAlign = 'center'
+        trailBufCtx.textBaseline = 'middle'
+
+        for (const p of weatherParticles) {
+          p.sway += p.swaySpeed * 0.016
+          p.y += p.speed * intMul
+          p.x = p.homeX + Math.sin(p.sway) * p.swayAmp + smoothNoise(p.y * 0.003, now * 0.0002) * 15 * turbMul
+
+          // Gentle wind push
+          p.x += windMul * 0.3
+
+          if (p.y > H + 20) { p.y = -20; p.homeX = Math.random() * W }
+          if (p.x < -40) p.homeX += W
+          if (p.x > W + 40) p.homeX -= W
+
+          // Mouse repel
+          const dx = p.x - mouseX, dy = p.y - mouseY
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          if (dist < MOUSE_R && dist > 0) {
+            const force = ((1 - dist / MOUSE_R) ** 2) * MOUSE_F
+            p.x += (dx / dist) * force
+            p.y += (dy / dist) * force
+          }
+          applyObjectRepelPos(p, frameObjBounds)
+
+          const scaledFont = `400 ${Math.round(fontSize * p.size)}px 'Cutive Mono'`
+          trailBufCtx.font = scaledFont
+          trailBufCtx.fillStyle = `hsla(210, 20%, 92%, ${p.alpha})`
+          trailBufCtx.shadowBlur = fontSize * 0.4 * p.size
+          trailBufCtx.shadowColor = `hsla(210, 30%, 90%, 0.3)`
+          trailBufCtx.fillText(p.char, p.x, p.y)
+        }
+        trailBufCtx.shadowBlur = 0
+
+        // Composite trail layer onto main canvas
+        ctx.drawImage(trailBuf, 0, 0)
+        ctx.font = font
+
+      } else if (weatherPreset === 'blizzard') {
+        // ── BLIZZARD ──────────────────────────────────────
+        // Medium trail fade
+        ctx.fillStyle = 'rgba(6, 8, 14, 0.15)'
+        ctx.fillRect(0, 0, W, H)
+
+        for (const p of weatherParticles) {
+          p.sway += p.swaySpeed * 0.016
+          p.y += p.speed * intMul
+          p.x += p.drift * windMul
+
+          // Turbulence sway
+          const t = now * 0.0004
+          p.x += Math.sin(p.sway) * p.swayAmp * 0.3
+          p.x += smoothNoise(p.x * 0.004 + t, p.y * 0.004) * turbMul * 0.8
+
+          // Wrap
+          if (p.y > H + 20) { p.y = -20; p.x = Math.random() * W; p.homeX = p.x }
+          if (p.x < -40) p.x = W + 20
+          if (p.x > W + 40) p.x = -20
+
+          // Mouse repel
+          const dx = p.x - mouseX, dy = p.y - mouseY
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          if (dist < MOUSE_R && dist > 0) {
+            const force = ((1 - dist / MOUSE_R) ** 2) * MOUSE_F * 1.3
+            p.x += (dx / dist) * force
+            p.y += (dy / dist) * force
+          }
+          applyObjectRepelPos(p, frameObjBounds)
+
+          // Streak trail (diagonal)
+          const streakLen = p.speed * intMul * 1.5
+          const streakDriftX = p.drift * windMul * 1.2
+          ctx.strokeStyle = `hsla(215, 20%, 88%, ${p.alpha * 0.2})`
+          ctx.lineWidth = 1
+          ctx.beginPath()
+          ctx.moveTo(p.x, p.y)
+          ctx.lineTo(p.x - streakDriftX, p.y - streakLen)
+          ctx.stroke()
+
+          const scaledFont = `400 ${Math.round(fontSize * p.size)}px 'Cutive Mono'`
+          ctx.font = scaledFont
+          ctx.fillStyle = `hsla(215, 18%, 92%, ${p.alpha})`
+          ctx.shadowBlur = fontSize * 0.3 * p.size
+          ctx.shadowColor = `hsla(210, 25%, 90%, 0.25)`
+          ctx.fillText(p.char, p.x, p.y)
+
+          if (Math.random() < 0.006) p.char = sourceChars[Math.floor(Math.random() * sourceChars.length)] || p.char
+        }
+        ctx.shadowBlur = 0
+        ctx.font = font
+
+      } else if (weatherPreset === 'fog') {
+        // ── FOG ───────────────────────────────────────────
+        // Render fog chars into an offscreen buffer, then blit onto the main
+        // canvas with ctx.filter = 'blur()' — the blur is GPU-accelerated and
+        // follows the actual glyph shapes, so the haze is organic.
+
+        // 1) Very slow fade on the buffer so trails accumulate into haze
+        fogBufCtx.fillStyle = 'rgba(12, 14, 16, 0.02)'
+        fogBufCtx.fillRect(0, 0, W, H)
+
+        // 2) Draw large, soft chars into the buffer
+        const fogFontSize = Math.round(fontSize * 1.8)
+        fogBufCtx.font = `400 ${fogFontSize}px 'Cutive Mono'`
+        fogBufCtx.textAlign = 'center'
+        fogBufCtx.textBaseline = 'middle'
+
+        for (const p of weatherParticles) {
+          p.x += p.speed * windMul
+          p.y += smoothNoise(p.x * 0.002, now * 0.00015 + p.layer) * 0.3 * turbMul
+
+          if (p.x > W * 1.3) p.x = -W * 0.3
+          if (p.x < -W * 0.3) p.x = W * 1.3
+
+          // Mouse repel (gentler in fog)
+          const dx = p.x - mouseX, dy = p.y - mouseY
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          if (dist < MOUSE_R * 1.5 && dist > 0) {
+            const force = ((1 - dist / (MOUSE_R * 1.5)) ** 2) * MOUSE_F * 0.6
+            p.x += (dx / dist) * force
+            p.y += (dy / dist) * force
+          }
+          applyObjectRepelPos(p, frameObjBounds)
+
+          fogBufCtx.fillStyle = `hsla(200, 15%, 92%, ${p.alpha * 0.55})`
+          fogBufCtx.fillText(p.char, p.x, p.y)
+        }
+
+        // 3) Mesh gradient background on main canvas
+        ctx.drawImage(meshBgs.fog, 0, 0, W, H)
+
+        // 4) Blit the buffer with a big blur — this is the haze
+        const blurPx = Math.max(8, Math.min(40, weatherBlurRadius * 0.6))
+        ctx.filter = `blur(${blurPx}px)`
+        ctx.drawImage(fogBuf, 0, 0, W, H)
+        ctx.filter = 'none'
+
+        // 5) Sharp chars on top for readable typography
+        ctx.font = font
+        for (const p of weatherParticles) {
+          ctx.fillStyle = `hsla(200, 10%, 95%, ${p.alpha * 0.75})`
+          ctx.fillText(p.char, p.x, p.y)
+        }
+
+      } else if (weatherPreset === 'wind') {
+        // ── WIND ──────────────────────────────────────────
+        ctx.drawImage(meshBgs.wind, 0, 0, W, H)
+        ctx.fillStyle = 'rgba(10, 10, 10, 0.25)'
+        ctx.fillRect(0, 0, W, H)
+
+        for (const p of weatherParticles) {
+          p.x += p.speed * windMul * intMul
+          p.y += p.drift * turbMul + smoothNoise(p.x * 0.004, p.y * 0.004 + now * 0.0003) * turbMul * 0.8
+
+          if (p.x > W + 60) { p.x = -40; p.y = Math.random() * H }
+          if (p.y < -20) p.y = H + 10
+          if (p.y > H + 20) p.y = -10
+
+          // Mouse repel
+          const dx = p.x - mouseX, dy = p.y - mouseY
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          if (dist < MOUSE_R && dist > 0) {
+            const force = ((1 - dist / MOUSE_R) ** 2) * MOUSE_F * 1.2
+            p.x += (dx / dist) * force
+            p.y += (dy / dist) * force
+          }
+          applyObjectRepelPos(p, frameObjBounds)
+
+          // Horizontal streak
+          const streakW = p.speed * windMul * p.streak * 2
+          const hue = 25 + (p.y / H) * 30
+          ctx.strokeStyle = `hsla(${hue}, 45%, 70%, ${p.alpha * 0.25})`
+          ctx.lineWidth = 1
+          ctx.beginPath()
+          ctx.moveTo(p.x, p.y)
+          ctx.lineTo(p.x - streakW, p.y - p.drift * 0.5)
+          ctx.stroke()
+
+          ctx.fillStyle = `hsla(${hue}, 40%, 75%, ${p.alpha})`
+          ctx.fillText(p.char, p.x, p.y)
+
+          if (Math.random() < 0.01) p.char = sourceChars[Math.floor(Math.random() * sourceChars.length)] || p.char
+        }
+
+      } else {
+        // ── CLEAR (sunny day) ─────────────────────────────
+        // Mesh-style gradient background (pre-rendered, blitted as image)
+        ctx.drawImage(meshBgs.clear, 0, 0, W, H)
+
+        // Two muted base tones — warm gray + cool blue-gray — alternated per particle
+        const clearTones = ['#D4D3CE', '#B8CED0']
+        for (const p of weatherParticles) {
+          const t = now * 0.0005
+          p.x = p.homeX + Math.sin(t + p.phase) * 35
+          p.y = p.homeY + Math.cos(t * 0.7 + p.phase) * 25
+
+          // Gentle upward shimmer
+          p.y -= Math.sin(now * 0.002 + p.phase * 3) * 0.3
+
+          // Mouse repel
+          const dx = p.x - mouseX, dy = p.y - mouseY
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          if (dist < MOUSE_R && dist > 0) {
+            const force = ((1 - dist / MOUSE_R) ** 2) * MOUSE_F
+            p.x += (dx / dist) * force
+            p.y += (dy / dist) * force
+          }
+          applyObjectRepelPos(p, frameObjBounds)
+
+          const tone = clearTones[Math.floor(p.phase * 100) % clearTones.length]
+          // Subtle alpha shimmer so the field feels alive
+          const a = Math.min(1, p.alpha * 1.6 + Math.sin(now * 0.0008 + p.phase) * 0.1)
+          ctx.globalAlpha = a
+          ctx.fillStyle = tone
+          ctx.fillText(p.char, p.x, p.y)
+        }
+        ctx.globalAlpha = 1
+        ctx.shadowBlur = 0
+      }
+    }
+
+    // ── Frame loop ──────────────────────────────────────────
+    let frameObjBounds = []
+    function frame(now) {
+      frameObjBounds = getRepelObjectBounds()
+      const elapsed = now - typewriterStart
+      const revealedChars = Math.min(totalChars, Math.floor(elapsed / 1000 * TYPEWRITER_CPS))
+
+      ctx.font = font
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+
+      if (matrixEnabled) drawMatrix(now, revealedChars)
+      else if (weatherEnabled) drawWeather(now)
+      else drawParagraph(now, revealedChars)
+
+      requestAnimationFrame(frame)
+    }
+
+    rebuildAll(true)
+    resize()
+    requestAnimationFrame(frame)
+  </script>
+</body>
+</html>
