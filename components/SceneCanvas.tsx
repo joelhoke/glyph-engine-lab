@@ -25,6 +25,10 @@ import {
   defaultSceneState,
 } from '../engine/constants'
 import { loadSvgTargets, SourceLayoutConfig, SvgTarget } from '../engine/svgTargetSource'
+import {
+  APPROVED_PLAYGROUND_DEFAULTS,
+  PlaygroundConfig,
+} from '../engine/playgroundConfig'
 type SequenceDiagnostics = {
   phase: string
   elapsedMs: number
@@ -87,7 +91,16 @@ type SceneCanvasProps = {
   particleRepel?: number
   weatherRepelMult?: number
   sourceLayout?: SourceLayoutConfig
+  playgroundConfig?: PlaygroundConfig
   onDiagnosticsUpdate?: (patch: Partial<SceneDiagnostics>) => void
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = hex.replace('#', '')
+  const r = parseInt(normalized.substring(0, 2), 16)
+  const g = parseInt(normalized.substring(2, 4), 16)
+  const b = parseInt(normalized.substring(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
 export default function SceneCanvas({
@@ -98,6 +111,7 @@ export default function SceneCanvas({
   particleRepel = 0.48,
   weatherRepelMult = 6,
   sourceLayout,
+  playgroundConfig,
   onDiagnosticsUpdate,
 }: SceneCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -123,6 +137,9 @@ export default function SceneCanvas({
   const sourceLayoutRef = useRef<SourceLayoutConfig | undefined>(undefined)
   const rebuildSvgTimeoutRef = useRef<number | null>(null)
   const prevTargetCountRef = useRef<number>(0)
+  const playgroundConfigRef = useRef<PlaygroundConfig>(
+    playgroundConfig ?? APPROVED_PLAYGROUND_DEFAULTS,
+  )
   const [diagnostics, setDiagnostics] = useState<SceneDiagnostics>({
     sourceStatus: 'idle',
     targetCount: 0,
@@ -152,7 +169,10 @@ export default function SceneCanvas({
   const [weatherBlur, setWeatherBlur] = useState(defaultSceneState.weatherBlur)
 
   const lineHeight = useMemo(() => Math.round(fontSize * 1.42), [fontSize])
-  const font = useMemo(() => `400 ${fontSize}px 'Cutive Mono'`, [fontSize])
+  const font = useMemo(
+    () => `400 ${fontSize}px ${playgroundConfig?.glyphFont ?? APPROVED_PLAYGROUND_DEFAULTS.glyphFont}`,
+    [fontSize, playgroundConfig?.glyphFont],
+  )
 
   const fontRef = useRef(font)
   const lineHeightRef = useRef(lineHeight)
@@ -181,6 +201,14 @@ export default function SceneCanvas({
   useEffect(() => { particleRepelRef.current = particleRepel }, [particleRepel])
   useEffect(() => { weatherRepelRef.current = weatherRepelMult }, [weatherRepelMult])
   useEffect(() => { tuningModeRef.current = tuningMode ?? false }, [tuningMode])
+  useEffect(() => {
+    playgroundConfigRef.current = playgroundConfig ?? APPROVED_PLAYGROUND_DEFAULTS
+    sourceCharsRef.current = Array.from(
+      playgroundConfigRef.current.glyphText.trim().length > 0
+        ? playgroundConfigRef.current.glyphText
+        : APPROVED_PLAYGROUND_DEFAULTS.glyphText,
+    )
+  }, [playgroundConfig])
   useEffect(() => {
     if (onDiagnosticsUpdate && diagnostics.targetCount !== prevTargetCountRef.current) {
       prevTargetCountRef.current = diagnostics.targetCount
@@ -589,7 +617,22 @@ export default function SceneCanvas({
     if (!canvas || !ctx) return
     const W = canvas.width / devicePixelRatio
     const H = canvas.height / devicePixelRatio
-    ctx.fillStyle = 'rgba(10, 10, 10, 1)'
+
+    const config = playgroundConfigRef.current ?? APPROVED_PLAYGROUND_DEFAULTS
+    const palette =
+      config.glyphPalette.length > 0 ? config.glyphPalette : APPROVED_PLAYGROUND_DEFAULTS.glyphPalette
+
+    const bgGradient = ctx.createRadialGradient(
+      W * 0.5,
+      H * 0.5,
+      0,
+      W * 0.5,
+      H * 0.5,
+      Math.max(W, H) * 0.8,
+    )
+    bgGradient.addColorStop(0, config.backgroundColor1)
+    bgGradient.addColorStop(1, config.backgroundColor2)
+    ctx.fillStyle = bgGradient
     ctx.fillRect(0, 0, W, H)
 
     const targets = svgTargetsRef.current
@@ -623,8 +666,8 @@ export default function SceneCanvas({
       simulateParticle(p)
       const homeDist = Math.sqrt((p.x - p.tx) ** 2 + (p.y - p.ty) ** 2)
       const alpha = Math.max(0.35, 1 - homeDist / 280)
-      const hue = (100 + i * 2 + now * 0.008) % 360
-      ctx.fillStyle = `hsla(${hue}, 80%, 72%, ${alpha})`
+      const color = palette[i % palette.length]
+      ctx.fillStyle = hexToRgba(color, alpha)
       ctx.fillText(p.char, p.x, p.y)
       visibleCount += 1
     }
