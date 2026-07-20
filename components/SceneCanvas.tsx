@@ -4,25 +4,33 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { prepareWithSegments, layoutNextLine } from '@chenglou/pretext'
 import RangeControl from './RangeControl'
 import { createPointerListeners, getPointer } from '../engine/Pointer'
+import {
+  Column,
+  MeshBgs,
+  ObjBounds,
+  ParagraphTarget,
+  Particle,
+  SequencePhase,
+  Slot,
+  TextPreset,
+} from '../engine/types'
+import {
+  DAMP,
+  FALL_SPEED_MAX,
+  FALL_SPEED_MIN,
+  HEAD_GLOW_BOOST,
+  LOGO_ASSEMBLE_DURATION,
+  LOGO_HOLD_DURATION,
+  LOGO_PATHS,
+  LOGO_RELEASE_DURATION,
+  LOGO_TARGET_STEP,
+  SPRING,
+  TYPEWRITER_CPS,
+  defaultSceneState,
+} from '../engine/constants'
 
 const QUOTE = "Voilà! In View, a humble Vaudevillian Veteran, cast Vicariously as both Victim and Villain by the Vicissitudes of fate. This Visage, no mere Veneer of Vanity, is a Vestige of the Vox populi, now Vacant, Vanished. However, this Valorous Visitation of a bygone Vexation stands Vivified, and has Vowed to Vanquish these Venal and Virulent Vermin Vanguarding Vice and Vouchsafing the Violently Vicious and Voracious Violation of Volition. The only Verdict is Vengeance; a Vendetta held as a Votive, not in Vain, for the Value and Veracity of such shall one day Vindicate the Vigilant and the Virtuous. Verily, this Vichyssoise of Verbiage Veers most Verbose, so let me simply add that it's my very good honor to meet you and you may call me V."
 const FULL_TEXT = Array(25).fill(QUOTE).join(' ')
-const TYPEWRITER_CPS = 140
-const SPRING = 0.03
-const DAMP = 0.85
-const MOUSE_F = 4
-const FALL_SPEED_MIN = 0.35
-const FALL_SPEED_MAX = 1.45
-const HEAD_GLOW_BOOST = 0.45
-const LOGO_TARGET_STEP = 10
-const LOGO_ASSEMBLE_DURATION = 900
-const LOGO_HOLD_DURATION = 2000
-const LOGO_RELEASE_DURATION = 900
-
-const LOGO_PATHS = [
-  'M24.54,32.22h28.93l-17.31,96.53c-.87,4.76-2.35,9.06-4.41,12.77-2.05,3.7-4.58,6.9-7.51,9.5-2.93,2.59-6.29,4.64-9.99,6.09-3.71,1.44-7.66,2.3-11.73,2.53l-.64.04-1.87,12.07.92-.02c5.66-.12,11.16-1.16,16.35-3.08,5.19-1.93,9.99-4.68,14.27-8.17,4.29-3.5,7.96-7.9,10.92-13.08,2.95-5.17,5.06-11.2,6.27-17.94l19.33-108.97.16-.9H26.63l-2.09,12.63Z',
-  'M139.16,88.87c1.30-8.04,2.68-16.43,4.13-25.19,1.45-8.75,2.83-17.15,4.13-25.19,1.30-8.04,2.50-15.42,3.57-22.15,1.08-6.73,1.93-12.17,2.56-16.34h-12.5l-9.24,57.52h-59.88l-1.97,11.61h60l-9.27,58.41h27.18l1.47-11.58h-14.65c.25-1.54.52-3.16.81-4.86,1.14-6.79,2.36-14.20,3.67-22.24Z',
-]
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
@@ -53,76 +61,6 @@ function buildMeshBg(colorA: string, colorB: string, base: string) {
   return cv
 }
 
-type Particle = {
-  char: string
-  tx: number
-  ty: number
-  x: number
-  y: number
-  vx: number
-  vy: number
-  hue: number
-  row: number
-  head: boolean
-  homeX?: number
-  homeY?: number
-  speed?: number
-  drift?: number
-  alpha?: number
-  sway?: number
-  swaySpeed?: number
-  swayAmp?: number
-  phase?: number
-  size?: number
-  streak?: number
-}
-
-type ParagraphTarget = {
-  char: string
-  tx: number
-  ty: number
-  row: number
-  hue: number
-}
-
-type SequencePhase = 'logo' | 'hold' | 'release' | 'ambient'
-
-type Column = {
-  x: number
-  speed: number
-  phase: number
-  sway: number
-  headRow: number
-  rowsPerColumn: number
-}
-
-type Slot = { stream: number; row: number }
-
-type MeshBgs = {
-  clear: HTMLCanvasElement
-  rain: HTMLCanvasElement
-  storm: HTMLCanvasElement
-  wind: HTMLCanvasElement
-  fog: HTMLCanvasElement
-  snow: HTMLCanvasElement
-}
-
-type ObjBounds = { cx: number; cy: number; hw: number; hh: number }
-
-type TextPreset = 'clear' | 'rain' | 'storm' | 'snow' | 'blizzard' | 'fog' | 'wind'
-
-const defaultSceneState = {
-  fontSize: 12,
-  textAmount: 1,
-  mouseR: 225,
-  matrixSpread: 100,
-  matrixSpeed: 100,
-  matrixVolume: 100,
-  weatherWind: 50,
-  weatherIntensity: 125,
-  weatherTurbulence: 125,
-  weatherBlur: 25,
-}
 
 type SceneCanvasProps = {
   className?: string
@@ -151,7 +89,7 @@ export default function SceneCanvas({ className }: SceneCanvasProps) {
   const particleRepelRef = useRef(particleRepel)
   const weatherRepelRef = useRef(weatherRepelMult)
 
-  const [matrixEnabled, setMatrixEnabled] = useState(false)
+    const [matrixEnabled, setMatrixEnabled] = useState(false)
   const [weatherEnabled, setWeatherEnabled] = useState(true)
   const [weatherPreset, setWeatherPreset] = useState<TextPreset>('rain')
   const [liveWeatherActive, setLiveWeatherActive] = useState(false)
