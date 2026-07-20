@@ -34,20 +34,23 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   text-align: center;
 }
 .intro-copy {
+  --tagline-progress: 0;
+  --tagline-translate: calc((1 - var(--tagline-progress)) * 18px);
   max-width: 720px;
   color: #f5f7fb;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1rem;
+  opacity: var(--tagline-progress);
+  transform: translateY(var(--tagline-translate));
+  will-change: opacity, transform;
 }
-.intro-brand {
-  margin-bottom: 0;
-}
-.intro-logo {
-  width: 86px;
-  height: auto;
-  display: block;
+
+.intro-copy.tagline-hidden {
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
 }
 .intro-copy h1 {
   font-size: clamp(2.9rem, 4vw, 4.64rem);

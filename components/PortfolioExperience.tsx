@@ -6,6 +6,7 @@ import PrimaryActions, { ExperienceKey } from './PrimaryActions'
 import {
   evaluateIntroSequence,
   getPhaseStartTime,
+  getTotalDuration,
   IntroPhase,
   IntroSequenceSnapshot,
   nextPhase,
@@ -13,6 +14,14 @@ import {
   previousPhase,
 } from '../engine/introSequence'
 import { useEffect, useRef, useState } from 'react'
+
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - clamp(t, 0, 1), 3)
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
 
 const isTuningMode = () => {
   if (typeof window === 'undefined') return false
@@ -23,6 +32,10 @@ type SequenceDiagnostics = {
   phase: IntroPhase
   elapsedMs: number
   phaseProgress: number
+  overallProgress: number
+  taglineProgress: number
+  taglineVisible: boolean
+  taglineMounted: boolean
   speed: number
   documentHidden: boolean
 }
@@ -48,11 +61,18 @@ export default function PortfolioExperience() {
     evaluateIntroSequence(0, portfolioIntroPreset.timing),
   )
 
+  // Direct DOM ref for full-rate tagline visual updates (not throttled diagnostics).
+  const taglineRef = useRef<HTMLElement | null>(null)
+
   // Throttled diagnostic state: drives text readouts only.
   const [diagnostics, setDiagnostics] = useState<SequenceDiagnostics>({
     phase: 'logo-forming',
     elapsedMs: 0,
     phaseProgress: 0,
+    overallProgress: 0,
+    taglineProgress: 0,
+    taglineVisible: false,
+    taglineMounted: true,
     speed: 1,
     documentHidden: false,
   })
@@ -73,6 +93,20 @@ export default function PortfolioExperience() {
 
     let raf: number
     let lastDiagnosticTick = 0
+    const totalDuration = getTotalDuration(portfolioIntroPreset.timing)
+
+    const updateTaglineVisuals = (sequence: IntroSequenceSnapshot) => {
+      const node = taglineRef.current
+      if (!node) return
+
+      const taglineProgress = sequence.taglineVisible ? sequence.taglineProgress : 0
+      const eased = easeOutCubic(taglineProgress)
+      node.style.setProperty('--tagline-progress', String(eased))
+
+      const visuallyHidden = !sequence.taglineVisible || taglineProgress <= 0
+      node.classList.toggle('tagline-hidden', visuallyHidden)
+      node.setAttribute('aria-hidden', String(visuallyHidden))
+    }
 
     const tick = (now: number) => {
       const ctrl = controllerRef.current
@@ -82,13 +116,21 @@ export default function PortfolioExperience() {
       const next = evaluateIntroSequence(elapsed, portfolioIntroPreset.timing)
       sequenceRef.current = next
 
+      // Full-rate visual update path: apply directly to the DOM without React re-render.
+      updateTaglineVisuals(next)
+
       // Throttle diagnostic React state updates to ~10fps.
       if (now - lastDiagnosticTick > 100) {
+        const taglineProgress = next.taglineVisible ? next.taglineProgress : 0
         setDiagnostics((prev) => ({
           ...prev,
           phase: next.phase,
           elapsedMs: next.elapsedMs,
-          phaseProgress: next.phaseProgress,
+          phaseProgress: next.phase === 'complete' ? 1 : next.phaseProgress,
+          overallProgress: clamp(next.elapsedMs / totalDuration, 0, 1),
+          taglineProgress,
+          taglineVisible: next.taglineVisible,
+          taglineMounted: !!taglineRef.current,
           speed: ctrl.speed,
         }))
         lastDiagnosticTick = now
@@ -110,7 +152,7 @@ export default function PortfolioExperience() {
       if (hidden) {
         if (!ctrl.paused) {
           ctrl.wasPlayingBeforeHidden = true
-          ctrl.pausedElapsed += performance.now() - ctrl.startTime
+          ctrl.pausedElapsed += (performance.now() - ctrl.startTime) * ctrl.speed
           ctrl.paused = true
         }
       } else {
@@ -154,11 +196,21 @@ export default function PortfolioExperience() {
     ctrl.startTime = performance.now()
     ctrl.pausedElapsed = 0
     sequenceRef.current = evaluateIntroSequence(0, portfolioIntroPreset.timing)
+    // Force immediate visual reset so the tagline hides before the next RAF.
+    const node = taglineRef.current
+    if (node) {
+      node.style.setProperty('--tagline-progress', '0')
+      node.classList.add('tagline-hidden')
+      node.setAttribute('aria-hidden', 'true')
+    }
     setDiagnostics((prev) => ({
       ...prev,
       phase: 'logo-forming',
       elapsedMs: 0,
       phaseProgress: 0,
+      overallProgress: 0,
+      taglineProgress: 0,
+      taglineVisible: false,
     }))
   }
 
@@ -169,12 +221,26 @@ export default function PortfolioExperience() {
     ctrl.paused = true
     ctrl.pausedElapsed = targetTime
     ctrl.wasPlayingBeforeHidden = false
-    sequenceRef.current = evaluateIntroSequence(targetTime, portfolioIntroPreset.timing)
+    const next = evaluateIntroSequence(targetTime, portfolioIntroPreset.timing)
+    sequenceRef.current = next
+
+    const taglineProgress = next.taglineVisible ? next.taglineProgress : 0
+
+    const node = taglineRef.current
+    if (node) {
+      node.style.setProperty('--tagline-progress', String(easeOutCubic(taglineProgress)))
+      const visuallyHidden = !next.taglineVisible || taglineProgress <= 0
+      node.classList.toggle('tagline-hidden', visuallyHidden)
+      node.setAttribute('aria-hidden', String(visuallyHidden))
+    }
+
     setDiagnostics((prev) => ({
       ...prev,
       phase,
       elapsedMs: targetTime,
-      phaseProgress: sequenceRef.current.phaseProgress,
+      phaseProgress: phase === 'complete' ? 1 : next.phaseProgress,
+      taglineProgress,
+      taglineVisible: next.taglineVisible,
     }))
   }
 
@@ -198,19 +264,22 @@ export default function PortfolioExperience() {
   return (
     <div className="portfolio-shell">
       <SceneCanvas tuningMode={tuningMode} sequenceDiagnostics={diagnostics} />
-      {tuningMode && (
-        <div className="foreground-layer" aria-live="polite">
-          <div className="foreground-content">
-            <Intro />
-            <PrimaryActions selected={selected} onSelect={handleAction} />
-          </div>
+      <div className="foreground-layer" aria-live="polite">
+        <div className="foreground-content">
+          <Intro taglineRef={taglineRef} />
+          {/* Milestone 4 will reveal PrimaryActions via sequence.optionsReady. */}
+          {false && <PrimaryActions selected={selected} onSelect={handleAction} />}
         </div>
-      )}
+      </div>
       {tuningMode && (
         <div className="sequence-controls" aria-label="Sequence playback controls">
           <div>phase: {diagnostics.phase}</div>
           <div>elapsed: {Math.round(diagnostics.elapsedMs)}ms</div>
-          <div>progress: {diagnostics.phaseProgress.toFixed(2)}</div>
+          <div>phase progress: {diagnostics.phaseProgress.toFixed(2)}</div>
+          <div>overall progress: {diagnostics.overallProgress.toFixed(2)}</div>
+          <div>tagline progress: {diagnostics.taglineProgress.toFixed(2)}</div>
+          <div>tagline visible: {diagnostics.taglineVisible ? 'yes' : 'no'}</div>
+          <div>tagline mounted: {diagnostics.taglineMounted ? 'yes' : 'no'}</div>
           <div>speed: {diagnostics.speed.toFixed(2)}x</div>
           <div>hidden: {diagnostics.documentHidden ? 'yes' : 'no'}</div>
           <label className="rate-control">
