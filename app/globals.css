@@ -396,14 +396,57 @@ button:focus-visible {
   pointer-events: auto;
 }
 
+.playground-control-dock-workspace {
+  position: fixed;
+  left: 1rem;
+  right: 1rem;
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  transform: none;
+  width: auto;
+  max-width: none;
+  --workspace-height: min(25vh, 420px);
+  height: var(--workspace-height);
+}
+
+@media (max-height: 800px) {
+  .playground-control-dock-workspace {
+    --workspace-height: min(35vh, 480px);
+  }
+}
+
+@media (max-width: 640px) {
+  .playground-control-dock {
+    width: min(96vw, 640px);
+  }
+
+  .playground-control-dock-workspace {
+    left: 0.75rem;
+    right: 0.75rem;
+    --workspace-height: min(55vh, 520px);
+  }
+}
+
+@media (max-width: 420px) {
+  .playground-control-dock {
+    width: min(96vw, 360px);
+  }
+}
+
 .playground-control-dock-beam {
   width: 100%;
+  height: 100%;
 }
 
 .playground-control-dock-content {
   background: rgba(8, 12, 18, 0.92);
   border-radius: 16px;
   transition: opacity 180ms ease, transform 180ms ease;
+  height: 100%;
+}
+
+.playground-control-dock-workspace .playground-control-dock-content {
+  display: flex;
+  flex-direction: column;
 }
 
 .playground-invitation {
@@ -423,8 +466,14 @@ button:focus-visible {
   margin: 0;
 }
 
+@media (max-width: 640px) {
+  .playground-invitation-copy {
+    max-width: 90vw;
+  }
+}
+
 .playground-start-button {
-  display: inline;
+  display: inline-block;
   font: inherit;
   font-weight: 600;
   color: #8abaff;
@@ -432,7 +481,7 @@ button:focus-visible {
   border: none;
   border-bottom: 1px solid currentColor;
   padding: 0;
-  margin: 0;
+  margin: 0.55rem 0 0;
   cursor: pointer;
   text-decoration: none;
   transition: color 180ms ease;
@@ -449,12 +498,6 @@ button:focus-visible {
   border-radius: 2px;
 }
 
-@media (max-width: 640px) {
-  .playground-invitation-copy {
-    max-width: 90vw;
-  }
-}
-
 .playground-controls-pane {
   display: flex;
   flex-direction: column;
@@ -468,13 +511,32 @@ button:focus-visible {
   overflow: auto;
 }
 
-.playground-controls-pane-header {
-  display: flex;
-  justify-content: flex-start;
+.playground-control-dock-workspace .playground-controls-pane {
+  flex: 1 1 auto;
+  max-height: none;
+  height: 100%;
 }
 
-.playground-close-button {
+.playground-controls-pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+}
+
+.playground-controls-pane-title {
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(200, 220, 255, 0.75);
+}
+
+.playground-hide-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   font: inherit;
+  font-size: 0.72rem;
   color: #8abaff;
   background: transparent;
   border: none;
@@ -483,11 +545,19 @@ button:focus-visible {
   padding: 0;
 }
 
-.playground-close-button:hover,
-.playground-close-button:focus-visible {
+.playground-hide-button:hover,
+.playground-hide-button:focus-visible {
   color: #bcd7ff;
+}
+
+.playground-hide-button:focus-visible {
   outline: 2px solid #8abaff;
   outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.playground-hide-icon {
+  flex: 0 0 auto;
 }
 
 .playground-controls {
@@ -500,11 +570,26 @@ button:focus-visible {
   color: rgba(220, 232, 255, 0.9);
 }
 
+.playground-control-dock-workspace .playground-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: start;
+  gap: 0.75rem;
+  overflow: auto;
+}
+
+@media (max-width: 640px) {
+  .playground-control-dock-workspace .playground-controls {
+    grid-template-columns: 1fr;
+  }
+}
+
 .playground-controls-row {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 0.75rem;
+  min-width: 0;
 }
 
 .playground-control {
@@ -699,12 +784,6 @@ button:focus-visible {
 
   .playground-controls-row {
     gap: 0.55rem;
-  }
-}
-
-@media (max-width: 420px) {
-  .playground-control-dock {
-    width: min(96vw, 360px);
   }
 }
 

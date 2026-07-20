@@ -1,10 +1,24 @@
+export type GlyphColorMode =
+  | 'image-gradient'
+  | 'glyph-cycle'
+  | 'word-cycle'
+  | 'rows'
+
 export type PlaygroundConfig = {
   glyphText: string
   glyphPalette: string[]
   backgroundColor1: string
   backgroundColor2: string
   glyphFont: string
+  glyphColorMode: GlyphColorMode
 }
+
+export const GLYPH_COLOR_MODE_OPTIONS: { value: GlyphColorMode; label: string }[] = [
+  { value: 'image-gradient', label: 'Image gradient' },
+  { value: 'glyph-cycle', label: 'Glyph cycle' },
+  { value: 'word-cycle', label: 'Word cycle' },
+  { value: 'rows', label: 'Rows' },
+]
 
 export const GLYPH_FONT_OPTIONS = [
   { value: "'Cutive Mono', monospace", label: 'Cutive Mono' },
@@ -31,4 +45,5 @@ export const APPROVED_PLAYGROUND_DEFAULTS: PlaygroundConfig = {
   backgroundColor1: '#0a0a0a',
   backgroundColor2: '#12121a',
   glyphFont: "'Cutive Mono', monospace",
+  glyphColorMode: 'image-gradient',
 }
