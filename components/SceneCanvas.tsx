@@ -2,7 +2,7 @@
 
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { prepareWithSegments, layoutNextLine } from '@chenglou/pretext'
-import { createPointerListeners, getPointer } from '../engine/Pointer'
+import { createPointerListeners } from '../engine/Pointer'
 import {
   Column,
   MeshBgs,
@@ -60,7 +60,7 @@ type SceneDiagnostics = {
 
 type SceneMode = 'svg' | 'paragraph' | 'matrix' | 'weather'
 
-const QUOTE = "Voilà! In View, a humble Vaudevillian Veteran, cast Vicariously as both Victim and Villain by the Vicissitudes of fate. This Visage, no mere Veneer of Vanity, is a Vestige of the Vox populi, now Vacant, Vanished. However, this Valorous Visitation of a bygone Vexation stands Vivified, and has Vowed to Vanquish these Venal and Virulent Vermin Vanguarding Vice and Vouchsafing the Violently Vicious and Voracious Violation of Volition. The only Verdict is Vengeance; a Vendetta held as a Votive, not in Vain, for the Value and Veracity of such shall one day Vindicate the Vigilant and the Virtuous. Verily, this Vichyssoise of Verbiage Veers most Verbose, so let me simply add that it's my very good honor to meet you and you may call me V."
+const QUOTE = "Voilà! In view, a humble vaudevillian veteran cast vicariously as both victim and villain by the vicissitudes of Fate... you may call me 'V'."
 const FULL_TEXT = Array(25).fill(QUOTE).join(' ')
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
@@ -198,14 +198,17 @@ function SceneCanvasInternal(
   const [weatherTurbulence, setWeatherTurbulence] = useState(defaultSceneState.weatherTurbulence)
   const [weatherBlur, setWeatherBlur] = useState(defaultSceneState.weatherBlur)
 
-  const lineHeight = useMemo(() => Math.round(fontSize * 1.42), [fontSize])
+  const glyphScale = playgroundConfig?.glyphScale ?? APPROVED_PLAYGROUND_DEFAULTS.glyphScale
+
+  const lineHeight = useMemo(() => Math.round(fontSize * 1.42 * glyphScale), [fontSize, glyphScale])
   const font = useMemo(
-    () => `400 ${fontSize}px ${playgroundConfig?.glyphFont ?? APPROVED_PLAYGROUND_DEFAULTS.glyphFont}`,
-    [fontSize, playgroundConfig?.glyphFont],
+    () => `400 ${fontSize * glyphScale}px ${playgroundConfig?.glyphFont ?? APPROVED_PLAYGROUND_DEFAULTS.glyphFont}`,
+    [fontSize, glyphScale, playgroundConfig?.glyphFont],
   )
 
   const fontRef = useRef(font)
   const lineHeightRef = useRef(lineHeight)
+  const glyphScaleRef = useRef(glyphScale)
   const matrixEnabledRef = useRef(matrixEnabled)
   const weatherEnabledRef = useRef(weatherEnabled)
   const matrixSpeedRef = useRef(matrixSpeed)
@@ -218,6 +221,7 @@ function SceneCanvasInternal(
 
   useEffect(() => { fontRef.current = font }, [font])
   useEffect(() => { lineHeightRef.current = lineHeight }, [lineHeight])
+  useEffect(() => { glyphScaleRef.current = glyphScale }, [glyphScale])
   useEffect(() => { matrixEnabledRef.current = matrixEnabled }, [matrixEnabled])
   useEffect(() => { weatherEnabledRef.current = weatherEnabled }, [weatherEnabled])
   useEffect(() => { weatherPresetRef.current = weatherPreset }, [weatherPreset])
@@ -641,18 +645,37 @@ function SceneCanvasInternal(
   }
 
 
+  const getPointerForFrame = () => {
+    const state = pointerRef.current
+    const now = performance.now()
+    if (state.active) {
+      return { x: state.x, y: state.y, active: true, influence: 1 }
+    }
+    if (state.fadeEndTime <= now) {
+      return { x: state.x, y: state.y, active: false, influence: 0 }
+    }
+    const remaining = state.fadeEndTime - now
+    const influence = Math.max(0, Math.min(1, remaining / FADE_DURATION_MS))
+    if (influence <= 0) {
+      return { x: state.x, y: state.y, active: false, influence: 0 }
+    }
+    return { x: state.fadeStartX, y: state.fadeStartY, active: true, influence }
+  }
+
   const simulateParticle = (p: Particle) => {
     // Apply mouse repel force if pointer is nearby
-    const pointer = getPointer()
-    const dx = p.x - pointer.x
-    const dy = p.y - pointer.y
-    const distSq = dx * dx + dy * dy
-    const radius = mouseRRef.current || 0
-    if (distSq > 0 && distSq < radius * radius) {
-      const dist = Math.sqrt(distSq)
-      const repelStrength = (1 - dist / radius) * (particleRepelRef.current || 0.48)
-      p.vx += (dx / dist) * repelStrength
-      p.vy += (dy / dist) * repelStrength
+    const pointer = getPointerForFrame()
+    if (pointer.active && pointer.influence > 0) {
+      const dx = p.x - pointer.x
+      const dy = p.y - pointer.y
+      const distSq = dx * dx + dy * dy
+      const radius = mouseRRef.current || 0
+      if (distSq > 0 && distSq < radius * radius) {
+        const dist = Math.sqrt(distSq)
+        const repelStrength = (1 - dist / radius) * (particleRepelRef.current || 0.48) * pointer.influence
+        p.vx += (dx / dist) * repelStrength
+        p.vy += (dy / dist) * repelStrength
+      }
     }
 
     p.vx += (p.tx - p.x) * SPRING
@@ -848,20 +871,22 @@ function SceneCanvasInternal(
       ctx.fillStyle = 'rgba(5, 8, 18, 0.3)'
       ctx.fillRect(0, 0, W, H)
       const count = Math.min(particles.length, Math.floor(120 * turbMul * intMul))
-      const pointer = getPointer()
+      const pointer = getPointerForFrame()
       for (let i = 0; i < count; i += 1) {
         const p = particles[i]
         p.y += (p.speed ?? 1) * intMul
         p.x += (p.drift ?? 0) * windMul
-        const dxw = p.x - pointer.x
-        const dyw = p.y - pointer.y
-        const distSqW = dxw * dxw + dyw * dyw
-        const radiusW = mouseRRef.current || 0
-        if (distSqW > 0 && distSqW < radiusW * radiusW) {
-          const distW = Math.sqrt(distSqW)
-          const repelStrengthW = (1 - distW / radiusW) * (weatherRepelRef.current || 6)
-          p.x += (dxw / distW) * repelStrengthW
-          p.y += (dyw / distW) * repelStrengthW
+        if (pointer.active && pointer.influence > 0) {
+          const dxw = p.x - pointer.x
+          const dyw = p.y - pointer.y
+          const distSqW = dxw * dxw + dyw * dyw
+          const radiusW = mouseRRef.current || 0
+          if (distSqW > 0 && distSqW < radiusW * radiusW) {
+            const distW = Math.sqrt(distSqW)
+            const repelStrengthW = (1 - distW / radiusW) * (weatherRepelRef.current || 6) * pointer.influence
+            p.x += (dxw / distW) * repelStrengthW
+            p.y += (dyw / distW) * repelStrengthW
+          }
         }
         if (p.y > H + lineHeightRef.current) {
           p.y = -lineHeightRef.current
@@ -885,21 +910,23 @@ function SceneCanvasInternal(
       if (mesh) ctx.drawImage(mesh, 0, 0, W, H)
       const t = now * 0.0005
       const count = Math.min(particles.length, Math.floor(120 * intMul))
-      const pointer = getPointer()
+      const pointer = getPointerForFrame()
       for (let i = 0; i < count; i += 1) {
         const p = particles[i]
         p.x = (p.homeX ?? 0) + Math.sin(t + (p.phase ?? 0)) * 35
         p.y = (p.homeY ?? 0) + Math.cos(t * 0.7 + (p.phase ?? 0)) * 25
         p.y -= Math.sin(now * 0.002 + (p.phase ?? 0) * 3) * 0.3
-        const dxw = p.x - pointer.x
-        const dyw = p.y - pointer.y
-        const distSqW = dxw * dxw + dyw * dyw
-        const radiusW = mouseRRef.current || 0
-        if (distSqW > 0 && distSqW < radiusW * radiusW) {
-          const distW = Math.sqrt(distSqW)
-          const repelStrengthW = (1 - distW / radiusW) * (weatherRepelRef.current ? (weatherRepelRef.current / 2) : 3)
-          p.x += (dxw / distW) * repelStrengthW
-          p.y += (dyw / distW) * repelStrengthW
+        if (pointer.active && pointer.influence > 0) {
+          const dxw = p.x - pointer.x
+          const dyw = p.y - pointer.y
+          const distSqW = dxw * dxw + dyw * dyw
+          const radiusW = mouseRRef.current || 0
+          if (distSqW > 0 && distSqW < radiusW * radiusW) {
+            const distW = Math.sqrt(distSqW)
+            const repelStrengthW = (1 - distW / radiusW) * (weatherRepelRef.current ? (weatherRepelRef.current / 2) : 3) * pointer.influence
+            p.x += (dxw / distW) * repelStrengthW
+            p.y += (dyw / distW) * repelStrengthW
+          }
         }
         ctx.fillStyle = `hsla(210, 20%, 92%, ${p.alpha ?? 0.4})`
         ctx.fillText(p.char, p.x, p.y)
@@ -927,9 +954,13 @@ function SceneCanvasInternal(
     const { addListeners, removeListeners } = createPointerListeners()
     addListeners()
 
+    canvas.style.touchAction = 'none'
+    addCanvasPointerListeners(canvas)
+
     return () => {
       window.removeEventListener('resize', resizeSceneListener)
       removeListeners()
+      removeCanvasPointerListeners(canvas)
     }
   }, [])
 
@@ -966,6 +997,137 @@ function SceneCanvasInternal(
       if (animationRef.current !== null) cancelAnimationFrame(animationRef.current)
     }
   }, [])
+
+  // Pointer interaction state evaluated inside the single RAF.
+  const pointerRef = useRef({
+    x: -9999,
+    y: -9999,
+    active: false,
+    touchPointerId: -1,
+    fadeEndTime: 0,
+    fadeStartX: -9999,
+    fadeStartY: -9999,
+    fadeStartActive: false,
+  })
+
+  const TOUCH_Y_OFFSET = -30
+  const FADE_DURATION_MS = 350
+
+  const getCanvasCssPoint = (event: PointerEvent) => {
+    const canvas = canvasRef.current
+    if (!canvas) return { x: event.clientX, y: event.clientY }
+    const rect = canvas.getBoundingClientRect()
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    }
+  }
+
+  const updatePointerFromEvent = (event: PointerEvent, isTouch: boolean) => {
+    const point = getCanvasCssPoint(event)
+    pointerRef.current.x = point.x
+    pointerRef.current.y = point.y + (isTouch ? TOUCH_Y_OFFSET : 0)
+    pointerRef.current.active = true
+  }
+
+  const startFade = () => {
+    const state = pointerRef.current
+    state.fadeStartX = state.x
+    state.fadeStartY = state.y
+    state.fadeStartActive = state.active
+    state.fadeEndTime = performance.now() + FADE_DURATION_MS
+    state.active = false
+    state.touchPointerId = -1
+  }
+
+  const clearPointer = () => {
+    const state = pointerRef.current
+    state.active = false
+    state.touchPointerId = -1
+    state.fadeEndTime = 0
+  }
+
+  const onCanvasPointerEnter = (event: PointerEvent) => {
+    if (event.pointerType === 'touch') return
+    updatePointerFromEvent(event, false)
+  }
+
+  const onCanvasPointerMove = (event: PointerEvent) => {
+    const state = pointerRef.current
+    const isTouch = event.pointerType === 'touch'
+    if (isTouch) {
+      if (state.touchPointerId !== event.pointerId) return
+      updatePointerFromEvent(event, true)
+      if (canvasRef.current) {
+        try {
+          canvasRef.current.setPointerCapture(event.pointerId)
+        } catch {}
+      }
+    } else {
+      updatePointerFromEvent(event, false)
+    }
+  }
+
+  const onCanvasPointerDown = (event: PointerEvent) => {
+    if (event.pointerType !== 'touch') return
+    const state = pointerRef.current
+    if (state.touchPointerId !== -1) return
+    state.touchPointerId = event.pointerId
+    updatePointerFromEvent(event, true)
+    if (canvasRef.current) {
+      try {
+        canvasRef.current.setPointerCapture(event.pointerId)
+      } catch {}
+    }
+  }
+
+  const onCanvasPointerUp = (event: PointerEvent) => {
+    const state = pointerRef.current
+    if (event.pointerType === 'touch' && state.touchPointerId === event.pointerId) {
+      startFade()
+    }
+  }
+
+  const onCanvasPointerLeave = (event: PointerEvent) => {
+    if (event.pointerType === 'touch') return
+    clearPointer()
+  }
+
+  const onCanvasPointerCancel = (event: PointerEvent) => {
+    const state = pointerRef.current
+    if (event.pointerType === 'touch' && state.touchPointerId === event.pointerId) {
+      startFade()
+    } else if (event.pointerType !== 'touch') {
+      clearPointer()
+    }
+  }
+
+  const onLostPointerCapture = (event: PointerEvent) => {
+    const state = pointerRef.current
+    if (event.pointerType === 'touch' && state.touchPointerId === event.pointerId) {
+      startFade()
+    }
+  }
+
+  const addCanvasPointerListeners = (canvas: HTMLCanvasElement) => {
+    canvas.addEventListener('pointerenter', onCanvasPointerEnter)
+    canvas.addEventListener('pointermove', onCanvasPointerMove)
+    canvas.addEventListener('pointerdown', onCanvasPointerDown)
+    canvas.addEventListener('pointerup', onCanvasPointerUp)
+    canvas.addEventListener('pointerleave', onCanvasPointerLeave)
+    canvas.addEventListener('pointercancel', onCanvasPointerCancel)
+    canvas.addEventListener('lostpointercapture', onLostPointerCapture)
+  }
+
+  const removeCanvasPointerListeners = (canvas: HTMLCanvasElement) => {
+    canvas.removeEventListener('pointerenter', onCanvasPointerEnter)
+    canvas.removeEventListener('pointermove', onCanvasPointerMove)
+    canvas.removeEventListener('pointerdown', onCanvasPointerDown)
+    canvas.removeEventListener('pointerup', onCanvasPointerUp)
+    canvas.removeEventListener('pointerleave', onCanvasPointerLeave)
+    canvas.removeEventListener('pointercancel', onCanvasPointerCancel)
+    canvas.removeEventListener('lostpointercapture', onLostPointerCapture)
+  }
 
   const toggleMatrix = () => {
     activateSceneMode(matrixEnabled ? 'paragraph' : 'matrix')

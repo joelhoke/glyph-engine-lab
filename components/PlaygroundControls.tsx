@@ -14,8 +14,6 @@ import { RefreshCcwAlt3Icon, ShareIosExportIcon } from './icons'
 
 type MobileSection = 'shape' | 'type' | 'color' | 'background'
 
-const CAPTION_TEXT = 'I made this with Joel. Bring your next idea to life at joelhoke.me.'
-
 type ShareStatus = {
   type: 'info' | 'error'
   message: string
@@ -48,13 +46,10 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
   const uploadErrorId = `upload-error-${stableId}`
   const uploadDescriptionId = `upload-desc-${stableId}`
   const shareStatusId = `share-status-${stableId}`
-  const captionStatusId = `caption-status-${stableId}`
   const [draftText, setDraftText] = useState(config.glyphText)
   const [mobileSection, setMobileSection] = useState<MobileSection>('shape')
   const [shareStatus, setShareStatus] = useState<ShareStatus | null>(null)
-  const [captionStatus, setCaptionStatus] = useState<ShareStatus | null>(null)
   const [isSharing, setIsSharing] = useState(false)
-  const captionTimeoutRef = useRef<number | null>(null)
 
   useEffect(() => {
     setDraftText(config.glyphText)
@@ -102,17 +97,8 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
     setShareStatus(null)
   }
 
-  const clearCaptionStatus = () => {
-    if (captionTimeoutRef.current !== null) {
-      window.clearTimeout(captionTimeoutRef.current)
-      captionTimeoutRef.current = null
-    }
-    setCaptionStatus(null)
-  }
-
   const handleShareCreation = async () => {
     if (isSharing) return
-    clearCaptionStatus()
     const handle = canvasRef?.current
     const canvas = handle?.getCanvas()
     if (!canvas) {
@@ -151,7 +137,7 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
         URL.revokeObjectURL(url)
         setShareStatus({
           type: 'info',
-          message: 'Image downloaded — copy the caption to share what you made.',
+          message: 'Image downloaded — share it wherever you like.',
         })
       }
     } catch (err) {
@@ -169,35 +155,6 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
       setIsSharing(false)
     }
   }
-
-  const handleCopyCaption = async () => {
-    clearCaptionStatus()
-    try {
-      if (!navigator.clipboard) {
-        throw new Error('Clipboard access is not available.')
-      }
-      await navigator.clipboard.writeText(CAPTION_TEXT)
-      setCaptionStatus({ type: 'info', message: 'Caption copied' })
-      if (captionTimeoutRef.current !== null) {
-        window.clearTimeout(captionTimeoutRef.current)
-      }
-      captionTimeoutRef.current = window.setTimeout(() => {
-        setCaptionStatus(null)
-        captionTimeoutRef.current = null
-      }, 3000)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      setCaptionStatus({ type: 'error', message: `Could not copy caption: ${message}` })
-    }
-  }
-
-  useEffect(() => {
-    return () => {
-      if (captionTimeoutRef.current !== null) {
-        window.clearTimeout(captionTimeoutRef.current)
-      }
-    }
-  }, [])
 
   const displayFilename = uploadedFilename ?? DEFAULT_UPLOADED_SVG_FILENAME
 
@@ -263,6 +220,27 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
           </option>
         ))}
       </select>
+    </label>
+  )
+
+  const scaleControl = (
+    <label className="playground-control playground-scale-control">
+      <span className="playground-control-label">
+        Glyph scale{' '}
+        <span className="playground-scale-value" aria-hidden="true">
+          {config.glyphScale.toFixed(2)}
+        </span>
+      </span>
+      <input
+        type="range"
+        min={0.6}
+        max={1.6}
+        step={0.05}
+        value={config.glyphScale}
+        onChange={(e) => onChange({ glyphScale: parseFloat(e.target.value) })}
+        aria-label="Glyph scale"
+        className="playground-scale-slider"
+      />
     </label>
   )
 
@@ -362,6 +340,7 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
         <div className="playground-controls-column playground-column-type" data-section="type">
           {glyphTextControl}
           {fontControl}
+          {scaleControl}
         </div>
         <div className="playground-controls-column playground-column-color" data-section="color">
           {paletteControl}
@@ -407,15 +386,6 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
         </button>
         <button
           type="button"
-          onClick={handleCopyCaption}
-          className="playground-copy-caption-button"
-          aria-label="Copy caption"
-          aria-describedby={captionStatus ? captionStatusId : undefined}
-        >
-          Copy caption
-        </button>
-        <button
-          type="button"
           onClick={onReset}
           className="playground-reset-button"
           aria-label="Reset playground"
@@ -434,19 +404,6 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
             ].filter(Boolean).join(' ')}
           >
             {shareStatus.message}
-          </span>
-        )}
-        {captionStatus && (
-          <span
-            id={captionStatusId}
-            role="status"
-            aria-live="polite"
-            className={[
-              'playground-share-status',
-              captionStatus.type === 'error' && 'playground-share-status-error',
-            ].filter(Boolean).join(' ')}
-          >
-            {captionStatus.message}
           </span>
         )}
       </div>
