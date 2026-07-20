@@ -14,7 +14,6 @@ export default function PlaygroundIntro({ taglineRef }: PlaygroundIntroProps) {
       ref={taglineRef as React.RefObject<HTMLElement>}
     >
       <h1>The portfolio is under construction.</h1>
-      <p>The playground is open. Upload a shape, change the type, and make the field your own.</p>
     </section>
   )
 }
