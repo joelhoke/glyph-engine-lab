@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { forwardRef, useEffect, useId, useState } from 'react'
 import {
   APPROVED_PLAYGROUND_DEFAULTS,
   GLYPH_FONT_OPTIONS,
@@ -14,7 +14,9 @@ type PlaygroundControlsProps = {
   onReset: () => void
 }
 
-export default function PlaygroundControls({ config, onChange, onReset }: PlaygroundControlsProps) {
+const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsProps>(
+  function PlaygroundControls({ config, onChange, onReset }, ref) {
+    const stableId = useId().replace(/:/g, '-')
   const [draftText, setDraftText] = useState(config.glyphText)
 
   useEffect(() => {
@@ -56,6 +58,8 @@ export default function PlaygroundControls({ config, onChange, onReset }: Playgr
         <label className="playground-control playground-control-grow">
           <span className="playground-control-label">Glyph text</span>
           <textarea
+            ref={ref}
+            id={`glyph-text-${stableId}`}
             className="playground-textarea"
             value={draftText}
             onChange={(e) => setDraftText(e.target.value)}
@@ -150,4 +154,6 @@ export default function PlaygroundControls({ config, onChange, onReset }: Playgr
       </div>
     </div>
   )
-}
+})
+
+export default PlaygroundControls

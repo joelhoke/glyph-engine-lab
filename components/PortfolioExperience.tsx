@@ -515,13 +515,20 @@ export default function PortfolioExperience({ mode = 'portfolio' }: PortfolioExp
         </div>
       </div>
       {mode === 'playground' && (
-        <PlaygroundControlDock>
-          <PlaygroundControls
-            config={playgroundConfig}
-            onChange={handlePlaygroundConfigChange}
-            onReset={handleResetPlaygroundConfig}
-          />
-        </PlaygroundControlDock>
+        <PlaygroundControlDock
+          invitation={
+            <>
+              The playground is open. Upload a shape, change the type, and make the field your own.
+            </>
+          }
+          controls={
+            <PlaygroundControls
+              config={playgroundConfig}
+              onChange={handlePlaygroundConfigChange}
+              onReset={handleResetPlaygroundConfig}
+            />
+          }
+        />
       )}
       {tuningMode && (
         <TuningPanel

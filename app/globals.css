@@ -56,7 +56,7 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   font-size: clamp(2.9rem, 4vw, 4.64rem);
   line-height: 0.95;
   letter-spacing: -0.05em;
-  max-width: 12ch;
+  max-width: min(20ch, 45vw);
   margin-bottom: 1.25rem;
 }
 .intro-copy p:last-of-type {
@@ -64,6 +64,12 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   max-width: 44rem;
   line-height: 1.8;
   color: #d8edf2;
+}
+
+@media (max-width: 640px) {
+  .intro-copy h1 {
+    max-width: 90vw;
+  }
 }
 .primary-actions {
   display: grid;
@@ -394,13 +400,100 @@ button:focus-visible {
   width: 100%;
 }
 
-.playground-controls {
+.playground-control-dock-content {
+  background: rgba(8, 12, 18, 0.92);
+  border-radius: 16px;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.playground-invitation {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  text-align: center;
+  font-family: 'Cutive Mono', monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: rgba(220, 232, 255, 0.9);
+}
+
+.playground-invitation-copy {
+  max-width: min(54ch, 45vw);
+  margin: 0;
+}
+
+.playground-start-button {
+  display: inline;
+  font: inherit;
+  font-weight: 600;
+  color: #8abaff;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid currentColor;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 180ms ease;
+}
+
+.playground-start-button:hover {
+  color: #bcd7ff;
+}
+
+.playground-start-button:focus-visible {
+  color: #bcd7ff;
+  outline: 2px solid #8abaff;
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+@media (max-width: 640px) {
+  .playground-invitation-copy {
+    max-width: 90vw;
+  }
+}
+
+.playground-controls-pane {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   padding: 0.85rem 1rem;
-  background: rgba(8, 12, 18, 0.92);
-  border-radius: 16px;
+  font-family: 'Cutive Mono', monospace;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: rgba(220, 232, 255, 0.9);
+  max-height: min(70vh, 520px);
+  overflow: auto;
+}
+
+.playground-controls-pane-header {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.playground-close-button {
+  font: inherit;
+  color: #8abaff;
+  background: transparent;
+  border: none;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+
+.playground-close-button:hover,
+.playground-close-button:focus-visible {
+  color: #bcd7ff;
+  outline: 2px solid #8abaff;
+  outline-offset: 2px;
+}
+
+.playground-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
   font-family: 'Cutive Mono', monospace;
   font-size: 0.75rem;
   line-height: 1.35;
@@ -545,8 +638,17 @@ button:focus-visible {
     width: min(96vw, 640px);
   }
 
-  .playground-controls {
+  .playground-invitation {
+    padding: 0.85rem 1rem;
+  }
+
+  .playground-controls-pane {
     padding: 0.65rem 0.75rem;
+    gap: 0.55rem;
+    max-height: min(72vh, 480px);
+  }
+
+  .playground-controls {
     gap: 0.55rem;
   }
 
