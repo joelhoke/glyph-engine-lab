@@ -2,7 +2,6 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { prepareWithSegments, layoutNextLine } from '@chenglou/pretext'
-import RangeControl from './RangeControl'
 import { createPointerListeners, getPointer } from '../engine/Pointer'
 import {
   Column,
@@ -73,9 +72,19 @@ type SceneCanvasProps = {
   className?: string
   tuningMode?: boolean
   sequenceDiagnostics?: SequenceDiagnostics
+  mouseR?: number
+  particleRepel?: number
+  weatherRepelMult?: number
 }
 
-export default function SceneCanvas({ className, tuningMode, sequenceDiagnostics }: SceneCanvasProps) {
+export default function SceneCanvas({
+  className,
+  tuningMode,
+  sequenceDiagnostics,
+  mouseR = defaultSceneState.mouseR,
+  particleRepel = 0.48,
+  weatherRepelMult = 6,
+}: SceneCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
   const meshBgsRef = useRef<MeshBgs | null>(null)
@@ -107,18 +116,15 @@ export default function SceneCanvas({ className, tuningMode, sequenceDiagnostics
     mode: 'svg',
   })
 
-  const [particleRepel, setParticleRepel] = useState(0.48)
-  const [weatherRepelMult, setWeatherRepelMult] = useState(6)
   const particleRepelRef = useRef(particleRepel)
   const weatherRepelRef = useRef(weatherRepelMult)
 
-    const [matrixEnabled, setMatrixEnabled] = useState(false)
+  const [matrixEnabled, setMatrixEnabled] = useState(false)
   const [weatherEnabled, setWeatherEnabled] = useState(true)
   const [weatherPreset, setWeatherPreset] = useState<TextPreset>('rain')
   const [liveWeatherActive, setLiveWeatherActive] = useState(false)
   const [fontSize, setFontSize] = useState(defaultSceneState.fontSize)
   const [textAmount, setTextAmount] = useState(defaultSceneState.textAmount)
-  const [mouseR, setMouseR] = useState(defaultSceneState.mouseR)
   const [matrixSpread, setMatrixSpread] = useState(defaultSceneState.matrixSpread)
   const [matrixSpeed, setMatrixSpeed] = useState(defaultSceneState.matrixSpeed)
   const [matrixVolume, setMatrixVolume] = useState(defaultSceneState.matrixVolume)
@@ -157,6 +163,12 @@ export default function SceneCanvas({ className, tuningMode, sequenceDiagnostics
   useEffect(() => { particleRepelRef.current = particleRepel }, [particleRepel])
   useEffect(() => { weatherRepelRef.current = weatherRepelMult }, [weatherRepelMult])
   useEffect(() => { tuningModeRef.current = tuningMode ?? false }, [tuningMode])
+
+  useEffect(() => {
+    mouseRRef.current = mouseR
+    particleRepelRef.current = particleRepel
+    weatherRepelRef.current = weatherRepelMult
+  }, [])
 
   const getActiveText = () => {
     const len = Math.max(1, Math.round(FULL_TEXT.length * textAmount))
@@ -739,7 +751,6 @@ export default function SceneCanvas({ className, tuningMode, sequenceDiagnostics
     setWeatherPreset('rain')
     setWeatherIntensity(125)
     setWeatherTurbulence(125)
-    setMouseR(225)
     setFontSize(12)
     activateSceneMode('svg')
 
@@ -804,13 +815,6 @@ export default function SceneCanvas({ className, tuningMode, sequenceDiagnostics
   return (
     <div className={['scene-root', className].filter(Boolean).join(' ')}>
       <canvas ref={canvasRef} />
-      {showTuningUi && (
-        <div id="repel-controls" aria-hidden="false">
-          <RangeControl label="Radius" id="repelRadius" value={mouseR} min={0} max={800} step={1} onChange={setMouseR} />
-          <RangeControl label="Particle Strength" id="particleStrength" value={particleRepel} min={0} max={2} step={0.01} onChange={setParticleRepel} />
-          <RangeControl label="Weather Mult" id="weatherMult" value={weatherRepelMult} min={0} max={12} step={0.1} onChange={setWeatherRepelMult} />
-        </div>
-      )}
       {showTuningUi && (
         <div className="dev-diagnostics" aria-hidden="true">
           <div>mode: {diagnostics.mode}</div>
