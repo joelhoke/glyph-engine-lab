@@ -203,6 +203,58 @@ button:focus-visible {
   padding: 0.6rem 0.8rem;
   backdrop-filter: blur(8px);
 }
+.sequence-controls {
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  z-index: 50;
+  pointer-events: auto;
+  font-family: 'Cutive Mono', monospace;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: rgba(200, 220, 255, 0.85);
+  background: rgba(6, 10, 16, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.sequence-buttons {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.sequence-buttons button {
+  font: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+}
+.sequence-buttons button:hover,
+.sequence-buttons button:focus-visible {
+  background: rgba(255, 255, 255, 0.16);
+}
+.rate-control {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+}
+.rate-control input {
+  width: 5rem;
+  font: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 0.2rem 0.4rem;
+}
 @media (max-width: 820px) {
   .primary-actions {
     grid-template-columns: 1fr;
