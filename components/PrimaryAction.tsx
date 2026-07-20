@@ -7,10 +7,11 @@ type PrimaryActionProps = {
   selected: boolean
   onClick: () => void
   hue?: string
+  style?: React.CSSProperties
 }
 
-export default function PrimaryAction({ label, selected, onClick, hue }: PrimaryActionProps) {
-  const beamStyle: React.CSSProperties = {}
+export default function PrimaryAction({ label, selected, onClick, hue, style }: PrimaryActionProps) {
+  const beamStyle: React.CSSProperties = { ...style }
   if (hue) (beamStyle as any)['--beam-hue-base'] = hue
 
   return (

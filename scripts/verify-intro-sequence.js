@@ -28,9 +28,12 @@ try {
   process.exit(1)
 }
 
-const { evaluateIntroSequence, getPhaseStartTime, getTotalDuration } = require(
-  path.join(tmpDir, 'introSequence.js'),
-)
+const {
+  evaluateIntroSequence,
+  getPhaseStartTime,
+  getStaggeredItemProgress,
+  getTotalDuration,
+} = require(path.join(tmpDir, 'introSequence.js'))
 
 const timing = {
   logoFormDuration: 900,
@@ -143,6 +146,60 @@ assert(getPhaseStartTime('complete', timing) === 6200, 'complete start')
 
 // Total duration
 assert(getTotalDuration(timing) === 6200, 'total duration')
+
+// Staggered item progress helper
+const stagger = getStaggeredItemProgress
+const optionDuration = timing.optionsTransitionDuration
+const staggerMs = timing.optionStagger
+const itemCount = 3
+
+assert(
+  stagger({ phaseElapsedMs: 0, groupDurationMs: optionDuration, staggerMs, itemIndex: 0, itemCount }).progress === 0,
+  'stagger: first item at group start',
+)
+assert(
+  stagger({ phaseElapsedMs: staggerMs * 0.5, groupDurationMs: optionDuration, staggerMs, itemIndex: 1, itemCount }).progress === 0,
+  'stagger: later item before its stagger start',
+)
+assert(
+  stagger({ phaseElapsedMs: staggerMs, groupDurationMs: optionDuration, staggerMs, itemIndex: 1, itemCount }).progress === 0,
+  'stagger: item at exact stagger start',
+)
+assert(
+  stagger({ phaseElapsedMs: staggerMs + optionDuration / 3, groupDurationMs: optionDuration, staggerMs, itemIndex: 1, itemCount }).progress > 0 && stagger({ phaseElapsedMs: staggerMs + optionDuration / 3, groupDurationMs: optionDuration, staggerMs, itemIndex: 1, itemCount }).progress < 1,
+  'stagger: later item interior is between 0 and 1',
+)
+assert(
+  stagger({ phaseElapsedMs: optionDuration, groupDurationMs: optionDuration, staggerMs, itemIndex: 2, itemCount }).progress === 1,
+  'stagger: all items complete at group completion',
+)
+assert(
+  stagger({ phaseElapsedMs: 0, groupDurationMs: optionDuration, staggerMs, itemIndex: 0, itemCount: 1 }).progress === 0,
+  'stagger: one item at start',
+)
+assert(
+  stagger({ phaseElapsedMs: optionDuration, groupDurationMs: optionDuration, staggerMs, itemIndex: 0, itemCount: 1 }).progress === 1,
+  'stagger: one item at completion',
+)
+assert(
+  stagger({ phaseElapsedMs: 100, groupDurationMs: optionDuration, staggerMs: 0, itemIndex: 1, itemCount }).progress === stagger({ phaseElapsedMs: 100, groupDurationMs: optionDuration, staggerMs: 0, itemIndex: 0, itemCount }).progress,
+  'stagger: zero stagger aligns all items',
+)
+const excessiveStagger = stagger({
+  phaseElapsedMs: staggerMs,
+  groupDurationMs: staggerMs * (itemCount - 1) + 5,
+  staggerMs: staggerMs * 10,
+  itemIndex: 1,
+  itemCount,
+})
+assert(excessiveStagger.progress === 0, 'stagger: excessive stagger clamps without crash')
+assert(excessiveStagger.itemDurationMs > 0, 'stagger: excessive stagger retains positive item duration')
+const zeroDuration = stagger({ phaseElapsedMs: 0, groupDurationMs: 0, staggerMs, itemIndex: 0, itemCount })
+assert(zeroDuration.progress === 0, 'stagger: zero group duration returns 0')
+assert(!Number.isNaN(zeroDuration.progress) && Number.isFinite(zeroDuration.progress), 'stagger: zero group duration is finite')
+const negativeElapsed = stagger({ phaseElapsedMs: -50, groupDurationMs: optionDuration, staggerMs, itemIndex: 0, itemCount })
+assert(negativeElapsed.progress === 0, 'stagger: negative elapsed clamps to 0')
+assert(!Number.isNaN(negativeElapsed.progress) && Number.isFinite(negativeElapsed.progress), 'stagger: negative elapsed is finite')
 
 // Cleanup
 fs.rmSync(tmpDir, { recursive: true, force: true })

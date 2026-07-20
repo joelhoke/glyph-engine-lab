@@ -2,10 +2,11 @@
 
 import SceneCanvas from './SceneCanvas'
 import Intro from './Intro'
-import PrimaryActions, { ExperienceKey } from './PrimaryActions'
+import PrimaryActions, { ExperienceKey, PRIMARY_ACTION_COUNT } from './PrimaryActions'
 import {
   evaluateIntroSequence,
   getPhaseStartTime,
+  getStaggeredItemProgress,
   getTotalDuration,
   IntroPhase,
   IntroSequenceSnapshot,
@@ -23,6 +24,8 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
+const ACTION_TRANSLATE_PX = 16
+
 const isTuningMode = () => {
   if (typeof window === 'undefined') return false
   return new URLSearchParams(window.location.search).get('debug') === 'true'
@@ -36,6 +39,15 @@ type SequenceDiagnostics = {
   taglineProgress: number
   taglineVisible: boolean
   taglineMounted: boolean
+  optionsProgress: number
+  optionsVisible: boolean
+  optionsReady: boolean
+  optionsMounted: boolean
+  optionItemProgress: number[]
+  effectiveOptionStaggerMs: number
+  effectiveOptionItemDurationMs: number
+  timingFallbackActive: boolean
+  actionsInert: boolean
   speed: number
   documentHidden: boolean
 }
@@ -61,8 +73,9 @@ export default function PortfolioExperience() {
     evaluateIntroSequence(0, portfolioIntroPreset.timing),
   )
 
-  // Direct DOM ref for full-rate tagline visual updates (not throttled diagnostics).
+  // Direct DOM refs for full-rate visual updates (not throttled diagnostics).
   const taglineRef = useRef<HTMLElement | null>(null)
+  const actionsRef = useRef<HTMLDivElement | null>(null)
 
   // Throttled diagnostic state: drives text readouts only.
   const [diagnostics, setDiagnostics] = useState<SequenceDiagnostics>({
@@ -73,6 +86,15 @@ export default function PortfolioExperience() {
     taglineProgress: 0,
     taglineVisible: false,
     taglineMounted: true,
+    optionsProgress: 0,
+    optionsVisible: false,
+    optionsReady: false,
+    optionsMounted: true,
+    optionItemProgress: Array(PRIMARY_ACTION_COUNT).fill(0),
+    effectiveOptionStaggerMs: portfolioIntroPreset.timing.optionStagger,
+    effectiveOptionItemDurationMs: 0,
+    timingFallbackActive: false,
+    actionsInert: true,
     speed: 1,
     documentHidden: false,
   })
@@ -108,6 +130,44 @@ export default function PortfolioExperience() {
       node.setAttribute('aria-hidden', String(visuallyHidden))
     }
 
+    const updateActionsVisuals = (sequence: IntroSequenceSnapshot) => {
+      const node = actionsRef.current
+      if (!node) return
+
+      const optionsVisible = sequence.optionsVisible
+      const optionsReady = sequence.optionsReady
+      const phaseElapsedMs = sequence.phaseElapsedMs
+      const { optionsTransitionDuration, optionStagger } = portfolioIntroPreset.timing
+
+      let timingFallbackActive = false
+      const itemProgresses: number[] = []
+
+      for (let i = 0; i < PRIMARY_ACTION_COUNT; i += 1) {
+        const { progress, effectiveStaggerMs, itemDurationMs } = getStaggeredItemProgress({
+          phaseElapsedMs,
+          groupDurationMs: optionsTransitionDuration,
+          staggerMs: optionStagger,
+          itemIndex: i,
+          itemCount: PRIMARY_ACTION_COUNT,
+        })
+        if (i === 0) {
+          timingFallbackActive =
+            effectiveStaggerMs !== optionStagger || itemDurationMs !== Math.max(0, optionsTransitionDuration - optionStagger * (PRIMARY_ACTION_COUNT - 1))
+        }
+        const eased = optionsVisible ? easeOutCubic(progress) : 0
+        node.style.setProperty(`--option-progress-${i}`, String(eased))
+        itemProgresses.push(progress)
+      }
+
+      const groupHidden = !optionsVisible || itemProgresses.every((p) => p <= 0)
+      node.classList.toggle('options-hidden', groupHidden)
+      node.classList.toggle('options-inert', !optionsReady)
+      node.setAttribute('aria-hidden', String(!optionsVisible))
+      node.toggleAttribute('inert', !optionsReady)
+
+      return { itemProgresses, timingFallbackActive }
+    }
+
     const tick = (now: number) => {
       const ctrl = controllerRef.current
       const elapsed = ctrl.paused
@@ -118,10 +178,16 @@ export default function PortfolioExperience() {
 
       // Full-rate visual update path: apply directly to the DOM without React re-render.
       updateTaglineVisuals(next)
+      const actionMeta = updateActionsVisuals(next)
 
       // Throttle diagnostic React state updates to ~10fps.
       if (now - lastDiagnosticTick > 100) {
         const taglineProgress = next.taglineVisible ? next.taglineProgress : 0
+        const optionsProgress = next.optionsVisible ? next.optionsProgress : 0
+        const { itemProgresses, timingFallbackActive } = actionMeta ?? {
+          itemProgresses: Array(PRIMARY_ACTION_COUNT).fill(0),
+          timingFallbackActive: false,
+        }
         setDiagnostics((prev) => ({
           ...prev,
           phase: next.phase,
@@ -131,6 +197,19 @@ export default function PortfolioExperience() {
           taglineProgress,
           taglineVisible: next.taglineVisible,
           taglineMounted: !!taglineRef.current,
+          optionsProgress,
+          optionsVisible: next.optionsVisible,
+          optionsReady: next.optionsReady,
+          optionsMounted: !!actionsRef.current,
+          optionItemProgress: itemProgresses,
+          effectiveOptionStaggerMs: portfolioIntroPreset.timing.optionStagger,
+          effectiveOptionItemDurationMs: Math.max(
+            0,
+            portfolioIntroPreset.timing.optionsTransitionDuration -
+              portfolioIntroPreset.timing.optionStagger * (PRIMARY_ACTION_COUNT - 1),
+          ),
+          timingFallbackActive,
+          actionsInert: !next.optionsReady,
           speed: ctrl.speed,
         }))
         lastDiagnosticTick = now
@@ -190,6 +269,18 @@ export default function PortfolioExperience() {
     }
   }
 
+  const resetActionsVisuals = () => {
+    const node = actionsRef.current
+    if (!node) return
+    for (let i = 0; i < PRIMARY_ACTION_COUNT; i += 1) {
+      node.style.setProperty(`--option-progress-${i}`, '0')
+    }
+    node.classList.add('options-hidden')
+    node.classList.add('options-inert')
+    node.setAttribute('aria-hidden', 'true')
+    node.setAttribute('inert', '')
+  }
+
   const replay = () => {
     const ctrl = controllerRef.current
     ctrl.paused = false
@@ -203,6 +294,7 @@ export default function PortfolioExperience() {
       node.classList.add('tagline-hidden')
       node.setAttribute('aria-hidden', 'true')
     }
+    resetActionsVisuals()
     setDiagnostics((prev) => ({
       ...prev,
       phase: 'logo-forming',
@@ -211,6 +303,11 @@ export default function PortfolioExperience() {
       overallProgress: 0,
       taglineProgress: 0,
       taglineVisible: false,
+      optionsProgress: 0,
+      optionsVisible: false,
+      optionsReady: false,
+      optionItemProgress: Array(PRIMARY_ACTION_COUNT).fill(0),
+      actionsInert: true,
     }))
   }
 
@@ -226,12 +323,33 @@ export default function PortfolioExperience() {
 
     const taglineProgress = next.taglineVisible ? next.taglineProgress : 0
 
-    const node = taglineRef.current
-    if (node) {
-      node.style.setProperty('--tagline-progress', String(easeOutCubic(taglineProgress)))
+    const taglineNode = taglineRef.current
+    if (taglineNode) {
+      taglineNode.style.setProperty('--tagline-progress', String(easeOutCubic(taglineProgress)))
       const visuallyHidden = !next.taglineVisible || taglineProgress <= 0
-      node.classList.toggle('tagline-hidden', visuallyHidden)
-      node.setAttribute('aria-hidden', String(visuallyHidden))
+      taglineNode.classList.toggle('tagline-hidden', visuallyHidden)
+      taglineNode.setAttribute('aria-hidden', String(visuallyHidden))
+    }
+
+    const actionsNode = actionsRef.current
+    if (actionsNode) {
+      const itemProgresses: number[] = []
+      for (let i = 0; i < PRIMARY_ACTION_COUNT; i += 1) {
+        const { progress } = getStaggeredItemProgress({
+          phaseElapsedMs: next.phaseElapsedMs,
+          groupDurationMs: portfolioIntroPreset.timing.optionsTransitionDuration,
+          staggerMs: portfolioIntroPreset.timing.optionStagger,
+          itemIndex: i,
+          itemCount: PRIMARY_ACTION_COUNT,
+        })
+        actionsNode.style.setProperty(`--option-progress-${i}`, String(easeOutCubic(next.optionsVisible ? progress : 0)))
+        itemProgresses.push(progress)
+      }
+      const groupHidden = !next.optionsVisible || itemProgresses.every((p) => p <= 0)
+      actionsNode.classList.toggle('options-hidden', groupHidden)
+      actionsNode.classList.toggle('options-inert', !next.optionsReady)
+      actionsNode.setAttribute('aria-hidden', String(!next.optionsVisible))
+      actionsNode.toggleAttribute('inert', !next.optionsReady)
     }
 
     setDiagnostics((prev) => ({
@@ -241,6 +359,19 @@ export default function PortfolioExperience() {
       phaseProgress: phase === 'complete' ? 1 : next.phaseProgress,
       taglineProgress,
       taglineVisible: next.taglineVisible,
+      optionsProgress: next.optionsVisible ? next.optionsProgress : 0,
+      optionsVisible: next.optionsVisible,
+      optionsReady: next.optionsReady,
+      optionItemProgress: Array(PRIMARY_ACTION_COUNT).fill(0).map((_, i) =>
+        getStaggeredItemProgress({
+          phaseElapsedMs: next.phaseElapsedMs,
+          groupDurationMs: portfolioIntroPreset.timing.optionsTransitionDuration,
+          staggerMs: portfolioIntroPreset.timing.optionStagger,
+          itemIndex: i,
+          itemCount: PRIMARY_ACTION_COUNT,
+        }).progress,
+      ),
+      actionsInert: !next.optionsReady,
     }))
   }
 
@@ -267,8 +398,11 @@ export default function PortfolioExperience() {
       <div className="foreground-layer" aria-live="polite">
         <div className="foreground-content">
           <Intro taglineRef={taglineRef} />
-          {/* Milestone 4 will reveal PrimaryActions via sequence.optionsReady. */}
-          {false && <PrimaryActions selected={selected} onSelect={handleAction} />}
+          <PrimaryActions
+            selected={selected}
+            onSelect={handleAction}
+            groupRef={actionsRef}
+          />
         </div>
       </div>
       {tuningMode && (
@@ -280,6 +414,17 @@ export default function PortfolioExperience() {
           <div>tagline progress: {diagnostics.taglineProgress.toFixed(2)}</div>
           <div>tagline visible: {diagnostics.taglineVisible ? 'yes' : 'no'}</div>
           <div>tagline mounted: {diagnostics.taglineMounted ? 'yes' : 'no'}</div>
+          <div>options progress: {diagnostics.optionsProgress.toFixed(2)}</div>
+          <div>options visible: {diagnostics.optionsVisible ? 'yes' : 'no'}</div>
+          <div>options ready: {diagnostics.optionsReady ? 'yes' : 'no'}</div>
+          <div>actions mounted: {diagnostics.optionsMounted ? 'yes' : 'no'}</div>
+          <div>actions inert: {diagnostics.actionsInert ? 'yes' : 'no'}</div>
+          <div>effective option stagger: {Math.round(diagnostics.effectiveOptionStaggerMs)}ms</div>
+          <div>effective option item duration: {Math.round(diagnostics.effectiveOptionItemDurationMs)}ms</div>
+          <div>timing fallback: {diagnostics.timingFallbackActive ? 'yes' : 'no'}</div>
+          {diagnostics.optionItemProgress.map((p, i) => (
+            <div key={i}>option {i} progress: {p.toFixed(2)}</div>
+          ))}
           <div>speed: {diagnostics.speed.toFixed(2)}x</div>
           <div>hidden: {diagnostics.documentHidden ? 'yes' : 'no'}</div>
           <label className="rate-control">
