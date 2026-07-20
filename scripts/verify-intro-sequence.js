@@ -31,6 +31,7 @@ try {
 const {
   evaluateIntroSequence,
   getPhaseStartTime,
+  getPrimaryActionProgresses,
   getStaggeredItemProgress,
   getTotalDuration,
 } = require(path.join(tmpDir, 'introSequence.js'))
@@ -200,6 +201,49 @@ assert(!Number.isNaN(zeroDuration.progress) && Number.isFinite(zeroDuration.prog
 const negativeElapsed = stagger({ phaseElapsedMs: -50, groupDurationMs: optionDuration, staggerMs, itemIndex: 0, itemCount })
 assert(negativeElapsed.progress === 0, 'stagger: negative elapsed clamps to 0')
 assert(!Number.isNaN(negativeElapsed.progress) && Number.isFinite(negativeElapsed.progress), 'stagger: negative elapsed is finite')
+
+// Primary action progress helper (authoritative)
+const actionProgresses = (elapsed) =>
+  getPrimaryActionProgresses(evaluateIntroSequence(elapsed, timing), itemCount, timing)
+const assertProgresses = (elapsed, expected, label) => {
+  const values = actionProgresses(elapsed)
+  assert(values.length === itemCount, `${label}: expected ${itemCount} action progress values`)
+  values.forEach((value, i) => {
+    assert(Number.isFinite(value) && !Number.isNaN(value), `${label}: item ${i} is finite`)
+    assert(value >= 0 && value <= 1, `${label}: item ${i} clamped to 0..1`)
+    assert(approx(value, expected[i]), `${label}: item ${i} expected ${expected[i]}, got ${value}`)
+  })
+}
+
+// Before options-entering
+assertProgresses(0, [0, 0, 0], 'primary actions before options at t=0')
+assertProgresses(3800, [0, 0, 0], 'primary actions during tagline-hold')
+
+// Start of options-entering
+assertProgresses(5300, [0, 0, 0], 'primary actions at options-entering start')
+
+// Interior of options-entering
+{
+  const interiorElapsed = 5600
+  const interiorSequence = evaluateIntroSequence(interiorElapsed, timing)
+  const expected = Array.from({ length: itemCount }, (_, i) =>
+    getStaggeredItemProgress({
+      phaseElapsedMs: interiorSequence.phaseElapsedMs,
+      groupDurationMs: timing.optionsTransitionDuration,
+      staggerMs,
+      itemIndex: i,
+      itemCount,
+    }).progress,
+  )
+  assertProgresses(interiorElapsed, expected, 'primary actions in options-entering interior')
+}
+
+// Exact options completion boundary
+assertProgresses(6200, [1, 1, 1], 'primary actions at options completion boundary')
+
+// Complete phase start and beyond completion
+assertProgresses(6200, [1, 1, 1], 'primary actions at complete start')
+assertProgresses(7200, [1, 1, 1], 'primary actions beyond completion')
 
 // Cleanup
 fs.rmSync(tmpDir, { recursive: true, force: true })

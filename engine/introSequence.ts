@@ -78,6 +78,46 @@ export function getStaggeredItemProgress(
 }
 
 /**
+ * Authoritative resolver for primary action reveal progress values.
+ *
+ * Contract:
+ * - Before options are visible: all 0
+ * - At options-entering start: all 0
+ * - During options-entering: staggered item progress
+ * - Once options are ready (and complete): all 1
+ */
+export function getPrimaryActionProgresses(
+  sequence: IntroSequenceSnapshot,
+  itemCount: number,
+  timing: IntroTiming,
+): number[] {
+  if (itemCount <= 0) return []
+
+  if (sequence.optionsReady) {
+    return Array(itemCount).fill(1)
+  }
+
+  if (!sequence.optionsVisible) {
+    return Array(itemCount).fill(0)
+  }
+
+  const progresses: number[] = []
+  for (let i = 0; i < itemCount; i += 1) {
+    const { progress } = getStaggeredItemProgress({
+      phaseElapsedMs: sequence.phaseElapsedMs,
+      groupDurationMs: timing.optionsTransitionDuration,
+      staggerMs: timing.optionStagger,
+      itemIndex: i,
+      itemCount,
+    })
+    const safe = Number.isFinite(progress) ? progress : 0
+    progresses.push(clamp(safe, 0, 1))
+  }
+
+  return progresses
+}
+
+/**
  * Pure evaluator that maps an elapsed sequence time to a deterministic
  * intro snapshot. All durations are in milliseconds.
  */

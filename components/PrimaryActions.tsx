@@ -1,6 +1,6 @@
 'use client'
 
-import { Ref, RefObject } from 'react'
+import { Ref } from 'react'
 import PrimaryAction from './PrimaryAction'
 
 type PrimaryActionsProps = {
@@ -34,6 +34,7 @@ export default function PrimaryActions({ selected, onSelect, groupRef }: Primary
           label={action.label}
           selected={selected === action.key}
           onClick={() => onSelect(action.key)}
+          actionIndex={index}
           hue={action.hue}
           style={{ '--option-index': String(index) } as React.CSSProperties}
         />
