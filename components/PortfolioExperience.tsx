@@ -1,6 +1,6 @@
 'use client'
 
-import SceneCanvas from './SceneCanvas'
+import SceneCanvas, { SceneCanvasHandle } from './SceneCanvas'
 import Intro from './Intro'
 import PlaygroundIntro from './PlaygroundIntro'
 import PrimaryActions, { ExperienceKey, PRIMARY_ACTION_COUNT } from './PrimaryActions'
@@ -115,6 +115,8 @@ export default function PortfolioExperience({ mode = 'portfolio' }: PortfolioExp
   const [playgroundConfig, setPlaygroundConfig] = useState<PlaygroundConfig>(() => ({
     ...APPROVED_PLAYGROUND_DEFAULTS,
   }))
+
+  const sceneCanvasRef = useRef<SceneCanvasHandle>(null)
 
   const [uploadedSvg, setUploadedSvg] = useState<SvgUploadSuccessResult | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -505,6 +507,7 @@ export default function PortfolioExperience({ mode = 'portfolio' }: PortfolioExp
   return (
     <div className="portfolio-shell">
       <SceneCanvas
+        ref={sceneCanvasRef}
         tuningMode={tuningMode}
         sequenceDiagnostics={diagnostics}
         mouseR={sceneConfig.mouseR}
@@ -547,6 +550,7 @@ export default function PortfolioExperience({ mode = 'portfolio' }: PortfolioExp
               config={playgroundConfig}
               uploadedFilename={uploadedSvg?.filename ?? DEFAULT_UPLOADED_SVG_FILENAME}
               uploadError={uploadError}
+              canvasRef={sceneCanvasRef}
               onChange={handlePlaygroundConfigChange}
               onReset={handleResetPlaygroundConfig}
               onUpload={handleUploadSvg}

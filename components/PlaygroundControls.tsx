@@ -9,13 +9,20 @@ import {
   PlaygroundConfig,
 } from '../engine/playgroundConfig'
 import { DEFAULT_UPLOADED_SVG_FILENAME } from '../engine/svgUpload'
+import { SceneCanvasHandle } from './SceneCanvas'
 
 type MobileSection = 'shape' | 'type' | 'color' | 'background'
+
+type ShareStatus = {
+  type: 'info' | 'error'
+  message: string
+}
 
 type PlaygroundControlsProps = {
   config: PlaygroundConfig
   uploadedFilename?: string | null
   uploadError?: string | null
+  canvasRef?: React.RefObject<SceneCanvasHandle | null>
   onChange: (patch: Partial<PlaygroundConfig>) => void
   onReset: () => void
   onUpload: (file: File) => void
@@ -30,15 +37,18 @@ const MOBILE_SECTIONS: { key: MobileSection; label: string }[] = [
 
 const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsProps>(
   function PlaygroundControls(
-    { config, uploadedFilename, uploadError, onChange, onReset, onUpload },
+    { config, uploadedFilename, uploadError, canvasRef, onChange, onReset, onUpload },
     ref,
   ) {
     const stableId = useId().replace(/:/g, '-')
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const uploadErrorId = `upload-error-${stableId}`
   const uploadDescriptionId = `upload-desc-${stableId}`
+  const shareStatusId = `share-status-${stableId}`
   const [draftText, setDraftText] = useState(config.glyphText)
   const [mobileSection, setMobileSection] = useState<MobileSection>('shape')
+  const [shareStatus, setShareStatus] = useState<ShareStatus | null>(null)
+  const [isSharing, setIsSharing] = useState(false)
 
   useEffect(() => {
     setDraftText(config.glyphText)
@@ -79,6 +89,74 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
     onUpload(file)
     if (uploadInputRef.current) {
       uploadInputRef.current.value = ''
+    }
+  }
+
+  const clearShareStatus = () => {
+    setShareStatus(null)
+  }
+
+  const handleShareCreation = async () => {
+    if (isSharing) return
+    const handle = canvasRef?.current
+    const canvas = handle?.getCanvas()
+    if (!canvas) {
+      setShareStatus({ type: 'error', message: 'Canvas is not ready. Try again in a moment.' })
+      return
+    }
+
+    setIsSharing(true)
+    setShareStatus({ type: 'info', message: 'Preparing…' })
+
+    try {
+      const blob = await new Promise<Blob | null>((resolve, reject) => {
+        try {
+          canvas.toBlob((b) => resolve(b), 'image/png')
+        } catch (err) {
+          reject(err)
+        }
+      })
+
+      if (!blob) {
+        throw new Error('Canvas export returned an empty image.')
+      }
+
+      const file = new File([blob], 'joel-hoke-playground.png', { type: 'image/png' })
+      const shareData = {
+        files: [file],
+        title: 'Made with Joel',
+        text: 'I made this with Joel. Bring your next idea to life at joelhoke.me.',
+        url: 'https://joelhoke.me',
+      }
+
+      if (navigator.canShare?.(shareData)) {
+        await navigator.share(shareData)
+        setShareStatus(null)
+      } else {
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = 'joel-hoke-playground.png'
+        link.click()
+        URL.revokeObjectURL(url)
+        setShareStatus({
+          type: 'info',
+          message: 'Image downloaded — share what you made at joelhoke.me.',
+        })
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      // Canceling the native share sheet throws an AbortError; keep it silent.
+      if ((err as Error)?.name === 'AbortError') {
+        setShareStatus(null)
+      } else {
+        setShareStatus({
+          type: 'error',
+          message: `Could not share: ${message}`,
+        })
+      }
+    } finally {
+      setIsSharing(false)
     }
   }
 
@@ -301,6 +379,47 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
           </svg>
           Reset playground
         </button>
+        <button
+          type="button"
+          onClick={handleShareCreation}
+          disabled={isSharing}
+          className="playground-share-button"
+          aria-label="Share creation"
+          aria-busy={isSharing}
+          aria-describedby={shareStatus ? shareStatusId : undefined}
+        >
+          <svg
+            className="playground-share-icon"
+            width="12"
+            height="12"
+            viewBox="0 0 12 12"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path
+              d="M2 5V2.5a1.5 1.5 0 1 1 3 0V5m0 0v2.5a1.5 1.5 0 1 1-3 0V5m5-2h1.5a1.5 1.5 0 0 1 0 3H7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          Share creation
+        </button>
+        {shareStatus && (
+          <span
+            id={shareStatusId}
+            role="status"
+            aria-live="polite"
+            className={[
+              'playground-share-status',
+              shareStatus.type === 'error' && 'playground-share-status-error',
+            ].filter(Boolean).join(' ')}
+          >
+            {shareStatus.message}
+          </span>
+        )}
       </div>
     </div>
   )
