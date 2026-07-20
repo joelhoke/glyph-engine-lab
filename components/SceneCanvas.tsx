@@ -28,6 +28,9 @@ import {
   TYPEWRITER_CPS,
   defaultSceneState,
 } from '../engine/constants'
+import { loadSvgTargets, SvgTarget } from '../engine/svgTargetSource'
+
+type SceneMode = 'svg' | 'paragraph' | 'matrix' | 'weather'
 
 const QUOTE = "Voilà! In View, a humble Vaudevillian Veteran, cast Vicariously as both Victim and Villain by the Vicissitudes of fate. This Visage, no mere Veneer of Vanity, is a Vestige of the Vox populi, now Vacant, Vanished. However, this Valorous Visitation of a bygone Vexation stands Vivified, and has Vowed to Vanquish these Venal and Virulent Vermin Vanguarding Vice and Vouchsafing the Violently Vicious and Voracious Violation of Volition. The only Verdict is Vengeance; a Vendetta held as a Votive, not in Vain, for the Value and Veracity of such shall one day Vindicate the Vigilant and the Virtuous. Verily, this Vichyssoise of Verbiage Veers most Verbose, so let me simply add that it's my very good honor to meet you and you may call me V."
 const FULL_TEXT = Array(25).fill(QUOTE).join(' ')
@@ -83,6 +86,17 @@ export default function SceneCanvas({ className }: SceneCanvasProps) {
   const mouseRRef = useRef(defaultSceneState.mouseR)
   const sequencePhaseRef = useRef<SequencePhase>('logo')
   const sequenceStartRef = useRef<number>(0)
+  const sceneModeRef = useRef<SceneMode>('svg')
+  const svgTargetsRef = useRef<SvgTarget[]>([])
+  const svgTargetMapRef = useRef<Int32Array>(new Int32Array(0))
+  const sceneStartRef = useRef<number>(0)
+  const [diagnostics, setDiagnostics] = useState({
+    sourceStatus: 'idle',
+    targetCount: 0,
+    glyphCount: 0,
+    assignedCount: 0,
+    mode: 'svg',
+  })
 
   const [particleRepel, setParticleRepel] = useState(0.48)
   const [weatherRepelMult, setWeatherRepelMult] = useState(6)
@@ -308,6 +322,100 @@ export default function SceneCanvas({ className }: SceneCanvasProps) {
     logoTargetsRef.current = targets
   }
 
+  const buildSvgTargetAssignment = () => {
+    const targets = svgTargetsRef.current
+    const particles = particlesRef.current
+    const count = particles.length
+    const targetCount = targets.length
+    const map = new Int32Array(count)
+    if (targetCount === 0) {
+      map.fill(-1)
+      svgTargetMapRef.current = map
+      return
+    }
+    for (let i = 0; i < count; i += 1) {
+      if (count >= targetCount) {
+        // Every target receives one glyph; remaining glyphs become ambient.
+        map[i] = i < targetCount ? i : -1
+      } else {
+        // Fewer glyphs than targets: spread glyphs evenly across the silhouette.
+        map[i] = Math.floor((i * targetCount) / count)
+      }
+    }
+    svgTargetMapRef.current = map
+  }
+
+  const countAssignedTargets = () => {
+    const map = svgTargetMapRef.current
+    let count = 0
+    for (let i = 0; i < map.length; i += 1) {
+      if (map[i] >= 0) count += 1
+    }
+    return count
+  }
+
+  const buildSvgTargets = async () => {
+    const W = window.innerWidth
+    const H = window.innerHeight
+    setDiagnostics((prev) => ({ ...prev, sourceStatus: 'loading' }))
+    const result = await loadSvgTargets({
+      url: '/assets/test-source.svg',
+      bounds: { width: W, height: H },
+      samplingStep: LOGO_TARGET_STEP,
+    })
+    if (result.ok) {
+      svgTargetsRef.current = result.targets
+      setDiagnostics((prev) => ({
+        ...prev,
+        sourceStatus: 'loaded',
+        targetCount: result.targets.length,
+      }))
+    } else {
+      svgTargetsRef.current = []
+      setDiagnostics((prev) => ({
+        ...prev,
+        sourceStatus: `error: ${result.error}`,
+        targetCount: 0,
+      }))
+    }
+    buildSvgTargetAssignment()
+    setDiagnostics((prev) => ({
+      ...prev,
+      glyphCount: particlesRef.current.length,
+      assignedCount: countAssignedTargets(),
+    }))
+  }
+
+  const activateSceneMode = (mode: SceneMode) => {
+    sceneModeRef.current = mode
+    if (mode === 'matrix') {
+      setMatrixEnabled(true)
+      setWeatherEnabled(false)
+      buildMatrixStructure()
+    } else if (mode === 'weather') {
+      setMatrixEnabled(false)
+      setWeatherEnabled(true)
+      buildWeatherParticles()
+    } else if (mode === 'paragraph') {
+      setMatrixEnabled(false)
+      setWeatherEnabled(false)
+    } else if (mode === 'svg') {
+      setMatrixEnabled(false)
+      setWeatherEnabled(false)
+      sceneStartRef.current = performance.now()
+      buildSvgTargetAssignment()
+    }
+    setDiagnostics((prev) => ({
+      ...prev,
+      mode,
+      glyphCount: particlesRef.current.length,
+      assignedCount: countAssignedTargets(),
+    }))
+    if (typeof document !== 'undefined') {
+      document.body.style.overflowY = mode === 'matrix' || mode === 'weather' ? 'hidden' : 'auto'
+    }
+  }
+
   const getLogoTarget = (index: number) => {
     const targets = logoTargetsRef.current
     if (targets.length === 0) return { tx: window.innerWidth * 0.5, ty: window.innerHeight * 0.5 }
@@ -388,7 +496,7 @@ export default function SceneCanvas({ className }: SceneCanvasProps) {
     const W = window.innerWidth
     const H = window.innerHeight
     let contentH = H
-    if (!matrixEnabledRef.current && !weatherEnabledRef.current && paragraphTargetsRef.current.length > 0) {
+    if (sceneModeRef.current === 'paragraph' && paragraphTargetsRef.current.length > 0) {
       const lastTarget = paragraphTargetsRef.current[paragraphTargetsRef.current.length - 1]
       contentH = Math.max(H, lastTarget.ty + lineHeightRef.current * 2)
     }
@@ -399,12 +507,20 @@ export default function SceneCanvas({ className }: SceneCanvasProps) {
     ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0)
     buildAllMeshBgs()
     buildParagraphTargets()
-    buildLogoTargets()
-    ensureParticleCount(Math.max(paragraphTargetsRef.current.length, logoTargetsRef.current.length, matrixSlotsRef.current.length, 120))
+    buildSvgTargets()
+    ensureParticleCount(Math.max(paragraphTargetsRef.current.length, svgTargetsRef.current.length, matrixSlotsRef.current.length, 120))
     if (weatherEnabledRef.current) buildWeatherParticles()
     if (matrixEnabledRef.current) buildMatrixStructure()
+    if (sceneModeRef.current === 'svg') {
+      buildSvgTargetAssignment()
+      setDiagnostics((prev) => ({
+        ...prev,
+        glyphCount: particlesRef.current.length,
+        assignedCount: countAssignedTargets(),
+      }))
+    }
     if (typeof document !== 'undefined') {
-      document.body.style.overflowY = matrixEnabledRef.current || weatherEnabledRef.current ? 'hidden' : 'auto'
+      document.body.style.overflowY = sceneModeRef.current === 'matrix' || sceneModeRef.current === 'weather' ? 'hidden' : 'auto'
     }
   }
 
@@ -429,6 +545,43 @@ export default function SceneCanvas({ className }: SceneCanvasProps) {
     p.vy *= DAMP
     p.x += p.vx
     p.y += p.vy
+  }
+
+  const drawSvgGlyphScene = (now: number) => {
+    const canvas = canvasRef.current
+    const ctx = ctxRef.current
+    if (!canvas || !ctx) return
+    const W = canvas.width / devicePixelRatio
+    const H = canvas.height / devicePixelRatio
+    ctx.fillStyle = 'rgba(10, 10, 10, 1)'
+    ctx.fillRect(0, 0, W, H)
+
+    const targets = svgTargetsRef.current
+    const particles = particlesRef.current
+    const map = svgTargetMapRef.current
+    if (targets.length === 0 || particles.length === 0) return
+
+    for (let i = 0; i < particles.length; i += 1) {
+      const p = particles[i]
+      const targetIndex = map[i]
+      if (targetIndex >= 0 && targetIndex < targets.length) {
+        p.tx = targets[targetIndex].tx
+        p.ty = targets[targetIndex].ty
+      } else {
+        const ambient = getAmbientTarget(p, i, now)
+        p.tx = ambient.tx
+        p.ty = ambient.ty
+      }
+      p.char = sourceCharsRef.current[i % Math.max(1, sourceCharsRef.current.length)] || p.char
+      p.row = 0
+      p.head = false
+      simulateParticle(p)
+      const homeDist = Math.sqrt((p.x - p.tx) ** 2 + (p.y - p.ty) ** 2)
+      const alpha = Math.max(0.35, 1 - homeDist / 280)
+      const hue = (100 + i * 2 + now * 0.008) % 360
+      ctx.fillStyle = `hsla(${hue}, 80%, 72%, ${alpha})`
+      ctx.fillText(p.char, p.x, p.y)
+    }
   }
 
   const drawParagraph = (now: number, revealedChars: number) => {
@@ -590,12 +743,12 @@ export default function SceneCanvas({ className }: SceneCanvasProps) {
     resizeScene()
     window.addEventListener('resize', resizeSceneListener)
 
-    setWeatherEnabled(true)
     setWeatherPreset('rain')
     setWeatherIntensity(125)
     setWeatherTurbulence(125)
     setMouseR(225)
     setFontSize(12)
+    activateSceneMode('svg')
 
     const { addListeners, removeListeners } = createPointerListeners()
     addListeners()
@@ -626,8 +779,10 @@ export default function SceneCanvas({ className }: SceneCanvasProps) {
       ctx.font = fontRef.current
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      if (matrixEnabledRef.current) drawMatrix(now, revealedChars)
-      else if (weatherEnabledRef.current) drawWeather(now)
+      const mode = sceneModeRef.current
+      if (mode === 'svg') drawSvgGlyphScene(now)
+      else if (mode === 'matrix') drawMatrix(now, revealedChars)
+      else if (mode === 'weather') drawWeather(now)
       else drawParagraph(now, revealedChars)
       animationRef.current = requestAnimationFrame(frame)
     }
@@ -639,13 +794,11 @@ export default function SceneCanvas({ className }: SceneCanvasProps) {
   }, [])
 
   const toggleMatrix = () => {
-    setMatrixEnabled((prev) => !prev)
-    if (!matrixEnabled) setWeatherEnabled(false)
+    activateSceneMode(matrixEnabled ? 'paragraph' : 'matrix')
   }
 
   const toggleWeather = () => {
-    setWeatherEnabled((prev) => !prev)
-    if (!weatherEnabled) setMatrixEnabled(false)
+    activateSceneMode(weatherEnabled ? 'paragraph' : 'weather')
   }
 
   const onShuffle = () => {
@@ -660,6 +813,13 @@ export default function SceneCanvas({ className }: SceneCanvasProps) {
         <RangeControl label="Radius" id="repelRadius" value={mouseR} min={0} max={800} step={1} onChange={setMouseR} />
         <RangeControl label="Particle Strength" id="particleStrength" value={particleRepel} min={0} max={2} step={0.01} onChange={setParticleRepel} />
         <RangeControl label="Weather Mult" id="weatherMult" value={weatherRepelMult} min={0} max={12} step={0.1} onChange={setWeatherRepelMult} />
+      </div>
+      <div className="dev-diagnostics" aria-hidden="true">
+        <div>mode: {diagnostics.mode}</div>
+        <div>source: {diagnostics.sourceStatus}</div>
+        <div>targets: {diagnostics.targetCount}</div>
+        <div>glyphs: {diagnostics.glyphCount}</div>
+        <div>assigned: {diagnostics.assignedCount}</div>
       </div>
     </div>
   )
