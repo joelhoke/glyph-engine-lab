@@ -2,8 +2,11 @@
 
 import SceneCanvas from './SceneCanvas'
 import Intro from './Intro'
+import PlaygroundIntro from './PlaygroundIntro'
 import PrimaryActions, { ExperienceKey, PRIMARY_ACTION_COUNT } from './PrimaryActions'
 import TuningPanel from './tuning/TuningPanel'
+import PlaygroundControlDock from './PlaygroundControlDock'
+import { ExperienceMode } from '../engine/types'
 import {
   APPROVED_SCENE_DEFAULTS,
   APPROVED_SOURCE_LAYOUT_DEFAULTS,
@@ -70,7 +73,11 @@ type SequenceController = {
   wasPlayingBeforeHidden: boolean
 }
 
-export default function PortfolioExperience() {
+type PortfolioExperienceProps = {
+  mode?: ExperienceMode
+}
+
+export default function PortfolioExperience({ mode = 'portfolio' }: PortfolioExperienceProps) {
   const [selected, setSelected] = useState<ExperienceKey | null>(null)
   const [tuningMode, setTuningMode] = useState(false)
 
@@ -475,14 +482,25 @@ export default function PortfolioExperience() {
       />
       <div className="foreground-layer" aria-live="polite">
         <div className="foreground-content">
-          <Intro taglineRef={taglineRef} />
-          <PrimaryActions
-            selected={selected}
-            onSelect={handleAction}
-            groupRef={actionsRef}
-          />
+          {mode === 'playground' ? (
+            <PlaygroundIntro taglineRef={taglineRef} />
+          ) : (
+            <Intro taglineRef={taglineRef} />
+          )}
+          {mode === 'portfolio' && (
+            <PrimaryActions
+              selected={selected}
+              onSelect={handleAction}
+              groupRef={actionsRef}
+            />
+          )}
         </div>
       </div>
+      {mode === 'playground' && (
+        <PlaygroundControlDock>
+          {null}
+        </PlaygroundControlDock>
+      )}
       {tuningMode && (
         <TuningPanel
           introTiming={introTiming}
