@@ -10,7 +10,6 @@ import {
   ObjBounds,
   ParagraphTarget,
   Particle,
-  SequencePhase,
   Slot,
   TextPreset,
   UnassignedGlyphBehavior,
@@ -20,16 +19,20 @@ import {
   FALL_SPEED_MAX,
   FALL_SPEED_MIN,
   HEAD_GLOW_BOOST,
-  LOGO_ASSEMBLE_DURATION,
-  LOGO_HOLD_DURATION,
   LOGO_PATHS,
-  LOGO_RELEASE_DURATION,
   LOGO_TARGET_STEP,
   SPRING,
   TYPEWRITER_CPS,
   defaultSceneState,
 } from '../engine/constants'
 import { loadSvgTargets, SvgTarget } from '../engine/svgTargetSource'
+type SequenceDiagnostics = {
+  phase: string
+  elapsedMs: number
+  phaseProgress: number
+  speed: number
+  documentHidden: boolean
+}
 
 type SceneMode = 'svg' | 'paragraph' | 'matrix' | 'weather'
 
@@ -69,9 +72,10 @@ function buildMeshBg(colorA: string, colorB: string, base: string) {
 type SceneCanvasProps = {
   className?: string
   tuningMode?: boolean
+  sequenceDiagnostics?: SequenceDiagnostics
 }
 
-export default function SceneCanvas({ className, tuningMode }: SceneCanvasProps) {
+export default function SceneCanvas({ className, tuningMode, sequenceDiagnostics }: SceneCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
   const meshBgsRef = useRef<MeshBgs | null>(null)
@@ -86,8 +90,6 @@ export default function SceneCanvas({ className, tuningMode }: SceneCanvasProps)
   const typewriterStartRef = useRef<number>(0)
   const animationRef = useRef<number | null>(null)
   const mouseRRef = useRef(defaultSceneState.mouseR)
-  const sequencePhaseRef = useRef<SequencePhase>('logo')
-  const sequenceStartRef = useRef<number>(0)
   const sceneModeRef = useRef<SceneMode>('svg')
   const svgTargetsRef = useRef<SvgTarget[]>([])
   const svgTargetMapRef = useRef<Int32Array>(new Int32Array(0))
@@ -154,6 +156,7 @@ export default function SceneCanvas({ className, tuningMode }: SceneCanvasProps)
   useEffect(() => { mouseRRef.current = mouseR }, [mouseR])
   useEffect(() => { particleRepelRef.current = particleRepel }, [particleRepel])
   useEffect(() => { weatherRepelRef.current = weatherRepelMult }, [weatherRepelMult])
+  useEffect(() => { tuningModeRef.current = tuningMode ?? false }, [tuningMode])
 
   const getActiveText = () => {
     const len = Math.max(1, Math.round(FULL_TEXT.length * textAmount))
@@ -460,45 +463,6 @@ export default function SceneCanvas({ className, tuningMode }: SceneCanvasProps)
     }
   }
 
-  const drawLogoSequence = (now: number) => {
-    const ctx = ctxRef.current
-    if (!ctx) return
-    const elapsed = now - sequenceStartRef.current
-    const phaseElapsed = clamp(elapsed, 0, LOGO_ASSEMBLE_DURATION + LOGO_HOLD_DURATION + LOGO_RELEASE_DURATION)
-    let phase: SequencePhase = 'ambient'
-    if (phaseElapsed < LOGO_ASSEMBLE_DURATION) phase = 'logo'
-    else if (phaseElapsed < LOGO_ASSEMBLE_DURATION + LOGO_HOLD_DURATION) phase = 'hold'
-    else if (phaseElapsed < LOGO_ASSEMBLE_DURATION + LOGO_HOLD_DURATION + LOGO_RELEASE_DURATION) phase = 'release'
-    sequencePhaseRef.current = phase
-
-    const releaseProgress = clamp((phaseElapsed - LOGO_ASSEMBLE_DURATION - LOGO_HOLD_DURATION) / LOGO_RELEASE_DURATION, 0, 1)
-    const particles = particlesRef.current
-    const count = Math.min(particles.length, logoTargetsRef.current.length)
-    for (let i = 0; i < count; i += 1) {
-      const p = particles[i]
-      const logoTarget = getLogoTarget(i)
-      const ambientTarget = getAmbientTarget(p, i, now)
-      const targetX = phase === 'release' ? lerp(logoTarget.tx, ambientTarget.tx, releaseProgress) : phase === 'ambient' ? ambientTarget.tx : logoTarget.tx
-      const targetY = phase === 'release' ? lerp(logoTarget.ty, ambientTarget.ty, releaseProgress) : phase === 'ambient' ? ambientTarget.ty : logoTarget.ty
-      p.char = sourceCharsRef.current[i % Math.max(1, sourceCharsRef.current.length)] || p.char
-      p.tx = targetX
-      p.ty = targetY
-      p.row = 0
-      p.head = false
-      simulateParticle(p)
-      const alpha = phase === 'logo' ? 1 : phase === 'hold' ? 0.85 : phase === 'release' ? 0.7 : 0.45
-      const hue = (100 + i * 2 + now * 0.008) % 360
-      ctx.shadowBlur = phase === 'logo' ? 4 : 0
-      ctx.shadowColor = `hsla(${hue}, 90%, 75%, ${alpha * 0.5})`
-      ctx.fillStyle = `hsla(${hue}, 80%, ${phase === 'ambient' ? 58 : 72}%, ${alpha})`
-      ctx.fillText(p.char, p.x, p.y)
-    }
-    ctx.shadowBlur = 0
-    if (phase === 'release' || phase === 'ambient') {
-      sequencePhaseRef.current = phase === 'ambient' ? 'ambient' : sequencePhaseRef.current
-    }
-  }
-
   const resizeScene = () => {
     const canvas = canvasRef.current
     const ctx = ctxRef.current
@@ -777,7 +741,6 @@ export default function SceneCanvas({ className, tuningMode }: SceneCanvasProps)
     setWeatherTurbulence(125)
     setMouseR(225)
     setFontSize(12)
-    tuningModeRef.current = tuningMode ?? false
     activateSceneMode('svg')
 
     const { addListeners, removeListeners } = createPointerListeners()
@@ -836,7 +799,7 @@ export default function SceneCanvas({ className, tuningMode }: SceneCanvasProps)
     if (matrixEnabledRef.current) buildMatrixStructure()
   }
 
-  const showTuningUi = tuningModeRef.current
+  const showTuningUi = tuningMode
 
   return (
     <div className={['scene-root', className].filter(Boolean).join(' ')}>
@@ -851,6 +814,11 @@ export default function SceneCanvas({ className, tuningMode }: SceneCanvasProps)
       {showTuningUi && (
         <div className="dev-diagnostics" aria-hidden="true">
           <div>mode: {diagnostics.mode}</div>
+          <div>phase: {sequenceDiagnostics?.phase ?? '—'}</div>
+          <div>elapsed: {Math.round(sequenceDiagnostics?.elapsedMs ?? 0)}ms</div>
+          <div>progress: {(sequenceDiagnostics?.phaseProgress ?? 0).toFixed(2)}</div>
+          <div>speed: {(sequenceDiagnostics?.speed ?? 1).toFixed(2)}x</div>
+          <div>hidden: {sequenceDiagnostics?.documentHidden ? 'yes' : 'no'}</div>
           <div>source: {diagnostics.sourceStatus}</div>
           <div>targets: {diagnostics.targetCount}</div>
           <div>glyphs: {diagnostics.glyphCount}</div>
