@@ -1,22 +1,32 @@
 'use client'
 
-import { forwardRef, useEffect, useId, useState } from 'react'
+import { forwardRef, useEffect, useId, useRef, useState } from 'react'
 import {
   APPROVED_PLAYGROUND_DEFAULTS,
   GLYPH_FONT_OPTIONS,
   MAX_GLYPH_PALETTE_SIZE,
   PlaygroundConfig,
 } from '../engine/playgroundConfig'
+import { DEFAULT_UPLOADED_SVG_FILENAME } from '../engine/svgUpload'
 
 type PlaygroundControlsProps = {
   config: PlaygroundConfig
+  uploadedFilename?: string | null
+  uploadError?: string | null
   onChange: (patch: Partial<PlaygroundConfig>) => void
   onReset: () => void
+  onUpload: (file: File) => void
 }
 
 const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsProps>(
-  function PlaygroundControls({ config, onChange, onReset }, ref) {
+  function PlaygroundControls(
+    { config, uploadedFilename, uploadError, onChange, onReset, onUpload },
+    ref,
+  ) {
     const stableId = useId().replace(/:/g, '-')
+  const uploadInputRef = useRef<HTMLInputElement>(null)
+  const uploadErrorId = `upload-error-${stableId}`
+  const uploadDescriptionId = `upload-desc-${stableId}`
   const [draftText, setDraftText] = useState(config.glyphText)
 
   useEffect(() => {
@@ -52,8 +62,51 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
     onChange({ glyphPalette: next })
   }
 
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    onUpload(file)
+    if (uploadInputRef.current) {
+      uploadInputRef.current.value = ''
+    }
+  }
+
+  const displayFilename = uploadedFilename ?? DEFAULT_UPLOADED_SVG_FILENAME
+
   return (
     <div className="playground-controls" role="region" aria-label="Playground controls">
+      <div className="playground-controls-row">
+        <label className="playground-control playground-control-grow">
+          <span className="playground-control-label">Upload SVG</span>
+          <span className="playground-upload-hint" id={uploadDescriptionId}>
+            Your SVG stays in your browser.
+          </span>
+          <input
+            ref={uploadInputRef}
+            type="file"
+            accept=".svg,image/svg+xml"
+            onChange={handleFileChange}
+            aria-describedby={uploadDescriptionId}
+            aria-errormessage={uploadError ? uploadErrorId : undefined}
+            aria-invalid={uploadError ? 'true' : undefined}
+            className="playground-file-input"
+          />
+          <span className="playground-upload-filename" aria-live="polite">
+            {displayFilename}
+          </span>
+          {uploadError && (
+            <span
+              id={uploadErrorId}
+              role="alert"
+              aria-live="polite"
+              className="playground-upload-error"
+            >
+              {uploadError}
+            </span>
+          )}
+        </label>
+      </div>
+
       <div className="playground-controls-row">
         <label className="playground-control playground-control-grow">
           <span className="playground-control-label">Glyph text</span>

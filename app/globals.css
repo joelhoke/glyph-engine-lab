@@ -542,6 +542,51 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
+.playground-file-input {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+}
+
+.playground-file-input::file-selector-button {
+  font: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+  margin-right: 0.6rem;
+  cursor: pointer;
+}
+
+.playground-file-input::file-selector-button:hover,
+.playground-file-input:focus-visible::file-selector-button {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.playground-file-input:focus-visible {
+  outline: 2px solid #8abaff;
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.playground-upload-hint {
+  font-size: 0.68rem;
+  color: rgba(200, 220, 255, 0.65);
+}
+
+.playground-upload-filename {
+  font-size: 0.72rem;
+  color: rgba(220, 232, 255, 0.85);
+  word-break: break-all;
+}
+
+.playground-upload-error {
+  font-size: 0.72rem;
+  color: #ff8a8a;
+}
+
 .playground-select {
   font: inherit;
   color: inherit;

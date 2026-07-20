@@ -91,6 +91,7 @@ type SceneCanvasProps = {
   particleRepel?: number
   weatherRepelMult?: number
   sourceLayout?: SourceLayoutConfig
+  uploadedSvgUrl?: string | null
   playgroundConfig?: PlaygroundConfig
   onDiagnosticsUpdate?: (patch: Partial<SceneDiagnostics>) => void
 }
@@ -111,6 +112,7 @@ export default function SceneCanvas({
   particleRepel = 0.48,
   weatherRepelMult = 6,
   sourceLayout,
+  uploadedSvgUrl,
   playgroundConfig,
   onDiagnosticsUpdate,
 }: SceneCanvasProps) {
@@ -219,6 +221,10 @@ export default function SceneCanvas({
     sourceLayoutRef.current = sourceLayout
     scheduleSvgTargetRebuild()
   }, [sourceLayout])
+
+  useEffect(() => {
+    scheduleSvgTargetRebuild()
+  }, [uploadedSvgUrl])
 
   const scheduleSvgTargetRebuild = () => {
     if (rebuildSvgTimeoutRef.current !== null) {
@@ -454,7 +460,7 @@ export default function SceneCanvas({
     const H = window.innerHeight
     setDiagnostics((prev) => ({ ...prev, sourceStatus: 'loading' }))
     const result = await loadSvgTargets({
-      url: '/assets/test-source.svg',
+      url: uploadedSvgUrl ?? '/assets/test-source.svg',
       bounds: { width: W, height: H },
       samplingStep: sourceLayout?.samplingStep ?? LOGO_TARGET_STEP,
       alphaThreshold: sourceLayout?.alphaThreshold,
