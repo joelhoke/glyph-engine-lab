@@ -6,8 +6,10 @@ import PrimaryActions, { ExperienceKey, PRIMARY_ACTION_COUNT } from './PrimaryAc
 import TuningPanel from './tuning/TuningPanel'
 import {
   APPROVED_SCENE_DEFAULTS,
+  APPROVED_SOURCE_LAYOUT_DEFAULTS,
   SceneConfig,
 } from './tuning/tuningConfig'
+import { SourceLayoutConfig } from '../engine/svgTargetSource'
 import {
   evaluateIntroSequence,
   getPhaseStartTime,
@@ -57,6 +59,7 @@ type SequenceDiagnostics = {
   actionsInert: boolean
   speed: number
   documentHidden: boolean
+  targetCount: number
 }
 
 type SequenceController = {
@@ -88,6 +91,10 @@ export default function PortfolioExperience() {
     ...APPROVED_SCENE_DEFAULTS,
   }))
 
+  const [sourceLayout, setSourceLayout] = useState<SourceLayoutConfig>(() => ({
+    ...APPROVED_SOURCE_LAYOUT_DEFAULTS,
+  }))
+
   // Animation-facing sequence state: updated every RAF tick for smooth progress.
   const sequenceRef = useRef<IntroSequenceSnapshot>(
     evaluateIntroSequence(0, portfolioIntroPreset.timing),
@@ -117,6 +124,7 @@ export default function PortfolioExperience() {
     actionsInert: true,
     speed: 1,
     documentHidden: false,
+    targetCount: 0,
   })
 
   const controllerRef = useRef<SequenceController>({
@@ -241,6 +249,7 @@ export default function PortfolioExperience() {
           timingFallbackActive,
           actionsInert: !next.optionsReady,
           speed: ctrl.speed,
+          // targetCount is reported by SceneCanvas diagnostics and should not be overwritten here.
         }))
         lastDiagnosticTick = now
       }
@@ -429,6 +438,26 @@ export default function PortfolioExperience() {
     setSceneConfig({ ...APPROVED_SCENE_DEFAULTS })
   }
 
+  const handleSourceLayoutChange = (key: keyof SourceLayoutConfig, value: number | string) => {
+    setSourceLayout((prev: SourceLayoutConfig) => ({ ...prev, [key]: value }))
+  }
+
+  const resetSourceLayout = () => {
+    setSourceLayout({ ...APPROVED_SOURCE_LAYOUT_DEFAULTS })
+  }
+
+  const handleCopyConfiguration = () => {
+    const payload = {
+      timing: { ...introTiming },
+      scene: { ...sceneConfig },
+      sourceLayout: { ...sourceLayout },
+    }
+    const json = JSON.stringify(payload, null, 2)
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(json).catch(() => {})
+    }
+  }
+
   return (
     <div className="portfolio-shell">
       <SceneCanvas
@@ -437,6 +466,12 @@ export default function PortfolioExperience() {
         mouseR={sceneConfig.mouseR}
         particleRepel={sceneConfig.particleRepel}
         weatherRepelMult={sceneConfig.weatherRepelMult}
+        sourceLayout={sourceLayout}
+        onDiagnosticsUpdate={(patch) => {
+          if (typeof patch.targetCount === 'number') {
+            setDiagnostics((prev) => ({ ...prev, targetCount: patch.targetCount! }))
+          }
+        }}
       />
       <div className="foreground-layer" aria-live="polite">
         <div className="foreground-content">
@@ -458,6 +493,11 @@ export default function PortfolioExperience() {
           sceneConfig={sceneConfig}
           onSceneConfigChange={handleSceneConfigChange}
           onResetSceneConfig={resetSceneConfig}
+          sourceLayout={sourceLayout}
+          onSourceLayoutChange={handleSourceLayoutChange}
+          onResetSourceLayout={resetSourceLayout}
+          targetCount={diagnostics.targetCount}
+          onCopyConfiguration={handleCopyConfiguration}
           onPlay={play}
           onPause={pause}
           onReplay={replay}

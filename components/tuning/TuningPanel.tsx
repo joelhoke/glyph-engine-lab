@@ -3,11 +3,15 @@
 import { IntroTiming, portfolioIntroPreset } from '../../engine/introSequence'
 import {
   APPROVED_SCENE_DEFAULTS,
+  APPROVED_SOURCE_LAYOUT_DEFAULTS,
   INTERACTION_CONTROL_DEFINITIONS,
   INTRO_TIMING_CONTROL_DEFINITIONS,
   SceneConfig,
   SceneConfigKey,
+  SourceLayoutConfigKey,
+  SOURCE_LAYOUT_CONTROL_DEFINITIONS,
 } from './tuningConfig'
+import { SourceLayoutConfig } from '../../engine/svgTargetSource'
 import NumericControl from './NumericControl'
 
 type TuningPanelProps = {
@@ -19,6 +23,11 @@ type TuningPanelProps = {
   sceneConfig: SceneConfig
   onSceneConfigChange: (key: SceneConfigKey, value: number) => void
   onResetSceneConfig: () => void
+  sourceLayout: SourceLayoutConfig
+  onSourceLayoutChange: (key: SourceLayoutConfigKey, value: number | string) => void
+  onResetSourceLayout: () => void
+  targetCount: number
+  onCopyConfiguration: () => void
   onPlay: () => void
   onPause: () => void
   onReplay: () => void
@@ -39,6 +48,11 @@ export default function TuningPanel({
   sceneConfig,
   onSceneConfigChange,
   onResetSceneConfig,
+  sourceLayout,
+  onSourceLayoutChange,
+  onResetSourceLayout,
+  targetCount,
+  onCopyConfiguration,
   onPlay,
   onPause,
   onReplay,
@@ -54,6 +68,9 @@ export default function TuningPanel({
   )
   const sceneDirty = (Object.keys(APPROVED_SCENE_DEFAULTS) as SceneConfigKey[]).some(
     (key) => sceneConfig[key] !== APPROVED_SCENE_DEFAULTS[key],
+  )
+  const sourceLayoutDirty = (Object.keys(APPROVED_SOURCE_LAYOUT_DEFAULTS) as SourceLayoutConfigKey[]).some(
+    (key) => sourceLayout[key] !== APPROVED_SOURCE_LAYOUT_DEFAULTS[key],
   )
 
   return (
@@ -129,23 +146,78 @@ export default function TuningPanel({
         </button>
       </section>
 
+      <section className="tuning-section" aria-labelledby="tuning-source-heading">
+        <h3 id="tuning-source-heading" className="tuning-section-title">Source and layout</h3>
+        <div className="tuning-controls-grid">
+          {(Object.keys(SOURCE_LAYOUT_CONTROL_DEFINITIONS) as SourceLayoutConfigKey[]).map((key) => {
+            const def = SOURCE_LAYOUT_CONTROL_DEFINITIONS[key]
+            if (def.kind === 'select') {
+              return (
+                <div key={key} className="numeric-control">
+                  <label htmlFor={`source-${key}`} className="numeric-control-label">
+                    {def.label}
+                  </label>
+                  <select
+                    id={`source-${key}`}
+                    value={sourceLayout[key]}
+                    onChange={(e) => onSourceLayoutChange(key, e.target.value)}
+                    className="tuning-select"
+                  >
+                    {def.options?.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )
+            }
+            return (
+              <NumericControl
+                key={key}
+                id={`source-${key}`}
+                label={def.label}
+                value={sourceLayout[key] as number}
+                min={def.min}
+                max={def.max}
+                step={def.step}
+                unit={def.unit}
+                showSlider={def.showSlider}
+                onChange={(value) => onSourceLayoutChange(key, value)}
+              />
+            )
+          })}
+        </div>
+        <button type="button" className="tuning-reset-button" onClick={onResetSourceLayout}>
+          Reset source and layout
+        </button>
+      </section>
+
       <section className="tuning-section" aria-labelledby="tuning-status-heading">
         <h3 id="tuning-status-heading" className="tuning-section-title">Configuration status</h3>
         <div className="tuning-status-grid">
           <div>Sequence timing: {timingDirty ? 'edited' : 'preset'}</div>
           <div>Interaction values: {sceneDirty ? 'edited' : 'preset'}</div>
+          <div>Source/layout: {sourceLayoutDirty ? 'edited' : 'preset'}</div>
+          <div>Target count: {targetCount}</div>
           <div>Total duration: {Math.round(totalDurationMs)} ms</div>
           <div>Effective option stagger: {Math.round(effectiveOptionStaggerMs)} ms</div>
           <div>Effective option item duration: {Math.round(effectiveOptionItemDurationMs)} ms</div>
           <div>Timing fallback: {timingFallbackActive ? 'active' : 'none'}</div>
         </div>
-        {(timingDirty || sceneDirty) && (
+        <div className="tuning-button-row" style={{ marginTop: '0.5rem' }}>
+          <button type="button" className="tuning-reset-button" onClick={onCopyConfiguration}>
+            Copy configuration
+          </button>
+        </div>
+        {(timingDirty || sceneDirty || sourceLayoutDirty) && (
           <button
             type="button"
             className="tuning-reset-button"
             onClick={() => {
               onResetIntroTiming()
               onResetSceneConfig()
+              onResetSourceLayout()
             }}
           >
             Reset all tuning values

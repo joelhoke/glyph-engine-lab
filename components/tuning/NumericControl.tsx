@@ -64,6 +64,7 @@ export default function NumericControl({
     const committed = commitNumericInput(event.target.value, value, min, max, step)
     if (committed !== null) {
       setDraft(formatNumericValue(committed, step))
+      setIsEditing(false)
       onChange(committed)
     }
   }
