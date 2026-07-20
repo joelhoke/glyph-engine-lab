@@ -13,6 +13,7 @@ import {
   SequencePhase,
   Slot,
   TextPreset,
+  UnassignedGlyphBehavior,
 } from '../engine/types'
 import {
   DAMP,
@@ -67,9 +68,10 @@ function buildMeshBg(colorA: string, colorB: string, base: string) {
 
 type SceneCanvasProps = {
   className?: string
+  tuningMode?: boolean
 }
 
-export default function SceneCanvas({ className }: SceneCanvasProps) {
+export default function SceneCanvas({ className, tuningMode }: SceneCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
   const meshBgsRef = useRef<MeshBgs | null>(null)
@@ -90,11 +92,16 @@ export default function SceneCanvas({ className }: SceneCanvasProps) {
   const svgTargetsRef = useRef<SvgTarget[]>([])
   const svgTargetMapRef = useRef<Int32Array>(new Int32Array(0))
   const sceneStartRef = useRef<number>(0)
+  const unassignedBehaviorRef = useRef<UnassignedGlyphBehavior>('hidden')
+  const tuningModeRef = useRef<boolean>(false)
   const [diagnostics, setDiagnostics] = useState({
     sourceStatus: 'idle',
     targetCount: 0,
     glyphCount: 0,
+    visibleCount: 0,
     assignedCount: 0,
+    unassignedCount: 0,
+    hiddenCount: 0,
     mode: 'svg',
   })
 
@@ -379,10 +386,13 @@ export default function SceneCanvas({ className }: SceneCanvasProps) {
       }))
     }
     buildSvgTargetAssignment()
+    const assignedCount = countAssignedTargets()
     setDiagnostics((prev) => ({
       ...prev,
       glyphCount: particlesRef.current.length,
-      assignedCount: countAssignedTargets(),
+      assignedCount,
+      unassignedCount: particlesRef.current.length - assignedCount,
+      hiddenCount: unassignedBehaviorRef.current === 'hidden' ? particlesRef.current.length - assignedCount : 0,
     }))
   }
 
@@ -561,16 +571,25 @@ export default function SceneCanvas({ className }: SceneCanvasProps) {
     const map = svgTargetMapRef.current
     if (targets.length === 0 || particles.length === 0) return
 
+    const behavior = unassignedBehaviorRef.current
+    let visibleCount = 0
+    let hiddenCount = 0
+
     for (let i = 0; i < particles.length; i += 1) {
       const p = particles[i]
       const targetIndex = map[i]
-      if (targetIndex >= 0 && targetIndex < targets.length) {
-        p.tx = targets[targetIndex].tx
-        p.ty = targets[targetIndex].ty
-      } else {
+      const assigned = targetIndex >= 0 && targetIndex < targets.length
+      if (!assigned) {
+        if (behavior === 'hidden') {
+          hiddenCount += 1
+          continue
+        }
         const ambient = getAmbientTarget(p, i, now)
         p.tx = ambient.tx
         p.ty = ambient.ty
+      } else {
+        p.tx = targets[targetIndex].tx
+        p.ty = targets[targetIndex].ty
       }
       p.char = sourceCharsRef.current[i % Math.max(1, sourceCharsRef.current.length)] || p.char
       p.row = 0
@@ -581,6 +600,16 @@ export default function SceneCanvas({ className }: SceneCanvasProps) {
       const hue = (100 + i * 2 + now * 0.008) % 360
       ctx.fillStyle = `hsla(${hue}, 80%, 72%, ${alpha})`
       ctx.fillText(p.char, p.x, p.y)
+      visibleCount += 1
+    }
+
+    if (tuningModeRef.current && now % 250 < 20) {
+      setDiagnostics((prev) => ({
+        ...prev,
+        visibleCount,
+        hiddenCount,
+        unassignedCount: particles.length - countAssignedTargets(),
+      }))
     }
   }
 
@@ -748,6 +777,7 @@ export default function SceneCanvas({ className }: SceneCanvasProps) {
     setWeatherTurbulence(125)
     setMouseR(225)
     setFontSize(12)
+    tuningModeRef.current = tuningMode ?? false
     activateSceneMode('svg')
 
     const { addListeners, removeListeners } = createPointerListeners()
@@ -806,21 +836,30 @@ export default function SceneCanvas({ className }: SceneCanvasProps) {
     if (matrixEnabledRef.current) buildMatrixStructure()
   }
 
+  const showTuningUi = tuningModeRef.current
+
   return (
     <div className={['scene-root', className].filter(Boolean).join(' ')}>
       <canvas ref={canvasRef} />
-      <div id="repel-controls" aria-hidden="false">
-        <RangeControl label="Radius" id="repelRadius" value={mouseR} min={0} max={800} step={1} onChange={setMouseR} />
-        <RangeControl label="Particle Strength" id="particleStrength" value={particleRepel} min={0} max={2} step={0.01} onChange={setParticleRepel} />
-        <RangeControl label="Weather Mult" id="weatherMult" value={weatherRepelMult} min={0} max={12} step={0.1} onChange={setWeatherRepelMult} />
-      </div>
-      <div className="dev-diagnostics" aria-hidden="true">
-        <div>mode: {diagnostics.mode}</div>
-        <div>source: {diagnostics.sourceStatus}</div>
-        <div>targets: {diagnostics.targetCount}</div>
-        <div>glyphs: {diagnostics.glyphCount}</div>
-        <div>assigned: {diagnostics.assignedCount}</div>
-      </div>
+      {showTuningUi && (
+        <div id="repel-controls" aria-hidden="false">
+          <RangeControl label="Radius" id="repelRadius" value={mouseR} min={0} max={800} step={1} onChange={setMouseR} />
+          <RangeControl label="Particle Strength" id="particleStrength" value={particleRepel} min={0} max={2} step={0.01} onChange={setParticleRepel} />
+          <RangeControl label="Weather Mult" id="weatherMult" value={weatherRepelMult} min={0} max={12} step={0.1} onChange={setWeatherRepelMult} />
+        </div>
+      )}
+      {showTuningUi && (
+        <div className="dev-diagnostics" aria-hidden="true">
+          <div>mode: {diagnostics.mode}</div>
+          <div>source: {diagnostics.sourceStatus}</div>
+          <div>targets: {diagnostics.targetCount}</div>
+          <div>glyphs: {diagnostics.glyphCount}</div>
+          <div>visible: {diagnostics.visibleCount}</div>
+          <div>assigned: {diagnostics.assignedCount}</div>
+          <div>unassigned: {diagnostics.unassignedCount}</div>
+          <div>hidden: {diagnostics.hiddenCount}</div>
+        </div>
+      )}
     </div>
   )
 }
