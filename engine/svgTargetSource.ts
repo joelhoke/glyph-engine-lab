@@ -95,8 +95,10 @@ export async function loadSvgTargets(
 
   const drawWidth = intrinsicWidth * scale
   const drawHeight = intrinsicHeight * scale
-  const offsetX = explicitOffsetX ?? (bounds.width - drawWidth) / 2
-  const offsetY = explicitOffsetY ?? (bounds.height - drawHeight) / 2
+  const centerOffsetX = (bounds.width - drawWidth) / 2
+  const centerOffsetY = (bounds.height - drawHeight) / 2
+  const offsetX = centerOffsetX + (explicitOffsetX ?? 0)
+  const offsetY = centerOffsetY + (explicitOffsetY ?? 0)
 
   const canvas = document.createElement('canvas')
   canvas.width = Math.max(1, Math.floor(bounds.width))
