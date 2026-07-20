@@ -93,14 +93,18 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   will-change: opacity, transform;
 }
 
-/* Map per-item progress to stable action indices from authored action data. */
-.primary-action-beam[data-action-index="0"] {
+/* Map per-item progress using an explicit stable action index on the slot.
+   This is safer than :nth-of-type because BorderBeam injects <style> siblings,
+   and safer than :nth-child because wrappers or portals could shift DOM order.
+   The index is authored from the action data array, so Work=0, Vibes=1,
+   Make Something=2 regardless of runtime render order. */
+.primary-action-slot[data-action-index="0"] .primary-action-beam {
   --option-progress: var(--option-progress-0, 0);
 }
-.primary-action-beam[data-action-index="1"] {
+.primary-action-slot[data-action-index="1"] .primary-action-beam {
   --option-progress: var(--option-progress-1, 0);
 }
-.primary-action-beam[data-action-index="2"] {
+.primary-action-slot[data-action-index="2"] .primary-action-beam {
   --option-progress: var(--option-progress-2, 0);
 }
 .primary-action-beam {
