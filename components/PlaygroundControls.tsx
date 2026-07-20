@@ -10,6 +10,8 @@ import {
 } from '../engine/playgroundConfig'
 import { DEFAULT_UPLOADED_SVG_FILENAME } from '../engine/svgUpload'
 
+type MobileSection = 'shape' | 'type' | 'color' | 'background'
+
 type PlaygroundControlsProps = {
   config: PlaygroundConfig
   uploadedFilename?: string | null
@@ -18,6 +20,13 @@ type PlaygroundControlsProps = {
   onReset: () => void
   onUpload: (file: File) => void
 }
+
+const MOBILE_SECTIONS: { key: MobileSection; label: string }[] = [
+  { key: 'shape', label: 'Shape' },
+  { key: 'type', label: 'Type' },
+  { key: 'color', label: 'Color' },
+  { key: 'background', label: 'Background' },
+]
 
 const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsProps>(
   function PlaygroundControls(
@@ -29,6 +38,7 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
   const uploadErrorId = `upload-error-${stableId}`
   const uploadDescriptionId = `upload-desc-${stableId}`
   const [draftText, setDraftText] = useState(config.glyphText)
+  const [mobileSection, setMobileSection] = useState<MobileSection>('shape')
 
   useEffect(() => {
     setDraftText(config.glyphText)
@@ -74,148 +84,221 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
 
   const displayFilename = uploadedFilename ?? DEFAULT_UPLOADED_SVG_FILENAME
 
-  return (
-    <div className="playground-controls" role="region" aria-label="Playground controls">
-      <div className="playground-controls-row">
-        <label className="playground-control playground-control-grow">
-          <span className="playground-control-label">Upload SVG</span>
-          <span className="playground-upload-hint" id={uploadDescriptionId}>
-            Your SVG stays in your browser.
-          </span>
-          <input
-            ref={uploadInputRef}
-            type="file"
-            accept=".svg,image/svg+xml"
-            onChange={handleFileChange}
-            aria-describedby={uploadDescriptionId}
-            aria-errormessage={uploadError ? uploadErrorId : undefined}
-            aria-invalid={uploadError ? 'true' : undefined}
-            className="playground-file-input"
-          />
-          <span className="playground-upload-filename" aria-live="polite">
-            {displayFilename}
-          </span>
-          {uploadError && (
-            <span
-              id={uploadErrorId}
-              role="alert"
-              aria-live="polite"
-              className="playground-upload-error"
-            >
-              {uploadError}
-            </span>
-          )}
-        </label>
-      </div>
+  const uploadControl = (
+    <label className="playground-control playground-control-grow">
+      <span className="playground-control-label">Upload SVG</span>
+      <span className="playground-upload-hint" id={uploadDescriptionId}>
+        Your SVG stays in your browser.
+      </span>
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept=".svg,image/svg+xml"
+        onChange={handleFileChange}
+        aria-describedby={uploadDescriptionId}
+        aria-errormessage={uploadError ? uploadErrorId : undefined}
+        aria-invalid={uploadError ? 'true' : undefined}
+        className="playground-file-input"
+      />
+      <span className="playground-upload-filename" aria-live="polite">
+        {displayFilename}
+      </span>
+      {uploadError && (
+        <span
+          id={uploadErrorId}
+          role="alert"
+          aria-live="polite"
+          className="playground-upload-error"
+        >
+          {uploadError}
+        </span>
+      )}
+    </label>
+  )
 
-      <div className="playground-controls-row">
-        <label className="playground-control playground-control-grow">
-          <span className="playground-control-label">Glyph text</span>
-          <textarea
-            ref={ref}
-            id={`glyph-text-${stableId}`}
-            className="playground-textarea"
-            value={draftText}
-            onChange={(e) => setDraftText(e.target.value)}
-            onBlur={commitGlyphText}
-            rows={2}
-            aria-label="Glyph text"
-          />
-        </label>
-      </div>
+  const glyphTextControl = (
+    <label className="playground-control playground-text-control">
+      <span className="playground-control-label">Glyph text</span>
+      <textarea
+        ref={ref}
+        id={`glyph-text-${stableId}`}
+        className="playground-textarea"
+        value={draftText}
+        onChange={(e) => setDraftText(e.target.value)}
+        onBlur={commitGlyphText}
+        aria-label="Glyph text"
+      />
+    </label>
+  )
 
-      <div className="playground-controls-row">
-        <div className="playground-control">
-          <span className="playground-control-label">Glyph palette</span>
-          <div className="playground-palette" role="group" aria-label="Glyph palette">
-            {config.glyphPalette.map((color, index) => (
-              <div key={index} className="playground-palette-item">
-                <input
-                  type="color"
-                  value={color}
-                  onChange={(e) => updatePaletteColor(index, e.target.value)}
-                  aria-label={`Glyph color ${index + 1}`}
-                  className="playground-color-input"
-                />
-                <button
-                  type="button"
-                  onClick={() => removePaletteColor(index)}
-                  disabled={config.glyphPalette.length <= 1}
-                  aria-label={`Remove glyph color ${index + 1}`}
-                  className="playground-icon-button"
-                  title={`Remove glyph color ${index + 1}`}
-                >
-                  −
-                </button>
-              </div>
-            ))}
+  const fontControl = (
+    <label className="playground-control">
+      <span className="playground-control-label">Glyph font</span>
+      <select
+        value={config.glyphFont}
+        onChange={(e) => onChange({ glyphFont: e.target.value })}
+        aria-label="Glyph font"
+        className="playground-select"
+      >
+        {GLYPH_FONT_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+
+  const paletteControl = (
+    <div className="playground-control">
+      <span className="playground-control-label">Glyph palette</span>
+      <div className="playground-palette" role="group" aria-label="Glyph palette">
+        {config.glyphPalette.map((color, index) => (
+          <div key={index} className="playground-palette-item">
+            <input
+              type="color"
+              value={color}
+              onChange={(e) => updatePaletteColor(index, e.target.value)}
+              aria-label={`Glyph color ${index + 1}`}
+              className="playground-color-input"
+            />
             <button
               type="button"
-              onClick={addPaletteColor}
-              disabled={config.glyphPalette.length >= MAX_GLYPH_PALETTE_SIZE}
-              aria-label="Add glyph color"
-              className="playground-add-button"
-              title="Add glyph color"
+              onClick={() => removePaletteColor(index)}
+              disabled={config.glyphPalette.length <= 1}
+              aria-label={`Remove glyph color ${index + 1}`}
+              className="playground-icon-button"
+              title={`Remove glyph color ${index + 1}`}
             >
-              +
+              −
             </button>
           </div>
+        ))}
+        <button
+          type="button"
+          onClick={addPaletteColor}
+          disabled={config.glyphPalette.length >= MAX_GLYPH_PALETTE_SIZE}
+          aria-label="Add glyph color"
+          className="playground-add-button"
+          title="Add glyph color"
+        >
+          +
+        </button>
+      </div>
+    </div>
+  )
+
+  const colorModeControl = (
+    <label className="playground-control">
+      <span className="playground-control-label">Color distribution</span>
+      <select
+        value={config.glyphColorMode}
+        onChange={(e) => onChange({ glyphColorMode: e.target.value as PlaygroundConfig['glyphColorMode'] })}
+        aria-label="Color distribution"
+        className="playground-select"
+      >
+        {GLYPH_COLOR_MODE_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+
+  const backgroundControls = (
+    <>
+      <label className="playground-control">
+        <span className="playground-control-label">Background color 1</span>
+        <input
+          type="color"
+          value={config.backgroundColor1}
+          onChange={(e) => onChange({ backgroundColor1: e.target.value })}
+          aria-label="Background color 1"
+          className="playground-color-input"
+        />
+      </label>
+      <label className="playground-control">
+        <span className="playground-control-label">Background color 2</span>
+        <input
+          type="color"
+          value={config.backgroundColor2}
+          onChange={(e) => onChange({ backgroundColor2: e.target.value })}
+          aria-label="Background color 2"
+          className="playground-color-input"
+        />
+      </label>
+    </>
+  )
+
+  return (
+    <div
+      className="playground-controls"
+      role="region"
+      aria-label="Playground controls"
+      data-mobile-section={mobileSection}
+    >
+      <div className="playground-controls-grid" role="none">
+        <div className="playground-controls-column playground-column-shape" data-section="shape">
+          {uploadControl}
+        </div>
+        <div className="playground-controls-column playground-column-type" data-section="type">
+          {glyphTextControl}
+          {fontControl}
+        </div>
+        <div className="playground-controls-column playground-column-color" data-section="color">
+          {paletteControl}
+          {colorModeControl}
+        </div>
+        <div className="playground-controls-column playground-column-background" data-section="background">
+          {backgroundControls}
         </div>
       </div>
 
-      <div className="playground-controls-row">
-        <label className="playground-control">
-          <span className="playground-control-label">Background color 1</span>
-          <input
-            type="color"
-            value={config.backgroundColor1}
-            onChange={(e) => onChange({ backgroundColor1: e.target.value })}
-            aria-label="Background color 1"
-            className="playground-color-input"
-          />
-        </label>
-        <label className="playground-control">
-          <span className="playground-control-label">Background color 2</span>
-          <input
-            type="color"
-            value={config.backgroundColor2}
-            onChange={(e) => onChange({ backgroundColor2: e.target.value })}
-            aria-label="Background color 2"
-            className="playground-color-input"
-          />
-        </label>
-        <label className="playground-control">          <span className="playground-control-label">Color distribution</span>
-          <select
-            value={config.glyphColorMode}
-            onChange={(e) => onChange({ glyphColorMode: e.target.value as PlaygroundConfig['glyphColorMode'] })}
-            aria-label="Color distribution"
-            className="playground-select"
+      <div className="playground-mobile-tabs" role="tablist" aria-label="Control sections">
+        {MOBILE_SECTIONS.map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={mobileSection === key}
+            aria-controls={`playground-section-${key}-${stableId}`}
+            id={`playground-tab-${key}-${stableId}`}
+            className={[
+              'playground-mobile-tab',
+              mobileSection === key && 'playground-mobile-tab-active',
+            ].filter(Boolean).join(' ')}
+            onClick={() => setMobileSection(key)}
           >
-            {GLYPH_COLOR_MODE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="playground-control">          <span className="playground-control-label">Glyph font</span>
-          <select
-            value={config.glyphFont}
-            onChange={(e) => onChange({ glyphFont: e.target.value })}
-            aria-label="Glyph font"
-            className="playground-select"
-          >
-            {GLYPH_FONT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+            {label}
+          </button>
+        ))}
       </div>
 
-      <div className="playground-controls-row">
-        <button type="button" onClick={onReset} className="playground-reset-button">
+      <div className="playground-controls-footer">
+        <button
+          type="button"
+          onClick={onReset}
+          className="playground-reset-button"
+          aria-label="Reset playground"
+        >
+          <svg
+            className="playground-reset-icon"
+            width="12"
+            height="12"
+            viewBox="0 0 12 12"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path
+              d="M1 4.5A4.5 4.5 0 0 1 9.2 3.2M11 7.5A4.5 4.5 0 0 1 2.8 8.8M2.8 3.2V1M2.8 3.2h2M9.2 8.8v2M9.2 8.8h-2"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
           Reset playground
         </button>
       </div>

@@ -408,9 +408,15 @@ button:focus-visible {
   height: var(--workspace-height);
 }
 
-@media (max-height: 800px) {
+@media (max-height: 900px) {
   .playground-control-dock-workspace {
     --workspace-height: min(35vh, 480px);
+  }
+}
+
+@media (max-height: 700px) {
+  .playground-control-dock-workspace {
+    --workspace-height: min(42vh, 520px);
   }
 }
 
@@ -422,7 +428,7 @@ button:focus-visible {
   .playground-control-dock-workspace {
     left: 0.75rem;
     right: 0.75rem;
-    --workspace-height: min(55vh, 520px);
+    --workspace-height: min(62vh, 560px);
   }
 }
 
@@ -508,13 +514,14 @@ button:focus-visible {
   line-height: 1.35;
   color: rgba(220, 232, 255, 0.9);
   max-height: min(70vh, 520px);
-  overflow: auto;
+  overflow: hidden;
 }
 
 .playground-control-dock-workspace .playground-controls-pane {
   flex: 1 1 auto;
   max-height: none;
   height: 100%;
+  padding-bottom: 0;
 }
 
 .playground-controls-pane-header {
@@ -568,52 +575,64 @@ button:focus-visible {
   font-size: 0.75rem;
   line-height: 1.35;
   color: rgba(220, 232, 255, 0.9);
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
-.playground-control-dock-workspace .playground-controls {
+.playground-controls-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  align-items: start;
-  gap: 0.75rem;
-  overflow: auto;
+  grid-template-columns:
+    minmax(180px, 0.85fr)
+    minmax(280px, 1.5fr)
+    minmax(300px, 1.4fr)
+    minmax(180px, 0.8fr);
+  gap: 1rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
-@media (max-width: 640px) {
-  .playground-control-dock-workspace .playground-controls {
-    grid-template-columns: 1fr;
-  }
-}
-
-.playground-controls-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.75rem;
-  min-width: 0;
-}
-
-.playground-control {
+.playground-controls-column {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.75rem;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.playground-control-grow {
+.playground-column-shape {
+  justify-content: flex-start;
+}
+
+.playground-column-type {
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.playground-column-color {
+  justify-content: flex-start;
+}
+
+.playground-column-background {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.playground-text-control {
   flex: 1 1 auto;
-  min-width: min(100%, 240px);
-}
-
-.playground-control-label {
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(200, 220, 255, 0.75);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .playground-textarea {
+  flex: 1 1 auto;
+  min-height: 4rem;
   width: 100%;
   min-width: 0;
-  resize: vertical;
+  resize: none;
   font: inherit;
   color: inherit;
   background: rgba(255, 255, 255, 0.08);
@@ -742,7 +761,19 @@ button:focus-visible {
   cursor: not-allowed;
 }
 
+.playground-controls-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0.5rem 0;
+  margin-top: 0.25rem;
+}
+
 .playground-reset-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   font: inherit;
   color: #8abaff;
   background: transparent;
@@ -760,6 +791,97 @@ button:focus-visible {
 .playground-reset-button:focus-visible {
   outline: 2px solid #8abaff;
   outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.playground-reset-icon {
+  flex: 0 0 auto;
+}
+
+.playground-mobile-tabs {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .playground-controls-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .playground-column-background {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 640px), (max-height: 560px) {
+  .playground-controls-grid {
+    display: block;
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+
+  .playground-controls-column {
+    display: none;
+    height: 100%;
+    overflow: auto;
+  }
+
+  .playground-controls[data-mobile-section="shape"] .playground-column-shape,
+  .playground-controls[data-mobile-section="type"] .playground-column-type,
+  .playground-controls[data-mobile-section="color"] .playground-column-color,
+  .playground-controls[data-mobile-section="background"] .playground-column-background {
+    display: flex;
+  }
+
+  .playground-column-background {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .playground-text-control {
+    flex: 1 1 auto;
+  }
+
+  .playground-textarea {
+    flex: 1 1 auto;
+  }
+
+  .playground-mobile-tabs {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 0.35rem;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .playground-mobile-tab {
+    flex: 1 1 auto;
+    font: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgba(200, 220, 255, 0.75);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 0.35rem 0.5rem;
+    cursor: pointer;
+  }
+
+  .playground-mobile-tab[aria-selected="true"] {
+    color: #090c12;
+    background: #8abaff;
+    border-color: #8abaff;
+  }
+
+  .playground-mobile-tab:hover:not([aria-selected="true"]) {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .playground-mobile-tab:focus-visible {
+    outline: 2px solid #8abaff;
+    outline-offset: 2px;
+  }
 }
 
 @media (max-height: 700px), (max-width: 640px) {
@@ -774,15 +896,6 @@ button:focus-visible {
 
   .playground-controls-pane {
     padding: 0.65rem 0.75rem;
-    gap: 0.55rem;
-    max-height: min(72vh, 480px);
-  }
-
-  .playground-controls {
-    gap: 0.55rem;
-  }
-
-  .playground-controls-row {
     gap: 0.55rem;
   }
 }
