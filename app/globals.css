@@ -780,7 +780,8 @@ button:focus-visible {
 }
 
 .playground-reset-button,
-.playground-share-button {
+.playground-share-button,
+.playground-copy-caption-button {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -793,22 +794,31 @@ button:focus-visible {
   padding: 0;
 }
 
+.playground-copy-caption-button {
+  color: rgba(200, 220, 255, 0.75);
+  text-decoration: none;
+}
+
 .playground-reset-button:hover:not(:disabled),
 .playground-share-button:hover:not(:disabled),
+.playground-copy-caption-button:hover:not(:disabled),
 .playground-reset-button:focus-visible,
-.playground-share-button:focus-visible {
+.playground-share-button:focus-visible,
+.playground-copy-caption-button:focus-visible {
   color: #bcd7ff;
 }
 
 .playground-reset-button:focus-visible,
-.playground-share-button:focus-visible {
+.playground-share-button:focus-visible,
+.playground-copy-caption-button:focus-visible {
   outline: 2px solid #8abaff;
   outline-offset: 2px;
   border-radius: 2px;
 }
 
 .playground-reset-button:disabled,
-.playground-share-button:disabled {
+.playground-share-button:disabled,
+.playground-copy-caption-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -816,6 +826,8 @@ button:focus-visible {
 .playground-reset-icon,
 .playground-share-icon {
   flex: 0 0 auto;
+  width: 0.85rem;
+  height: 0.85rem;
 }
 
 .playground-share-status {
