@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { prepareWithSegments, layoutNextLine } from '@chenglou/pretext'
 import { createPointerListeners, getPointer } from '../engine/Pointer'
 import {
@@ -114,20 +114,31 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-export default function SceneCanvas({
-  className,
-  tuningMode,
-  sequenceDiagnostics,
-  mouseR = defaultSceneState.mouseR,
-  particleRepel = 0.48,
-  weatherRepelMult = 6,
-  sourceLayout,
-  uploadedSvgUrl,
-  playgroundConfig,
-  onDiagnosticsUpdate,
-}: SceneCanvasProps) {
+export type SceneCanvasHandle = {
+  getCanvas: () => HTMLCanvasElement | null
+}
+
+function SceneCanvasInternal(
+  {
+    className,
+    tuningMode,
+    sequenceDiagnostics,
+    mouseR = defaultSceneState.mouseR,
+    particleRepel = 0.48,
+    weatherRepelMult = 6,
+    sourceLayout,
+    uploadedSvgUrl,
+    playgroundConfig,
+    onDiagnosticsUpdate,
+  }: SceneCanvasProps,
+  ref: React.ForwardedRef<SceneCanvasHandle>,
+) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
+
+  useImperativeHandle(ref, () => ({
+    getCanvas: () => canvasRef.current,
+  }))
   const meshBgsRef = useRef<MeshBgs | null>(null)
   const particlesRef = useRef<Particle[]>([])
   const paragraphTargetsRef = useRef<ParagraphTarget[]>([])
@@ -994,3 +1005,6 @@ export default function SceneCanvas({
     </div>
   )
 }
+
+const SceneCanvas = forwardRef(SceneCanvasInternal)
+export default SceneCanvas
