@@ -56,6 +56,8 @@ type ObjBounds = { cx: number; cy: number; hw: number; hh: number }
 
 type TextPreset = 'clear' | 'rain' | 'storm' | 'snow' | 'blizzard' | 'fog' | 'wind'
 
+type UnassignedGlyphBehavior = 'hidden' | 'parked' | 'ambient' | 'dispersed'
+
 export type {
   Column,
   MeshBgs,
@@ -65,4 +67,5 @@ export type {
   SequencePhase,
   Slot,
   TextPreset,
+  UnassignedGlyphBehavior,
 }

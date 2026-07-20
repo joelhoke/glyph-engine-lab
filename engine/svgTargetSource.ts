@@ -3,6 +3,8 @@ export type SvgTarget = {
   ty: number
 }
 
+export type SvgFitMode = 'contain' | 'cover'
+
 export type SvgTargetSourceOptions = {
   /** Same-origin URL or path to a static SVG file. */
   url: string
@@ -14,6 +16,13 @@ export type SvgTargetSourceOptions = {
   alphaThreshold?: number
   /** Fraction of the smaller bound dimension to reserve as a margin. */
   margin?: number
+  /** How the SVG should fit into the destination bounds. */
+  fit?: SvgFitMode
+  /** Explicit uniform scale override. Ignored when <= 0. */
+  scale?: number
+  /** Explicit draw offset overrides. Applied after fit/centering. */
+  offsetX?: number
+  offsetY?: number
 }
 
 export type SvgTargetSourceResult = {
@@ -39,6 +48,10 @@ export async function loadSvgTargets(
     samplingStep = 10,
     alphaThreshold = 64,
     margin = 0.08,
+    fit = 'contain',
+    scale: explicitScale,
+    offsetX: explicitOffsetX,
+    offsetY: explicitOffsetY,
   } = options
 
   if (!url || !url.trim()) {
@@ -65,15 +78,15 @@ export async function loadSvgTargets(
   const availableWidth = bounds.width - marginPixels * 2
   const availableHeight = bounds.height - marginPixels * 2
 
-  const scale = Math.min(
-    availableWidth / intrinsicWidth,
-    availableHeight / intrinsicHeight,
-  )
+  const fitScale = fit === 'cover'
+    ? Math.max(availableWidth / intrinsicWidth, availableHeight / intrinsicHeight)
+    : Math.min(availableWidth / intrinsicWidth, availableHeight / intrinsicHeight)
+  const scale = explicitScale && explicitScale > 0 ? explicitScale : fitScale
 
   const drawWidth = intrinsicWidth * scale
   const drawHeight = intrinsicHeight * scale
-  const offsetX = (bounds.width - drawWidth) / 2
-  const offsetY = (bounds.height - drawHeight) / 2
+  const offsetX = explicitOffsetX ?? (bounds.width - drawWidth) / 2
+  const offsetY = explicitOffsetY ?? (bounds.height - drawHeight) / 2
 
   const canvas = document.createElement('canvas')
   canvas.width = Math.max(1, Math.floor(bounds.width))
