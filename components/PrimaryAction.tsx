@@ -1,6 +1,6 @@
 'use client'
 
-import { useId } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { BorderBeam } from 'border-beam'
 
 type PrimaryActionProps = {
@@ -13,8 +13,27 @@ type PrimaryActionProps = {
 
 export default function PrimaryAction({ label, selected, onClick, hue, style }: PrimaryActionProps) {
   const stableId = useId().replace(/:/g, '-')
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   const beamStyle: React.CSSProperties = { ...style }
   if (hue) (beamStyle as any)['--beam-hue-base'] = hue
+
+  const button = (
+    <button
+      type="button"
+      className={`primary-action-button ${selected ? 'selected' : ''}`}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  )
+
+  if (!mounted) {
+    return button
+  }
 
   return (
     <BorderBeam
@@ -28,13 +47,7 @@ export default function PrimaryAction({ label, selected, onClick, hue, style }: 
       style={beamStyle}
       id={stableId}
     >
-      <button
-        type="button"
-        className={`primary-action-button ${selected ? 'selected' : ''}`}
-        onClick={onClick}
-      >
-        {label}
-      </button>
+      {button}
     </BorderBeam>
   )
 }
