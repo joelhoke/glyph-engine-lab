@@ -1,5 +1,6 @@
 'use client'
 
+import { useId } from 'react'
 import { BorderBeam } from 'border-beam'
 
 type PrimaryActionProps = {
@@ -11,6 +12,7 @@ type PrimaryActionProps = {
 }
 
 export default function PrimaryAction({ label, selected, onClick, hue, style }: PrimaryActionProps) {
+  const stableId = useId().replace(/:/g, '-')
   const beamStyle: React.CSSProperties = { ...style }
   if (hue) (beamStyle as any)['--beam-hue-base'] = hue
 
@@ -24,6 +26,7 @@ export default function PrimaryAction({ label, selected, onClick, hue, style }: 
       strength={selected ? 0.7 : 0.45}
       className="primary-action-beam"
       style={beamStyle}
+      id={stableId}
     >
       <button
         type="button"
