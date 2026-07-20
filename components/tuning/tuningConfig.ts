@@ -1,5 +1,6 @@
 import { IntroTiming } from '../../engine/introSequence'
 import { defaultSceneState } from '../../engine/constants'
+import { SourceLayoutConfig } from '../../engine/svgTargetSource'
 
 export type NumericControlDefinition = {
   label: string
@@ -8,6 +9,13 @@ export type NumericControlDefinition = {
   step: number
   unit?: string
   showSlider?: boolean
+}
+
+export type SourceLayoutConfigKey = keyof SourceLayoutConfig
+
+export type SourceLayoutControlDefinition = NumericControlDefinition & {
+  kind: 'number' | 'select'
+  options?: { label: string; value: string }[]
 }
 
 export const INTRO_TIMING_CONTROL_DEFINITIONS: Record<
@@ -104,6 +112,81 @@ export const APPROVED_SCENE_DEFAULTS: SceneConfig = {
   mouseR: defaultSceneState.mouseR,
   particleRepel: 0.48,
   weatherRepelMult: 6,
+}
+
+export const APPROVED_SOURCE_LAYOUT_DEFAULTS: SourceLayoutConfig = {
+  samplingStep: 10,
+  alphaThreshold: 64,
+  margin: 0.08,
+  fit: 'contain',
+  scale: 0,
+  offsetX: 0,
+  offsetY: 0,
+}
+
+export const SOURCE_LAYOUT_CONTROL_DEFINITIONS: Record<
+  SourceLayoutConfigKey,
+  SourceLayoutControlDefinition
+> = {
+  samplingStep: {
+    label: 'Sampling step',
+    min: 2,
+    max: 40,
+    step: 1,
+    unit: 'px',
+    showSlider: true,
+    kind: 'number',
+  },
+  alphaThreshold: {
+    label: 'Alpha threshold',
+    min: 0,
+    max: 255,
+    step: 1,
+    kind: 'number',
+  },
+  margin: {
+    label: 'Margin',
+    min: 0,
+    max: 0.45,
+    step: 0.01,
+    kind: 'number',
+  },
+  fit: {
+    label: 'Fit mode',
+    min: 0,
+    max: 0,
+    step: 1,
+    kind: 'select',
+    options: [
+      { label: 'Contain', value: 'contain' },
+      { label: 'Cover', value: 'cover' },
+    ],
+  },
+  scale: {
+    label: 'Scale override',
+    min: 0,
+    max: 5,
+    step: 0.05,
+    kind: 'number',
+  },
+  offsetX: {
+    label: 'Horizontal offset',
+    min: -400,
+    max: 400,
+    step: 1,
+    unit: 'px',
+    showSlider: true,
+    kind: 'number',
+  },
+  offsetY: {
+    label: 'Vertical offset',
+    min: -400,
+    max: 400,
+    step: 1,
+    unit: 'px',
+    showSlider: true,
+    kind: 'number',
+  },
 }
 
 function decimalPlaces(value: number): number {

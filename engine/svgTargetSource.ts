@@ -5,6 +5,16 @@ export type SvgTarget = {
 
 export type SvgFitMode = 'contain' | 'cover'
 
+export type SourceLayoutConfig = {
+  samplingStep: number
+  alphaThreshold: number
+  margin: number
+  fit: SvgFitMode
+  scale: number
+  offsetX: number
+  offsetY: number
+}
+
 export type SvgTargetSourceOptions = {
   /** Same-origin URL or path to a static SVG file. */
   url: string

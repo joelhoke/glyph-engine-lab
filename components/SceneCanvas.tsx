@@ -24,13 +24,24 @@ import {
   TYPEWRITER_CPS,
   defaultSceneState,
 } from '../engine/constants'
-import { loadSvgTargets, SvgTarget } from '../engine/svgTargetSource'
+import { loadSvgTargets, SourceLayoutConfig, SvgTarget } from '../engine/svgTargetSource'
 type SequenceDiagnostics = {
   phase: string
   elapsedMs: number
   phaseProgress: number
   speed: number
   documentHidden: boolean
+}
+
+type SceneDiagnostics = {
+  sourceStatus: string
+  targetCount: number
+  glyphCount: number
+  visibleCount: number
+  assignedCount: number
+  unassignedCount: number
+  hiddenCount: number
+  mode: string
 }
 
 type SceneMode = 'svg' | 'paragraph' | 'matrix' | 'weather'
@@ -75,6 +86,8 @@ type SceneCanvasProps = {
   mouseR?: number
   particleRepel?: number
   weatherRepelMult?: number
+  sourceLayout?: SourceLayoutConfig
+  onDiagnosticsUpdate?: (patch: Partial<SceneDiagnostics>) => void
 }
 
 export default function SceneCanvas({
@@ -84,6 +97,8 @@ export default function SceneCanvas({
   mouseR = defaultSceneState.mouseR,
   particleRepel = 0.48,
   weatherRepelMult = 6,
+  sourceLayout,
+  onDiagnosticsUpdate,
 }: SceneCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
@@ -105,7 +120,9 @@ export default function SceneCanvas({
   const sceneStartRef = useRef<number>(0)
   const unassignedBehaviorRef = useRef<UnassignedGlyphBehavior>('hidden')
   const tuningModeRef = useRef<boolean>(false)
-  const [diagnostics, setDiagnostics] = useState({
+  const sourceLayoutRef = useRef<SourceLayoutConfig | undefined>(undefined)
+  const rebuildSvgTimeoutRef = useRef<number | null>(null)
+  const [diagnostics, setDiagnostics] = useState<SceneDiagnostics>({
     sourceStatus: 'idle',
     targetCount: 0,
     glyphCount: 0,
@@ -163,11 +180,32 @@ export default function SceneCanvas({
   useEffect(() => { particleRepelRef.current = particleRepel }, [particleRepel])
   useEffect(() => { weatherRepelRef.current = weatherRepelMult }, [weatherRepelMult])
   useEffect(() => { tuningModeRef.current = tuningMode ?? false }, [tuningMode])
+  useEffect(() => {
+    sourceLayoutRef.current = sourceLayout
+    scheduleSvgTargetRebuild()
+  }, [sourceLayout])
+
+  const scheduleSvgTargetRebuild = () => {
+    if (rebuildSvgTimeoutRef.current !== null) {
+      window.clearTimeout(rebuildSvgTimeoutRef.current)
+    }
+    rebuildSvgTimeoutRef.current = window.setTimeout(() => {
+      rebuildSvgTimeoutRef.current = null
+      if (sceneModeRef.current === 'svg') {
+        buildSvgTargets()
+      } else {
+        buildSvgTargets().then(() => {
+          // Keep targets warm for the next time the mode switches back.
+        })
+      }
+    }, 150)
+  }
 
   useEffect(() => {
     mouseRRef.current = mouseR
     particleRepelRef.current = particleRepel
     weatherRepelRef.current = weatherRepelMult
+    sourceLayoutRef.current = sourceLayout
   }, [])
 
   const getActiveText = () => {
@@ -383,32 +421,50 @@ export default function SceneCanvas({
     const result = await loadSvgTargets({
       url: '/assets/test-source.svg',
       bounds: { width: W, height: H },
-      samplingStep: LOGO_TARGET_STEP,
+      samplingStep: sourceLayout?.samplingStep ?? LOGO_TARGET_STEP,
+      alphaThreshold: sourceLayout?.alphaThreshold,
+      margin: sourceLayout?.margin,
+      fit: sourceLayout?.fit,
+      scale: sourceLayout?.scale,
+      offsetX: sourceLayout?.offsetX,
+      offsetY: sourceLayout?.offsetY,
     })
     if (result.ok) {
       svgTargetsRef.current = result.targets
-      setDiagnostics((prev) => ({
-        ...prev,
-        sourceStatus: 'loaded',
-        targetCount: result.targets.length,
-      }))
+      setDiagnostics((prev) => {
+        const next = {
+          ...prev,
+          sourceStatus: 'loaded',
+          targetCount: result.targets.length,
+        }
+        onDiagnosticsUpdate?.(next)
+        return next
+      })
     } else {
       svgTargetsRef.current = []
-      setDiagnostics((prev) => ({
-        ...prev,
-        sourceStatus: `error: ${result.error}`,
-        targetCount: 0,
-      }))
+      setDiagnostics((prev) => {
+        const next = {
+          ...prev,
+          sourceStatus: `error: ${result.error}`,
+          targetCount: 0,
+        }
+        onDiagnosticsUpdate?.(next)
+        return next
+      })
     }
     buildSvgTargetAssignment()
     const assignedCount = countAssignedTargets()
-    setDiagnostics((prev) => ({
-      ...prev,
-      glyphCount: particlesRef.current.length,
-      assignedCount,
-      unassignedCount: particlesRef.current.length - assignedCount,
-      hiddenCount: unassignedBehaviorRef.current === 'hidden' ? particlesRef.current.length - assignedCount : 0,
-    }))
+    setDiagnostics((prev) => {
+      const next = {
+        ...prev,
+        glyphCount: particlesRef.current.length,
+        assignedCount,
+        unassignedCount: particlesRef.current.length - assignedCount,
+        hiddenCount: unassignedBehaviorRef.current === 'hidden' ? particlesRef.current.length - assignedCount : 0,
+      }
+      onDiagnosticsUpdate?.(next)
+      return next
+    })
   }
 
   const activateSceneMode = (mode: SceneMode) => {
@@ -428,7 +484,6 @@ export default function SceneCanvas({
       setMatrixEnabled(false)
       setWeatherEnabled(false)
       sceneStartRef.current = performance.now()
-      buildSvgTargetAssignment()
     }
     setDiagnostics((prev) => ({
       ...prev,
@@ -499,11 +554,15 @@ export default function SceneCanvas({
     if (matrixEnabledRef.current) buildMatrixStructure()
     if (sceneModeRef.current === 'svg') {
       buildSvgTargetAssignment()
-      setDiagnostics((prev) => ({
-        ...prev,
-        glyphCount: particlesRef.current.length,
-        assignedCount: countAssignedTargets(),
-      }))
+      setDiagnostics((prev) => {
+        const next = {
+          ...prev,
+          glyphCount: particlesRef.current.length,
+          assignedCount: countAssignedTargets(),
+        }
+        onDiagnosticsUpdate?.(next)
+        return next
+      })
     }
     if (typeof document !== 'undefined') {
       document.body.style.overflowY = sceneModeRef.current === 'matrix' || sceneModeRef.current === 'weather' ? 'hidden' : 'auto'
