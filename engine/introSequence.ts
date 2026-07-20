@@ -35,6 +35,48 @@ export type IntroSequenceSnapshot = {
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value))
 
+export type StaggeredItemProgressInput = {
+  phaseElapsedMs: number
+  groupDurationMs: number
+  staggerMs: number
+  itemIndex: number
+  itemCount: number
+}
+
+const MIN_ITEM_DURATION_MS = 1
+
+/**
+ * Pure helper that computes a single item's normalized entrance progress
+ * within a staggered group reveal.
+ *
+ * The group duration is the total window for the complete reveal. The last
+ * item must finish no later than the group end, so the per-item transition
+ * duration is derived from the group duration minus the total stagger span.
+ */
+export function getStaggeredItemProgress(
+  input: StaggeredItemProgressInput,
+): { progress: number; effectiveStaggerMs: number; itemDurationMs: number } {
+  const { phaseElapsedMs, groupDurationMs, staggerMs, itemIndex, itemCount } = input
+
+  if (itemCount <= 0 || groupDurationMs <= 0) {
+    return { progress: 0, effectiveStaggerMs: staggerMs, itemDurationMs: 0 }
+  }
+
+  const safeGroupDurationMs = Math.max(MIN_ITEM_DURATION_MS, groupDurationMs)
+  const maxStaggerSpan = safeGroupDurationMs - MIN_ITEM_DURATION_MS
+  const requestedStaggerSpan = Math.max(0, staggerMs * Math.max(0, itemCount - 1))
+  const effectiveStaggerSpan = Math.min(requestedStaggerSpan, maxStaggerSpan)
+  const effectiveStaggerMs = itemCount > 1 ? effectiveStaggerSpan / (itemCount - 1) : 0
+  const itemDurationMs = Math.max(MIN_ITEM_DURATION_MS, safeGroupDurationMs - effectiveStaggerSpan)
+
+  const itemStart = itemIndex * effectiveStaggerMs
+  const itemElapsed = phaseElapsedMs - itemStart
+  const rawProgress = itemElapsed / itemDurationMs
+  const progress = clamp(rawProgress, 0, 1)
+
+  return { progress, effectiveStaggerMs, itemDurationMs }
+}
+
 /**
  * Pure evaluator that maps an elapsed sequence time to a deterministic
  * intro snapshot. All durations are in milliseconds.

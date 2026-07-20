@@ -73,6 +73,25 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   width: 100%;
   justify-items: center;
 }
+
+.primary-actions.options-hidden {
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.primary-actions.options-inert {
+  pointer-events: none;
+  user-select: none;
+}
+
+.primary-actions .primary-action-beam {
+  --option-progress: 0;
+  --option-translate: calc((1 - var(--option-progress)) * 16px);
+  opacity: var(--option-progress);
+  transform: translateY(var(--option-translate));
+  will-change: opacity, transform;
+}
 .primary-action-beam {
   display: inline-flex;
   width: 100%;

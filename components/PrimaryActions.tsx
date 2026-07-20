@@ -1,30 +1,41 @@
 'use client'
 
+import { Ref, RefObject } from 'react'
 import PrimaryAction from './PrimaryAction'
 
 type PrimaryActionsProps = {
   selected: ExperienceKey | null
   onSelect: (key: ExperienceKey) => void
+  groupRef?: Ref<HTMLDivElement>
 }
 
 export type ExperienceKey = 'work' | 'vibes' | 'make'
 
-const actions: { key: ExperienceKey; label: string; hue: string }[] = [
-  { key: 'work', label: 'Work', hue: '20deg' },
-  { key: 'vibes', label: 'Vibes', hue: '200deg' },
-  { key: 'make', label: 'Make Something', hue: '320deg' },
+export const primaryActions = [
+  { key: 'work' as const, label: 'Work', hue: '20deg' },
+  { key: 'vibes' as const, label: 'Vibes', hue: '200deg' },
+  { key: 'make' as const, label: 'Make Something', hue: '320deg' },
 ]
 
-export default function PrimaryActions({ selected, onSelect }: PrimaryActionsProps) {
+export const PRIMARY_ACTION_COUNT = primaryActions.length
+
+export default function PrimaryActions({ selected, onSelect, groupRef }: PrimaryActionsProps) {
   return (
-    <div className="primary-actions" role="group" aria-label="Primary portfolio actions">
-      {actions.map((action) => (
+    <div
+      ref={groupRef}
+      className="primary-actions options-inert"
+      role="group"
+      aria-label="Primary portfolio actions"
+      aria-hidden="true"
+    >
+      {primaryActions.map((action, index) => (
         <PrimaryAction
           key={action.key}
           label={action.label}
           selected={selected === action.key}
           onClick={() => onSelect(action.key)}
           hue={action.hue}
+          style={{ '--option-index': String(index) } as React.CSSProperties}
         />
       ))}
     </div>
