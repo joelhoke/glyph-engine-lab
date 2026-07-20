@@ -8,6 +8,11 @@ import TuningPanel from './tuning/TuningPanel'
 import PlaygroundControlDock from './PlaygroundControlDock'
 import { ExperienceMode } from '../engine/types'
 import {
+  APPROVED_PLAYGROUND_DEFAULTS,
+  PlaygroundConfig,
+} from '../engine/playgroundConfig'
+import PlaygroundControls from './PlaygroundControls'
+import {
   APPROVED_SCENE_DEFAULTS,
   APPROVED_SOURCE_LAYOUT_DEFAULTS,
   SceneConfig,
@@ -100,6 +105,10 @@ export default function PortfolioExperience({ mode = 'portfolio' }: PortfolioExp
 
   const [sourceLayout, setSourceLayout] = useState<SourceLayoutConfig>(() => ({
     ...APPROVED_SOURCE_LAYOUT_DEFAULTS,
+  }))
+
+  const [playgroundConfig, setPlaygroundConfig] = useState<PlaygroundConfig>(() => ({
+    ...APPROVED_PLAYGROUND_DEFAULTS,
   }))
 
   // Animation-facing sequence state: updated every RAF tick for smooth progress.
@@ -465,6 +474,14 @@ export default function PortfolioExperience({ mode = 'portfolio' }: PortfolioExp
     }
   }
 
+  const handlePlaygroundConfigChange = (patch: Partial<PlaygroundConfig>) => {
+    setPlaygroundConfig((prev) => ({ ...prev, ...patch }))
+  }
+
+  const handleResetPlaygroundConfig = () => {
+    setPlaygroundConfig({ ...APPROVED_PLAYGROUND_DEFAULTS })
+  }
+
   return (
     <div className="portfolio-shell">
       <SceneCanvas
@@ -474,6 +491,7 @@ export default function PortfolioExperience({ mode = 'portfolio' }: PortfolioExp
         particleRepel={sceneConfig.particleRepel}
         weatherRepelMult={sceneConfig.weatherRepelMult}
         sourceLayout={sourceLayout}
+        playgroundConfig={playgroundConfig}
         onDiagnosticsUpdate={(patch) => {
           if (typeof patch.targetCount === 'number') {
             setDiagnostics((prev) => ({ ...prev, targetCount: patch.targetCount! }))
@@ -498,7 +516,11 @@ export default function PortfolioExperience({ mode = 'portfolio' }: PortfolioExp
       </div>
       {mode === 'playground' && (
         <PlaygroundControlDock>
-          {null}
+          <PlaygroundControls
+            config={playgroundConfig}
+            onChange={handlePlaygroundConfigChange}
+            onReset={handleResetPlaygroundConfig}
+          />
         </PlaygroundControlDock>
       )}
       {tuningMode && (

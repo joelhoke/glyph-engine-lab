@@ -8,13 +8,12 @@ type PlaygroundControlDockProps = {
 }
 
 /**
- * Layout boundary for future public creative controls.
+ * Layout boundary for public creative controls.
  *
- * In this milestone it is intentionally empty: it renders nothing when no
- * children are provided, so it does not introduce an empty placeholder or
- * affect the current composition. When controls are added, it will wrap them
- * with the same BorderBeam treatment used by the primary actions, while
- * keeping the public dock visually separate from the engineering tuning panel.
+ * The positioned anchor is a plain div so BorderBeam cannot override its
+ * absolute placement. BorderBeam wraps the inner content with the same beam
+ * treatment used by the primary actions, while keeping the public dock
+ * visually separate from the engineering tuning panel.
  */
 export default function PlaygroundControlDock({ children }: PlaygroundControlDockProps) {
   const stableId = useId().replace(/:/g, '-')
@@ -28,22 +27,28 @@ export default function PlaygroundControlDock({ children }: PlaygroundControlDoc
     return null
   }
 
-  if (!mounted) {
-    return <div className="playground-control-dock">{children}</div>
-  }
+  const content = (
+    <div className="playground-control-dock-content">{children}</div>
+  )
 
   return (
-    <BorderBeam
-      size="md"
-      colorVariant="colorful"
-      staticColors
-      hueRange={0}
-      theme="auto"
-      strength={0.45}
-      className="playground-control-dock"
-      id={stableId}
-    >
-      {children}
-    </BorderBeam>
+    <div className="playground-control-dock">
+      {!mounted ? (
+        content
+      ) : (
+        <BorderBeam
+          size="md"
+          colorVariant="colorful"
+          staticColors
+          hueRange={0}
+          theme="auto"
+          strength={0.45}
+          className="playground-control-dock-beam"
+          id={stableId}
+        >
+          {content}
+        </BorderBeam>
+      )}
+    </div>
   )
 }
