@@ -58,8 +58,11 @@ type TextPreset = 'clear' | 'rain' | 'storm' | 'snow' | 'blizzard' | 'fog' | 'wi
 
 type UnassignedGlyphBehavior = 'hidden' | 'parked' | 'ambient' | 'dispersed'
 
+type ExperienceMode = 'portfolio' | 'playground'
+
 export type {
   Column,
+  ExperienceMode,
   MeshBgs,
   ObjBounds,
   ParagraphTarget,

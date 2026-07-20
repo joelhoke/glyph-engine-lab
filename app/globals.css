@@ -377,6 +377,28 @@ button:focus-visible {
     padding: 1.5rem;
   }
 }
+/* Future public creative-control dock layout boundary.
+   The dock is not rendered until it has controls to display, so these
+   styles do not affect the current composition. */
+.playground-control-dock {
+  position: absolute;
+  left: 50%;
+  bottom: calc(20vh + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 30;
+  width: min(90vw, 720px);
+  max-width: calc(100vw - 2rem);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  pointer-events: auto;
+}
+
+@media (max-height: 700px), (max-width: 640px) {
+  .playground-control-dock {
+    bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    width: min(96vw, 640px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
