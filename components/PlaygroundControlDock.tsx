@@ -40,7 +40,12 @@ export default function PlaygroundControlDock({ invitation, controls }: Playgrou
   const handleClose = () => setState('invitation')
 
   return (
-    <div className="playground-control-dock">
+    <div
+      className={[
+        'playground-control-dock',
+        state === 'controls' && 'playground-control-dock-workspace',
+      ].filter(Boolean).join(' ')}
+    >
       {!mounted ? (
         <div className="playground-control-dock-content">
           <PlaygroundInvitation
@@ -92,17 +97,15 @@ type PlaygroundInvitationProps = {
 function PlaygroundInvitation({ children, startCreatingRef, onOpen }: PlaygroundInvitationProps) {
   return (
     <div className="playground-invitation">
-      <p className="playground-invitation-copy">
-        {children}{' '}
-        <button
-          ref={startCreatingRef}
-          type="button"
-          className="playground-start-button"
-          onClick={onOpen}
-        >
-          Start creating
-        </button>
-      </p>
+      <p className="playground-invitation-copy">{children}</p>
+      <button
+        ref={startCreatingRef}
+        type="button"
+        className="playground-start-button"
+        onClick={onOpen}
+      >
+        Start creating →
+      </button>
     </div>
   )
 }
@@ -141,13 +144,31 @@ function PlaygroundControlsPane({ children, onClose }: PlaygroundControlsPanePro
       aria-label="Playground controls"
     >
       <div className="playground-controls-pane-header">
+        <span className="playground-controls-pane-title">Customize</span>
         <button
           type="button"
-          className="playground-close-button"
+          className="playground-hide-button"
           onClick={onClose}
-          aria-label="Close controls"
+          aria-label="Hide customization controls"
         >
-          Back
+          <svg
+            className="playground-hide-icon"
+            width="12"
+            height="12"
+            viewBox="0 0 12 12"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path
+              d="M1 4l5 5 5-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          Hide
         </button>
       </div>
       {children}

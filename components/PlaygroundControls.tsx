@@ -3,6 +3,7 @@
 import { forwardRef, useEffect, useId, useRef, useState } from 'react'
 import {
   APPROVED_PLAYGROUND_DEFAULTS,
+  GLYPH_COLOR_MODE_OPTIONS,
   GLYPH_FONT_OPTIONS,
   MAX_GLYPH_PALETTE_SIZE,
   PlaygroundConfig,
@@ -183,8 +184,21 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
             className="playground-color-input"
           />
         </label>
-        <label className="playground-control">
-          <span className="playground-control-label">Glyph font</span>
+        <label className="playground-control">          <span className="playground-control-label">Color distribution</span>
+          <select
+            value={config.glyphColorMode}
+            onChange={(e) => onChange({ glyphColorMode: e.target.value as PlaygroundConfig['glyphColorMode'] })}
+            aria-label="Color distribution"
+            className="playground-select"
+          >
+            {GLYPH_COLOR_MODE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="playground-control">          <span className="playground-control-label">Glyph font</span>
           <select
             value={config.glyphFont}
             onChange={(e) => onChange({ glyphFont: e.target.value })}

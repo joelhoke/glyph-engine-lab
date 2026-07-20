@@ -13,7 +13,7 @@ export default function PlaygroundIntro({ taglineRef }: PlaygroundIntroProps) {
       aria-hidden="true"
       ref={taglineRef as React.RefObject<HTMLElement>}
     >
-      <h1>The portfolio is under construction.</h1>
+      <h1>This space is under construction</h1>
     </section>
   )
 }

@@ -29,6 +29,16 @@ import {
   APPROVED_PLAYGROUND_DEFAULTS,
   PlaygroundConfig,
 } from '../engine/playgroundConfig'
+import {
+  buildTargetSpatialData,
+  buildWordColorIndices,
+  formatRgba,
+  GlyphColorMode,
+  parseHexColor,
+  Rgb,
+  sampleImageGradient,
+  sampleRowBand,
+} from '../engine/colorDistribution'
 type SequenceDiagnostics = {
   phase: string
   elapsedMs: number
@@ -142,6 +152,13 @@ export default function SceneCanvas({
   const playgroundConfigRef = useRef<PlaygroundConfig>(
     playgroundConfig ?? APPROVED_PLAYGROUND_DEFAULTS,
   )
+  const colorModeRef = useRef<GlyphColorMode>(
+    playgroundConfig?.glyphColorMode ?? APPROVED_PLAYGROUND_DEFAULTS.glyphColorMode,
+  )
+  const paletteRgbRef = useRef<Rgb[]>([])
+  const wordColorRef = useRef<number[]>([])
+  const targetGradientRef = useRef<Float32Array>(new Float32Array(0))
+  const targetRowRef = useRef<Float32Array>(new Float32Array(0))
   const [diagnostics, setDiagnostics] = useState<SceneDiagnostics>({
     sourceStatus: 'idle',
     targetCount: 0,
@@ -203,6 +220,20 @@ export default function SceneCanvas({
   useEffect(() => { particleRepelRef.current = particleRepel }, [particleRepel])
   useEffect(() => { weatherRepelRef.current = weatherRepelMult }, [weatherRepelMult])
   useEffect(() => { tuningModeRef.current = tuningMode ?? false }, [tuningMode])
+  const updateColorMetadata = (config: PlaygroundConfig) => {
+    const palette =
+      config.glyphPalette.length > 0 ? config.glyphPalette : APPROVED_PLAYGROUND_DEFAULTS.glyphPalette
+    paletteRgbRef.current = palette.map(parseHexColor)
+    colorModeRef.current = config.glyphColorMode ?? APPROVED_PLAYGROUND_DEFAULTS.glyphColorMode
+    const { indices } = buildWordColorIndices(
+      config.glyphText.trim().length > 0
+        ? config.glyphText
+        : APPROVED_PLAYGROUND_DEFAULTS.glyphText,
+      palette.length,
+    )
+    wordColorRef.current = indices
+  }
+
   useEffect(() => {
     playgroundConfigRef.current = playgroundConfig ?? APPROVED_PLAYGROUND_DEFAULTS
     sourceCharsRef.current = Array.from(
@@ -210,6 +241,7 @@ export default function SceneCanvas({
         ? playgroundConfigRef.current.glyphText
         : APPROVED_PLAYGROUND_DEFAULTS.glyphText,
     )
+    updateColorMetadata(playgroundConfigRef.current)
   }, [playgroundConfig])
   useEffect(() => {
     if (onDiagnosticsUpdate && diagnostics.targetCount !== prevTargetCountRef.current) {
@@ -472,6 +504,9 @@ export default function SceneCanvas({
     })
     if (result.ok) {
       svgTargetsRef.current = result.targets
+      const { gradientT, rowT } = buildTargetSpatialData(result.targets)
+      targetGradientRef.current = gradientT
+      targetRowRef.current = rowT
       setDiagnostics((prev) => ({
         ...prev,
         sourceStatus: 'loaded',
@@ -617,6 +652,33 @@ export default function SceneCanvas({
     p.y += p.vy
   }
 
+  const resolveGlyphColor = (
+    particleIndex: number,
+    targetIndex: number,
+    targetCount: number,
+  ): Rgb => {
+    const palette = paletteRgbRef.current
+    if (palette.length === 0) return parseHexColor('#ffffff')
+    const mode = colorModeRef.current
+    const assigned = targetIndex >= 0 && targetIndex < targetCount
+
+    if (mode === 'image-gradient' && assigned && targetIndex < targetGradientRef.current.length) {
+      return sampleImageGradient(palette, targetGradientRef.current[targetIndex])
+    }
+
+    if (mode === 'rows' && assigned && targetIndex < targetRowRef.current.length) {
+      const band = sampleRowBand(palette.length, targetRowRef.current[targetIndex])
+      return palette[band]
+    }
+
+    if (mode === 'word-cycle' && wordColorRef.current.length > 0) {
+      const colorIndex = wordColorRef.current[particleIndex % wordColorRef.current.length]
+      return palette[colorIndex >= 0 ? colorIndex : 0]
+    }
+
+    return palette[particleIndex % palette.length]
+  }
+
   const drawSvgGlyphScene = (now: number) => {
     const canvas = canvasRef.current
     const ctx = ctxRef.current
@@ -625,8 +687,6 @@ export default function SceneCanvas({
     const H = canvas.height / devicePixelRatio
 
     const config = playgroundConfigRef.current ?? APPROVED_PLAYGROUND_DEFAULTS
-    const palette =
-      config.glyphPalette.length > 0 ? config.glyphPalette : APPROVED_PLAYGROUND_DEFAULTS.glyphPalette
 
     const bgGradient = ctx.createRadialGradient(
       W * 0.5,
@@ -672,8 +732,8 @@ export default function SceneCanvas({
       simulateParticle(p)
       const homeDist = Math.sqrt((p.x - p.tx) ** 2 + (p.y - p.ty) ** 2)
       const alpha = Math.max(0.35, 1 - homeDist / 280)
-      const color = palette[i % palette.length]
-      ctx.fillStyle = hexToRgba(color, alpha)
+      const color = resolveGlyphColor(i, targetIndex, targets.length)
+      ctx.fillStyle = formatRgba(color, alpha)
       ctx.fillText(p.char, p.x, p.y)
       visibleCount += 1
     }
