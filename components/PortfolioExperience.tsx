@@ -3,6 +3,11 @@
 import SceneCanvas from './SceneCanvas'
 import Intro from './Intro'
 import PrimaryActions, { ExperienceKey, PRIMARY_ACTION_COUNT } from './PrimaryActions'
+import TuningPanel from './tuning/TuningPanel'
+import {
+  APPROVED_SCENE_DEFAULTS,
+  SceneConfig,
+} from './tuning/tuningConfig'
 import {
   evaluateIntroSequence,
   getPhaseStartTime,
@@ -11,6 +16,7 @@ import {
   getTotalDuration,
   IntroPhase,
   IntroSequenceSnapshot,
+  IntroTiming,
   nextPhase,
   portfolioIntroPreset,
   previousPhase,
@@ -69,6 +75,19 @@ export default function PortfolioExperience() {
     setTuningMode(isTuningMode())
   }, [])
 
+  // Editable working copies of authored configuration.
+  const [introTiming, setIntroTiming] = useState<IntroTiming>(() => ({
+    ...portfolioIntroPreset.timing,
+  }))
+  const timingRef = useRef(introTiming)
+  useEffect(() => {
+    timingRef.current = introTiming
+  }, [introTiming])
+
+  const [sceneConfig, setSceneConfig] = useState<SceneConfig>(() => ({
+    ...APPROVED_SCENE_DEFAULTS,
+  }))
+
   // Animation-facing sequence state: updated every RAF tick for smooth progress.
   const sequenceRef = useRef<IntroSequenceSnapshot>(
     evaluateIntroSequence(0, portfolioIntroPreset.timing),
@@ -108,15 +127,11 @@ export default function PortfolioExperience() {
     wasPlayingBeforeHidden: false,
   })
 
-  // Playback-rate input draft state.
-  const [speedDraft, setSpeedDraft] = useState('1')
-
   useEffect(() => {
     controllerRef.current.startTime = performance.now()
 
     let raf: number
     let lastDiagnosticTick = 0
-    const totalDuration = getTotalDuration(portfolioIntroPreset.timing)
 
     const updateTaglineVisuals = (sequence: IntroSequenceSnapshot) => {
       const node = taglineRef.current
@@ -137,12 +152,13 @@ export default function PortfolioExperience() {
 
       const optionsVisible = sequence.optionsVisible
       const optionsReady = sequence.optionsReady
-      const { optionsTransitionDuration, optionStagger } = portfolioIntroPreset.timing
+      const timing = timingRef.current
+      const { optionsTransitionDuration, optionStagger } = timing
 
       const itemProgresses = getPrimaryActionProgresses(
         sequence,
         PRIMARY_ACTION_COUNT,
-        portfolioIntroPreset.timing,
+        timing,
       )
 
       let timingFallbackActive = false
@@ -182,7 +198,8 @@ export default function PortfolioExperience() {
       const elapsed = ctrl.paused
         ? ctrl.pausedElapsed
         : ctrl.pausedElapsed + (now - ctrl.startTime) * ctrl.speed
-      const next = evaluateIntroSequence(elapsed, portfolioIntroPreset.timing)
+      const timing = timingRef.current
+      const next = evaluateIntroSequence(elapsed, timing)
       sequenceRef.current = next
 
       // Full-rate visual update path: apply directly to the DOM without React re-render.
@@ -197,6 +214,14 @@ export default function PortfolioExperience() {
           itemProgresses: Array(PRIMARY_ACTION_COUNT).fill(0),
           timingFallbackActive: false,
         }
+        const totalDuration = getTotalDuration(timing)
+        const { effectiveStaggerMs, itemDurationMs } = getStaggeredItemProgress({
+          phaseElapsedMs: next.phaseElapsedMs,
+          groupDurationMs: timing.optionsTransitionDuration,
+          staggerMs: timing.optionStagger,
+          itemIndex: 0,
+          itemCount: PRIMARY_ACTION_COUNT,
+        })
         setDiagnostics((prev) => ({
           ...prev,
           phase: next.phase,
@@ -211,12 +236,8 @@ export default function PortfolioExperience() {
           optionsReady: next.optionsReady,
           optionsMounted: !!actionsRef.current,
           optionItemProgress: itemProgresses,
-          effectiveOptionStaggerMs: portfolioIntroPreset.timing.optionStagger,
-          effectiveOptionItemDurationMs: Math.max(
-            0,
-            portfolioIntroPreset.timing.optionsTransitionDuration -
-              portfolioIntroPreset.timing.optionStagger * (PRIMARY_ACTION_COUNT - 1),
-          ),
+          effectiveOptionStaggerMs: effectiveStaggerMs,
+          effectiveOptionItemDurationMs: itemDurationMs,
           timingFallbackActive,
           actionsInert: !next.optionsReady,
           speed: ctrl.speed,
@@ -295,7 +316,8 @@ export default function PortfolioExperience() {
     ctrl.paused = false
     ctrl.startTime = performance.now()
     ctrl.pausedElapsed = 0
-    sequenceRef.current = evaluateIntroSequence(0, portfolioIntroPreset.timing)
+    const timing = timingRef.current
+    sequenceRef.current = evaluateIntroSequence(0, timing)
     // Force immediate visual reset so the tagline hides before the next RAF.
     const node = taglineRef.current
     if (node) {
@@ -322,12 +344,13 @@ export default function PortfolioExperience() {
 
   const jumpToPhase = (phase: IntroPhase) => {
     const ctrl = controllerRef.current
-    const targetTime = getPhaseStartTime(phase, portfolioIntroPreset.timing)
+    const timing = timingRef.current
+    const targetTime = getPhaseStartTime(phase, timing)
     // Always pause after a jump so the phase can be inspected.
     ctrl.paused = true
     ctrl.pausedElapsed = targetTime
     ctrl.wasPlayingBeforeHidden = false
-    const next = evaluateIntroSequence(targetTime, portfolioIntroPreset.timing)
+    const next = evaluateIntroSequence(targetTime, timing)
     sequenceRef.current = next
 
     const taglineProgress = next.taglineVisible ? next.taglineProgress : 0
@@ -345,7 +368,7 @@ export default function PortfolioExperience() {
       const itemProgresses = getPrimaryActionProgresses(
         next,
         PRIMARY_ACTION_COUNT,
-        portfolioIntroPreset.timing,
+        timing,
       )
       for (let i = 0; i < PRIMARY_ACTION_COUNT; i += 1) {
         actionsNode.style.setProperty(
@@ -373,32 +396,48 @@ export default function PortfolioExperience() {
       optionItemProgress: getPrimaryActionProgresses(
         next,
         PRIMARY_ACTION_COUNT,
-        portfolioIntroPreset.timing,
+        timing,
       ),
       actionsInert: !next.optionsReady,
     }))
   }
 
-  const commitSpeed = (raw: string) => {
-    const parsed = Number(raw)
-    if (!Number.isFinite(parsed) || parsed <= 0 || Number.isNaN(parsed)) {
-      setSpeedDraft(String(controllerRef.current.speed))
-      return
-    }
+  const handleSpeedChange = (value: number) => {
     // Preserve elapsed time across rate changes by adjusting the start-time baseline.
     const ctrl = controllerRef.current
     if (!ctrl.paused) {
       ctrl.pausedElapsed += (performance.now() - ctrl.startTime) * ctrl.speed
       ctrl.startTime = performance.now()
     }
-    ctrl.speed = parsed
-    setSpeedDraft(String(parsed))
-    setDiagnostics((prev) => ({ ...prev, speed: parsed }))
+    ctrl.speed = value
+    setDiagnostics((prev) => ({ ...prev, speed: value }))
+  }
+
+  const handleTimingChange = (key: keyof IntroTiming, value: number) => {
+    setIntroTiming((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const resetIntroTiming = () => {
+    setIntroTiming({ ...portfolioIntroPreset.timing })
+  }
+
+  const handleSceneConfigChange = (key: keyof SceneConfig, value: number) => {
+    setSceneConfig((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const resetSceneConfig = () => {
+    setSceneConfig({ ...APPROVED_SCENE_DEFAULTS })
   }
 
   return (
     <div className="portfolio-shell">
-      <SceneCanvas tuningMode={tuningMode} sequenceDiagnostics={diagnostics} />
+      <SceneCanvas
+        tuningMode={tuningMode}
+        sequenceDiagnostics={diagnostics}
+        mouseR={sceneConfig.mouseR}
+        particleRepel={sceneConfig.particleRepel}
+        weatherRepelMult={sceneConfig.weatherRepelMult}
+      />
       <div className="foreground-layer" aria-live="polite">
         <div className="foreground-content">
           <Intro taglineRef={taglineRef} />
@@ -410,61 +449,25 @@ export default function PortfolioExperience() {
         </div>
       </div>
       {tuningMode && (
-        <div className="sequence-controls" aria-label="Sequence playback controls">
-          <div>phase: {diagnostics.phase}</div>
-          <div>elapsed: {Math.round(diagnostics.elapsedMs)}ms</div>
-          <div>phase progress: {diagnostics.phaseProgress.toFixed(2)}</div>
-          <div>overall progress: {diagnostics.overallProgress.toFixed(2)}</div>
-          <div>tagline progress: {diagnostics.taglineProgress.toFixed(2)}</div>
-          <div>tagline visible: {diagnostics.taglineVisible ? 'yes' : 'no'}</div>
-          <div>tagline mounted: {diagnostics.taglineMounted ? 'yes' : 'no'}</div>
-          <div>options progress: {diagnostics.optionsProgress.toFixed(2)}</div>
-          <div>options visible: {diagnostics.optionsVisible ? 'yes' : 'no'}</div>
-          <div>options ready: {diagnostics.optionsReady ? 'yes' : 'no'}</div>
-          <div>actions mounted: {diagnostics.optionsMounted ? 'yes' : 'no'}</div>
-          <div>actions inert: {diagnostics.actionsInert ? 'yes' : 'no'}</div>
-          <div>effective option stagger: {Math.round(diagnostics.effectiveOptionStaggerMs)}ms</div>
-          <div>effective option item duration: {Math.round(diagnostics.effectiveOptionItemDurationMs)}ms</div>
-          <div>timing fallback: {diagnostics.timingFallbackActive ? 'yes' : 'no'}</div>
-          {diagnostics.optionItemProgress.map((p, i) => (
-            <div key={i}>option {i} progress: {p.toFixed(2)}</div>
-          ))}
-          <div>speed: {diagnostics.speed.toFixed(2)}x</div>
-          <div>hidden: {diagnostics.documentHidden ? 'yes' : 'no'}</div>
-          <label className="rate-control">
-            rate
-            <input
-              type="number"
-              value={speedDraft}
-              min={0.01}
-              step={0.1}
-              onChange={(event) => setSpeedDraft(event.target.value)}
-              onBlur={(event) => commitSpeed(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  commitSpeed((event.target as HTMLInputElement).value)
-                }
-              }}
-            />
-          </label>
-          <div className="sequence-buttons">
-            <button type="button" onClick={play}>Play</button>
-            <button type="button" onClick={pause}>Pause</button>
-            <button type="button" onClick={replay}>Replay</button>
-            <button
-              type="button"
-              onClick={() => jumpToPhase(previousPhase(diagnostics.phase, portfolioIntroPreset.timing))}
-            >
-              Prev phase
-            </button>
-            <button
-              type="button"
-              onClick={() => jumpToPhase(nextPhase(diagnostics.phase, portfolioIntroPreset.timing))}
-            >
-              Next phase
-            </button>
-          </div>
-        </div>
+        <TuningPanel
+          introTiming={introTiming}
+          onIntroTimingChange={handleTimingChange}
+          onResetIntroTiming={resetIntroTiming}
+          speed={diagnostics.speed}
+          onSpeedChange={handleSpeedChange}
+          sceneConfig={sceneConfig}
+          onSceneConfigChange={handleSceneConfigChange}
+          onResetSceneConfig={resetSceneConfig}
+          onPlay={play}
+          onPause={pause}
+          onReplay={replay}
+          onPrevPhase={() => jumpToPhase(previousPhase(diagnostics.phase, timingRef.current))}
+          onNextPhase={() => jumpToPhase(nextPhase(diagnostics.phase, timingRef.current))}
+          totalDurationMs={getTotalDuration(introTiming)}
+          effectiveOptionStaggerMs={diagnostics.effectiveOptionStaggerMs}
+          effectiveOptionItemDurationMs={diagnostics.effectiveOptionItemDurationMs}
+          timingFallbackActive={diagnostics.timingFallbackActive}
+        />
       )}
     </div>
   )
