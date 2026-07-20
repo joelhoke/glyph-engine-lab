@@ -1,6 +1,6 @@
 'use client'
 
-import { Ref } from 'react'
+import { Ref, RefObject } from 'react'
 import PrimaryAction from './PrimaryAction'
 
 type PrimaryActionsProps = {
@@ -29,15 +29,19 @@ export default function PrimaryActions({ selected, onSelect, groupRef }: Primary
       aria-hidden="true"
     >
       {primaryActions.map((action, index) => (
-        <PrimaryAction
+        <div
           key={action.key}
-          label={action.label}
-          selected={selected === action.key}
-          onClick={() => onSelect(action.key)}
-          actionIndex={index}
-          hue={action.hue}
-          style={{ '--option-index': String(index) } as React.CSSProperties}
-        />
+          className="primary-action-slot"
+          data-action-index={index}
+        >
+          <PrimaryAction
+            label={action.label}
+            selected={selected === action.key}
+            onClick={() => onSelect(action.key)}
+            hue={action.hue}
+            style={{ '--option-index': String(index) } as React.CSSProperties}
+          />
+        </div>
       ))}
     </div>
   )

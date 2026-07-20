@@ -145,24 +145,26 @@ export default function PortfolioExperience() {
         portfolioIntroPreset.timing,
       )
 
-      const { effectiveStaggerMs, itemDurationMs } = getStaggeredItemProgress({
-        phaseElapsedMs: sequence.phaseElapsedMs,
-        groupDurationMs: optionsTransitionDuration,
-        staggerMs: optionStagger,
-        itemIndex: 0,
-        itemCount: PRIMARY_ACTION_COUNT,
-      })
-      const timingFallbackActive =
-        effectiveStaggerMs !== optionStagger ||
-        itemDurationMs !==
-          Math.max(
-            0,
-            optionsTransitionDuration - optionStagger * (PRIMARY_ACTION_COUNT - 1),
-          )
+      let timingFallbackActive = false
+      if (!optionsReady) {
+        const { effectiveStaggerMs, itemDurationMs } = getStaggeredItemProgress({
+          phaseElapsedMs: sequence.phaseElapsedMs,
+          groupDurationMs: optionsTransitionDuration,
+          staggerMs: optionStagger,
+          itemIndex: 0,
+          itemCount: PRIMARY_ACTION_COUNT,
+        })
+        timingFallbackActive =
+          effectiveStaggerMs !== optionStagger ||
+          itemDurationMs !==
+            Math.max(
+              0,
+              optionsTransitionDuration - optionStagger * (PRIMARY_ACTION_COUNT - 1),
+            )
+      }
 
       for (let i = 0; i < PRIMARY_ACTION_COUNT; i += 1) {
-        const progress = itemProgresses[i] ?? 0
-        const eased = optionsVisible ? easeOutCubic(progress) : 0
+        const eased = optionsVisible ? easeOutCubic(itemProgresses[i]) : 0
         node.style.setProperty(`--option-progress-${i}`, String(eased))
       }
 
@@ -339,18 +341,19 @@ export default function PortfolioExperience() {
     }
 
     const actionsNode = actionsRef.current
-    const optionItemProgress = getPrimaryActionProgresses(
-      next,
-      PRIMARY_ACTION_COUNT,
-      portfolioIntroPreset.timing,
-    )
-
     if (actionsNode) {
+      const itemProgresses = getPrimaryActionProgresses(
+        next,
+        PRIMARY_ACTION_COUNT,
+        portfolioIntroPreset.timing,
+      )
       for (let i = 0; i < PRIMARY_ACTION_COUNT; i += 1) {
-        const progress = optionItemProgress[i] ?? 0
-        actionsNode.style.setProperty(`--option-progress-${i}`, String(easeOutCubic(next.optionsVisible ? progress : 0)))
+        actionsNode.style.setProperty(
+          `--option-progress-${i}`,
+          String(easeOutCubic(next.optionsVisible ? itemProgresses[i] : 0)),
+        )
       }
-      const groupHidden = !next.optionsVisible || optionItemProgress.every((p) => p <= 0)
+      const groupHidden = !next.optionsVisible || itemProgresses.every((p) => p <= 0)
       actionsNode.classList.toggle('options-hidden', groupHidden)
       actionsNode.classList.toggle('options-inert', !next.optionsReady)
       actionsNode.setAttribute('aria-hidden', String(!next.optionsVisible))
@@ -367,7 +370,11 @@ export default function PortfolioExperience() {
       optionsProgress: next.optionsVisible ? next.optionsProgress : 0,
       optionsVisible: next.optionsVisible,
       optionsReady: next.optionsReady,
-      optionItemProgress,
+      optionItemProgress: getPrimaryActionProgresses(
+        next,
+        PRIMARY_ACTION_COUNT,
+        portfolioIntroPreset.timing,
+      ),
       actionsInert: !next.optionsReady,
     }))
   }

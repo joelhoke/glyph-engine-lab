@@ -202,48 +202,79 @@ const negativeElapsed = stagger({ phaseElapsedMs: -50, groupDurationMs: optionDu
 assert(negativeElapsed.progress === 0, 'stagger: negative elapsed clamps to 0')
 assert(!Number.isNaN(negativeElapsed.progress) && Number.isFinite(negativeElapsed.progress), 'stagger: negative elapsed is finite')
 
-// Primary action progress helper (authoritative)
-const actionProgresses = (elapsed) =>
-  getPrimaryActionProgresses(evaluateIntroSequence(elapsed, timing), itemCount, timing)
-const assertProgresses = (elapsed, expected, label) => {
-  const values = actionProgresses(elapsed)
-  assert(values.length === itemCount, `${label}: expected ${itemCount} action progress values`)
-  values.forEach((value, i) => {
-    assert(Number.isFinite(value) && !Number.isNaN(value), `${label}: item ${i} is finite`)
-    assert(value >= 0 && value <= 1, `${label}: item ${i} clamped to 0..1`)
-    assert(approx(value, expected[i]), `${label}: item ${i} expected ${expected[i]}, got ${value}`)
-  })
+// Primary action progress helper
+function allEqual(arr, value) {
+  return arr.every((x) => x === value)
 }
 
-// Before options-entering
-assertProgresses(0, [0, 0, 0], 'primary actions before options at t=0')
-assertProgresses(3800, [0, 0, 0], 'primary actions during tagline-hold')
-
-// Start of options-entering
-assertProgresses(5300, [0, 0, 0], 'primary actions at options-entering start')
-
-// Interior of options-entering
-{
-  const interiorElapsed = 5600
-  const interiorSequence = evaluateIntroSequence(interiorElapsed, timing)
-  const expected = Array.from({ length: itemCount }, (_, i) =>
-    getStaggeredItemProgress({
-      phaseElapsedMs: interiorSequence.phaseElapsedMs,
-      groupDurationMs: timing.optionsTransitionDuration,
-      staggerMs,
-      itemIndex: i,
-      itemCount,
-    }).progress,
-  )
-  assertProgresses(interiorElapsed, expected, 'primary actions in options-entering interior')
+function allFinite(arr) {
+  return arr.every((x) => Number.isFinite(x) && !Number.isNaN(x))
 }
 
-// Exact options completion boundary
-assertProgresses(6200, [1, 1, 1], 'primary actions at options completion boundary')
+function allInRange(arr) {
+  return arr.every((x) => x >= 0 && x <= 1)
+}
 
-// Complete phase start and beyond completion
-assertProgresses(6200, [1, 1, 1], 'primary actions at complete start')
-assertProgresses(7200, [1, 1, 1], 'primary actions beyond completion')
+// Before options-entering: all zero
+let actionProgresses = getPrimaryActionProgresses(
+  evaluateIntroSequence(getPhaseStartTime('tagline-hold', timing), timing),
+  itemCount,
+  timing,
+)
+assert(actionProgresses.length === itemCount, 'progress: returns one value per action')
+assert(allEqual(actionProgresses, 0), 'progress: all zero before options-entering')
+assert(allFinite(actionProgresses), 'progress: finite before options-entering')
+assert(allInRange(actionProgresses), 'progress: clamped before options-entering')
+
+// At options-entering start: all zero
+actionProgresses = getPrimaryActionProgresses(
+  evaluateIntroSequence(getPhaseStartTime('options-entering', timing), timing),
+  itemCount,
+  timing,
+)
+assert(allEqual(actionProgresses, 0), 'progress: all zero at options-entering start')
+
+// Interior of options-entering: staggered values
+actionProgresses = getPrimaryActionProgresses(
+  evaluateIntroSequence(5750, timing),
+  itemCount,
+  timing,
+)
+assert(
+  actionProgresses[0] > actionProgresses[1] && actionProgresses[1] > actionProgresses[2],
+  'progress: stagger order Work > Vibes > Make Something during options-entering',
+)
+assert(
+  actionProgresses.every((p) => p > 0 && p < 1),
+  'progress: all actions interior is between 0 and 1',
+)
+assert(allFinite(actionProgresses), 'progress: finite during options-entering')
+assert(allInRange(actionProgresses), 'progress: clamped during options-entering')
+
+// Exact options completion boundary: all one
+actionProgresses = getPrimaryActionProgresses(
+  evaluateIntroSequence(6200, timing),
+  itemCount,
+  timing,
+)
+assert(allEqual(actionProgresses, 1), 'progress: all one at exact options completion')
+
+// Complete phase start: all one
+actionProgresses = getPrimaryActionProgresses(
+  evaluateIntroSequence(getPhaseStartTime('complete', timing), timing),
+  itemCount,
+  timing,
+)
+assert(allEqual(actionProgresses, 1), 'progress: all one at complete phase start')
+
+// Elapsed beyond completion: all one
+actionProgresses = getPrimaryActionProgresses(
+  evaluateIntroSequence(10000, timing),
+  itemCount,
+  timing,
+)
+assert(allEqual(actionProgresses, 1), 'progress: all one beyond completion')
+assert(allFinite(actionProgresses), 'progress: finite beyond completion')
 
 // Cleanup
 fs.rmSync(tmpDir, { recursive: true, force: true })

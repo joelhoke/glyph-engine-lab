@@ -78,40 +78,44 @@ export function getStaggeredItemProgress(
 }
 
 /**
- * Authoritative resolver for primary action reveal progress values.
+ * Pure helper that returns the authoritative raw entrance progress for every
+ * primary action from the current sequence snapshot.
  *
- * Contract:
- * - Before options are visible: all 0
- * - At options-entering start: all 0
- * - During options-entering: staggered item progress
- * - Once options are ready (and complete): all 1
+ * - Before/during `options-entering` until completion: stagger calculation
+ * - When `optionsReady` is true (completion boundary and beyond): all 1
+ * - All other phases: all 0
+ *
+ * Values are clamped to [0, 1] and are finite.
  */
 export function getPrimaryActionProgresses(
   sequence: IntroSequenceSnapshot,
   itemCount: number,
   timing: IntroTiming,
 ): number[] {
-  if (itemCount <= 0) return []
+  if (itemCount <= 0) {
+    return []
+  }
 
   if (sequence.optionsReady) {
     return Array(itemCount).fill(1)
   }
 
-  if (!sequence.optionsVisible) {
+  if (sequence.phase !== 'options-entering') {
     return Array(itemCount).fill(0)
   }
 
+  const { optionsTransitionDuration, optionStagger } = timing
   const progresses: number[] = []
+
   for (let i = 0; i < itemCount; i += 1) {
     const { progress } = getStaggeredItemProgress({
       phaseElapsedMs: sequence.phaseElapsedMs,
-      groupDurationMs: timing.optionsTransitionDuration,
-      staggerMs: timing.optionStagger,
+      groupDurationMs: optionsTransitionDuration,
+      staggerMs: optionStagger,
       itemIndex: i,
       itemCount,
     })
-    const safe = Number.isFinite(progress) ? progress : 0
-    progresses.push(clamp(safe, 0, 1))
+    progresses.push(progress)
   }
 
   return progresses

@@ -6,12 +6,11 @@ type PrimaryActionProps = {
   label: string
   selected: boolean
   onClick: () => void
-  actionIndex: number
   hue?: string
   style?: React.CSSProperties
 }
 
-export default function PrimaryAction({ label, selected, onClick, actionIndex, hue, style }: PrimaryActionProps) {
+export default function PrimaryAction({ label, selected, onClick, hue, style }: PrimaryActionProps) {
   const beamStyle: React.CSSProperties = { ...style }
   if (hue) (beamStyle as any)['--beam-hue-base'] = hue
 
@@ -24,7 +23,6 @@ export default function PrimaryAction({ label, selected, onClick, actionIndex, h
       theme="auto"
       strength={selected ? 0.7 : 0.45}
       className="primary-action-beam"
-      data-action-index={actionIndex}
       style={beamStyle}
     >
       <button
