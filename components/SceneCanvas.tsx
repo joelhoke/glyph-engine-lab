@@ -122,6 +122,7 @@ export default function SceneCanvas({
   const tuningModeRef = useRef<boolean>(false)
   const sourceLayoutRef = useRef<SourceLayoutConfig | undefined>(undefined)
   const rebuildSvgTimeoutRef = useRef<number | null>(null)
+  const prevTargetCountRef = useRef<number>(0)
   const [diagnostics, setDiagnostics] = useState<SceneDiagnostics>({
     sourceStatus: 'idle',
     targetCount: 0,
@@ -180,6 +181,12 @@ export default function SceneCanvas({
   useEffect(() => { particleRepelRef.current = particleRepel }, [particleRepel])
   useEffect(() => { weatherRepelRef.current = weatherRepelMult }, [weatherRepelMult])
   useEffect(() => { tuningModeRef.current = tuningMode ?? false }, [tuningMode])
+  useEffect(() => {
+    if (onDiagnosticsUpdate && diagnostics.targetCount !== prevTargetCountRef.current) {
+      prevTargetCountRef.current = diagnostics.targetCount
+      onDiagnosticsUpdate({ targetCount: diagnostics.targetCount })
+    }
+  }, [diagnostics.targetCount, onDiagnosticsUpdate])
   useEffect(() => {
     sourceLayoutRef.current = sourceLayout
     scheduleSvgTargetRebuild()
@@ -431,40 +438,28 @@ export default function SceneCanvas({
     })
     if (result.ok) {
       svgTargetsRef.current = result.targets
-      setDiagnostics((prev) => {
-        const next = {
-          ...prev,
-          sourceStatus: 'loaded',
-          targetCount: result.targets.length,
-        }
-        onDiagnosticsUpdate?.(next)
-        return next
-      })
+      setDiagnostics((prev) => ({
+        ...prev,
+        sourceStatus: 'loaded',
+        targetCount: result.targets.length,
+      }))
     } else {
       svgTargetsRef.current = []
-      setDiagnostics((prev) => {
-        const next = {
-          ...prev,
-          sourceStatus: `error: ${result.error}`,
-          targetCount: 0,
-        }
-        onDiagnosticsUpdate?.(next)
-        return next
-      })
+      setDiagnostics((prev) => ({
+        ...prev,
+        sourceStatus: `error: ${result.error}`,
+        targetCount: 0,
+      }))
     }
     buildSvgTargetAssignment()
     const assignedCount = countAssignedTargets()
-    setDiagnostics((prev) => {
-      const next = {
-        ...prev,
-        glyphCount: particlesRef.current.length,
-        assignedCount,
-        unassignedCount: particlesRef.current.length - assignedCount,
-        hiddenCount: unassignedBehaviorRef.current === 'hidden' ? particlesRef.current.length - assignedCount : 0,
-      }
-      onDiagnosticsUpdate?.(next)
-      return next
-    })
+    setDiagnostics((prev) => ({
+      ...prev,
+      glyphCount: particlesRef.current.length,
+      assignedCount,
+      unassignedCount: particlesRef.current.length - assignedCount,
+      hiddenCount: unassignedBehaviorRef.current === 'hidden' ? particlesRef.current.length - assignedCount : 0,
+    }))
   }
 
   const activateSceneMode = (mode: SceneMode) => {
@@ -554,15 +549,11 @@ export default function SceneCanvas({
     if (matrixEnabledRef.current) buildMatrixStructure()
     if (sceneModeRef.current === 'svg') {
       buildSvgTargetAssignment()
-      setDiagnostics((prev) => {
-        const next = {
-          ...prev,
-          glyphCount: particlesRef.current.length,
-          assignedCount: countAssignedTargets(),
-        }
-        onDiagnosticsUpdate?.(next)
-        return next
-      })
+      setDiagnostics((prev) => ({
+        ...prev,
+        glyphCount: particlesRef.current.length,
+        assignedCount: countAssignedTargets(),
+      }))
     }
     if (typeof document !== 'undefined') {
       document.body.style.overflowY = sceneModeRef.current === 'matrix' || sceneModeRef.current === 'weather' ? 'hidden' : 'auto'
