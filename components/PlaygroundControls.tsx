@@ -10,8 +10,11 @@ import {
 } from '../engine/playgroundConfig'
 import { DEFAULT_UPLOADED_SVG_FILENAME } from '../engine/svgUpload'
 import { SceneCanvasHandle } from './SceneCanvas'
+import { RefreshCcwAlt3Icon, ShareIosExportIcon } from './icons'
 
 type MobileSection = 'shape' | 'type' | 'color' | 'background'
+
+const CAPTION_TEXT = 'I made this with Joel. Bring your next idea to life at joelhoke.me.'
 
 type ShareStatus = {
   type: 'info' | 'error'
@@ -45,10 +48,13 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
   const uploadErrorId = `upload-error-${stableId}`
   const uploadDescriptionId = `upload-desc-${stableId}`
   const shareStatusId = `share-status-${stableId}`
+  const captionStatusId = `caption-status-${stableId}`
   const [draftText, setDraftText] = useState(config.glyphText)
   const [mobileSection, setMobileSection] = useState<MobileSection>('shape')
   const [shareStatus, setShareStatus] = useState<ShareStatus | null>(null)
+  const [captionStatus, setCaptionStatus] = useState<ShareStatus | null>(null)
   const [isSharing, setIsSharing] = useState(false)
+  const captionTimeoutRef = useRef<number | null>(null)
 
   useEffect(() => {
     setDraftText(config.glyphText)
@@ -96,8 +102,17 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
     setShareStatus(null)
   }
 
+  const clearCaptionStatus = () => {
+    if (captionTimeoutRef.current !== null) {
+      window.clearTimeout(captionTimeoutRef.current)
+      captionTimeoutRef.current = null
+    }
+    setCaptionStatus(null)
+  }
+
   const handleShareCreation = async () => {
     if (isSharing) return
+    clearCaptionStatus()
     const handle = canvasRef?.current
     const canvas = handle?.getCanvas()
     if (!canvas) {
@@ -122,12 +137,7 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
       }
 
       const file = new File([blob], 'joel-hoke-playground.png', { type: 'image/png' })
-      const shareData = {
-        files: [file],
-        title: 'Made with Joel',
-        text: 'I made this with Joel. Bring your next idea to life at joelhoke.me.',
-        url: 'https://joelhoke.me',
-      }
+      const shareData = { files: [file] }
 
       if (navigator.canShare?.(shareData)) {
         await navigator.share(shareData)
@@ -141,7 +151,7 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
         URL.revokeObjectURL(url)
         setShareStatus({
           type: 'info',
-          message: 'Image downloaded — share what you made at joelhoke.me.',
+          message: 'Image downloaded — copy the caption to share what you made.',
         })
       }
     } catch (err) {
@@ -159,6 +169,35 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
       setIsSharing(false)
     }
   }
+
+  const handleCopyCaption = async () => {
+    clearCaptionStatus()
+    try {
+      if (!navigator.clipboard) {
+        throw new Error('Clipboard access is not available.')
+      }
+      await navigator.clipboard.writeText(CAPTION_TEXT)
+      setCaptionStatus({ type: 'info', message: 'Caption copied' })
+      if (captionTimeoutRef.current !== null) {
+        window.clearTimeout(captionTimeoutRef.current)
+      }
+      captionTimeoutRef.current = window.setTimeout(() => {
+        setCaptionStatus(null)
+        captionTimeoutRef.current = null
+      }, 3000)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      setCaptionStatus({ type: 'error', message: `Could not copy caption: ${message}` })
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (captionTimeoutRef.current !== null) {
+        window.clearTimeout(captionTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const displayFilename = uploadedFilename ?? DEFAULT_UPLOADED_SVG_FILENAME
 
@@ -356,31 +395,6 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
       <div className="playground-controls-footer">
         <button
           type="button"
-          onClick={onReset}
-          className="playground-reset-button"
-          aria-label="Reset playground"
-        >
-          <svg
-            className="playground-reset-icon"
-            width="12"
-            height="12"
-            viewBox="0 0 12 12"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <path
-              d="M1 4.5A4.5 4.5 0 0 1 9.2 3.2M11 7.5A4.5 4.5 0 0 1 2.8 8.8M2.8 3.2V1M2.8 3.2h2M9.2 8.8v2M9.2 8.8h-2"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          Reset playground
-        </button>
-        <button
-          type="button"
           onClick={handleShareCreation}
           disabled={isSharing}
           className="playground-share-button"
@@ -388,24 +402,26 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
           aria-busy={isSharing}
           aria-describedby={shareStatus ? shareStatusId : undefined}
         >
-          <svg
-            className="playground-share-icon"
-            width="12"
-            height="12"
-            viewBox="0 0 12 12"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <path
-              d="M2 5V2.5a1.5 1.5 0 1 1 3 0V5m0 0v2.5a1.5 1.5 0 1 1-3 0V5m5-2h1.5a1.5 1.5 0 0 1 0 3H7"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          <ShareIosExportIcon className="playground-share-icon" />
           Share creation
+        </button>
+        <button
+          type="button"
+          onClick={handleCopyCaption}
+          className="playground-copy-caption-button"
+          aria-label="Copy caption"
+          aria-describedby={captionStatus ? captionStatusId : undefined}
+        >
+          Copy caption
+        </button>
+        <button
+          type="button"
+          onClick={onReset}
+          className="playground-reset-button"
+          aria-label="Reset playground"
+        >
+          <RefreshCcwAlt3Icon className="playground-reset-icon" />
+          Reset playground
         </button>
         {shareStatus && (
           <span
@@ -418,6 +434,19 @@ const PlaygroundControls = forwardRef<HTMLTextAreaElement, PlaygroundControlsPro
             ].filter(Boolean).join(' ')}
           >
             {shareStatus.message}
+          </span>
+        )}
+        {captionStatus && (
+          <span
+            id={captionStatusId}
+            role="status"
+            aria-live="polite"
+            className={[
+              'playground-share-status',
+              captionStatus.type === 'error' && 'playground-share-status-error',
+            ].filter(Boolean).join(' ')}
+          >
+            {captionStatus.message}
           </span>
         )}
       </div>
