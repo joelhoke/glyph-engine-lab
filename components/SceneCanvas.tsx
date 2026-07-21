@@ -155,6 +155,7 @@ function SceneCanvasInternal(
   const svgTargetsRef = useRef<SvgTarget[]>([])
   const svgTargetMapRef = useRef<Int32Array>(new Int32Array(0))
   const sceneStartRef = useRef<number>(0)
+  const reducedMotionRef = useRef(false)
   const unassignedBehaviorRef = useRef<UnassignedGlyphBehavior>('hidden')
   const tuningModeRef = useRef<boolean>(false)
   const sourceLayoutRef = useRef<SourceLayoutConfig | undefined>(undefined)
@@ -218,6 +219,17 @@ function SceneCanvasInternal(
   const weatherIntensityRef = useRef(weatherIntensity)
   const weatherTurbulenceRef = useRef(weatherTurbulence)
   const weatherBlurRef = useRef(weatherBlur)
+
+  useEffect(() => {
+    const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const updateReducedMotion = () => {
+      reducedMotionRef.current = reducedMotionQuery.matches
+    }
+
+    updateReducedMotion()
+    reducedMotionQuery.addEventListener('change', updateReducedMotion)
+    return () => reducedMotionQuery.removeEventListener('change', updateReducedMotion)
+  }, [])
 
   useEffect(() => { fontRef.current = font }, [font])
   useEffect(() => { lineHeightRef.current = lineHeight }, [lineHeight])
@@ -741,6 +753,8 @@ function SceneCanvasInternal(
     if (targets.length === 0 || particles.length === 0) return
 
     const behavior = unassignedBehaviorRef.current
+    const reducedMotion = reducedMotionRef.current
+    const sceneTime = reducedMotion ? sceneStartRef.current : now
     let visibleCount = 0
     let hiddenCount = 0
 
@@ -753,7 +767,7 @@ function SceneCanvasInternal(
           hiddenCount += 1
           continue
         }
-        const ambient = getAmbientTarget(p, i, now)
+        const ambient = getAmbientTarget(p, i, sceneTime)
         p.tx = ambient.tx
         p.ty = ambient.ty
       } else {
@@ -763,7 +777,14 @@ function SceneCanvasInternal(
       p.char = sourceCharsRef.current[i % Math.max(1, sourceCharsRef.current.length)] || p.char
       p.row = 0
       p.head = false
-      simulateParticle(p)
+      if (reducedMotion) {
+        p.x = p.tx
+        p.y = p.ty
+        p.vx = 0
+        p.vy = 0
+      } else {
+        simulateParticle(p)
+      }
       const homeDist = Math.sqrt((p.x - p.tx) ** 2 + (p.y - p.ty) ** 2)
       const alpha = Math.max(0.35, 1 - homeDist / 280)
       const color = resolveGlyphColor(i, targetIndex, targets.length)
