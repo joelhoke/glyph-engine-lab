@@ -162,7 +162,23 @@ export default function PortfolioExperience({ mode = 'portfolio' }: PortfolioExp
   })
 
   useEffect(() => {
-    controllerRef.current.startTime = performance.now()
+    const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const ctrl = controllerRef.current
+
+    ctrl.startTime = performance.now()
+    if (reducedMotionQuery.matches) {
+      ctrl.pausedElapsed = getTotalDuration(timingRef.current)
+      ctrl.paused = true
+    }
+
+    const handleReducedMotionChange = (event: MediaQueryListEvent) => {
+      if (!event.matches) return
+      const controller = controllerRef.current
+      controller.pausedElapsed = getTotalDuration(timingRef.current)
+      controller.paused = true
+    }
+
+    reducedMotionQuery.addEventListener('change', handleReducedMotionChange)
 
     let raf: number
     let lastDiagnosticTick = 0
@@ -284,7 +300,10 @@ export default function PortfolioExperience({ mode = 'portfolio' }: PortfolioExp
     }
 
     raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
+    return () => {
+      cancelAnimationFrame(raf)
+      reducedMotionQuery.removeEventListener('change', handleReducedMotionChange)
+    }
   }, [])
 
   // Freeze sequence while the tab is hidden to avoid large deltas.
