@@ -49,7 +49,7 @@ function clamp(value: number, min: number, max: number) {
 const ACTION_TRANSLATE_PX = 16
 
 const isTuningMode = () => {
-  if (process.env.NODE_ENV !== 'development' || typeof window === 'undefined') return false
+  if (typeof window === 'undefined') return false
   return new URLSearchParams(window.location.search).get('debug') === 'true'
 }
 
