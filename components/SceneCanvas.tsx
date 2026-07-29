@@ -798,7 +798,7 @@ function SceneCanvasInternal(
   const buildAllMeshBgs = () => {
     const { width: W, height: H } = getViewportSize()
     meshBgsRef.current = {
-      clear: buildMeshBg('#DDEBEE', '#F2E6D8', '#EAE2DC', W, H),
+      clear: buildMeshBg('#DAD29C', '#B4EEFF', '#DAD29C', W, H),
       rain: buildMeshBg('#012840', '#364F59', '#1A3A4A', W, H),
       storm: buildMeshBg('#070926', '#281259', '#170E40', W, H),
       wind: buildMeshBg('#6D808C', '#BDAC89', '#94968C', W, H),

@@ -165,6 +165,12 @@ assert(
       sceneSource.includes('LANDING_GLYPH_GRADIENT.to'),
     'SceneCanvas applies the approved fixed colors to landing source samples',
   )
+  assert(
+    sceneSource.includes(
+      "clear: buildMeshBg('#DAD29C', '#B4EEFF', '#DAD29C', W, H)",
+    ),
+    'clear weather uses the approved #DAD29C → #B4EEFF backdrop colors',
+  )
 }
 
 if (failures > 0) {
