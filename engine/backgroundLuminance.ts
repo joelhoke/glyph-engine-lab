@@ -1,19 +1,21 @@
 /**
- * Background-luminance glyph gradient (Stage 3): the completed-intro landing
- * recolors the JH glyph field with a vertical gradient chosen by the
- * background's computed luminance — a light pair on dark backgrounds, a deep
- * pair on light ones, so the mark stays legible either way.
+ * Landing glyph gradient (Stage 3): the completed-intro landing recolors the
+ * JH glyph field with the approved fixed vertical cyan gradient.
+ *
+ * The older luminance helpers remain exported for compatibility, but landing
+ * presentation no longer changes its brand colors with the background.
  *
  * Pure functions only — verified by scripts/verify-background-luminance.js.
  */
 
 import { packSourceRgba } from './targetSampling'
 
-/** Gradient pair over a dark background (light, airy cyans). */
-export const LANDING_GRADIENT_DARK = { from: '#8FE3F5', to: '#2F9BC4' }
+/** Approved landing mark colors, top to bottom. */
+export const LANDING_GLYPH_GRADIENT = { from: '#0C5E7D', to: '#3B9EC8' }
 
-/** Gradient pair over a light background (deep, grounded cyans). */
-export const LANDING_GRADIENT_LIGHT = { from: '#0C5E7D', to: '#3B9EC8' }
+/** Backward-compatible aliases for callers that imported the old pair names. */
+export const LANDING_GRADIENT_DARK = LANDING_GLYPH_GRADIENT
+export const LANDING_GRADIENT_LIGHT = LANDING_GLYPH_GRADIENT
 
 /** Mean relative luminance at or above this counts as a light background. */
 export const LANDING_LUMINANCE_THRESHOLD = 0.35
@@ -38,18 +40,12 @@ export function computeRelativeLuminance(hex: string): number {
 
 export type LandingGlyphGradient = { from: string; to: string }
 
-/**
- * Pick the landing gradient pair from the mean luminance of the two
- * background stops: dark backgrounds get the light pair, light backgrounds
- * the deep pair.
- */
+/** Return the fixed approved landing gradient regardless of background. */
 export function resolveLandingGlyphGradient(
-  backgroundColor1: string,
-  backgroundColor2: string,
+  _backgroundColor1: string,
+  _backgroundColor2: string,
 ): LandingGlyphGradient {
-  const mean =
-    (computeRelativeLuminance(backgroundColor1) + computeRelativeLuminance(backgroundColor2)) / 2
-  return mean >= LANDING_LUMINANCE_THRESHOLD ? LANDING_GRADIENT_LIGHT : LANDING_GRADIENT_DARK
+  return LANDING_GLYPH_GRADIENT
 }
 
 function parseHexChannels(hex: string): { r: number; g: number; b: number } {

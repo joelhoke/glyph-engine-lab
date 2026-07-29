@@ -100,6 +100,29 @@ function clonePlaygroundConfig(config: PlaygroundConfig): PlaygroundConfig {
   return { ...config, glyphPalette: [...config.glyphPalette] }
 }
 
+/**
+ * Resolve the local seasonal mood during the initial render so SceneCanvas
+ * receives a complete weather config before its first animated frame. The
+ * static server fallback may use the build environment's locale/timezone,
+ * but client hydration resolves its own local inputs; canvas markup is
+ * identical and the resolver performs no network or location request.
+ */
+function resolveInitialLandingAtmosphere(): AmbientConfig {
+  let locale = ''
+  let timeZone = ''
+  try {
+    const resolved = Intl.DateTimeFormat().resolvedOptions()
+    locale = resolved.locale
+    timeZone = resolved.timeZone
+  } catch {
+    // Intl is an optional refinement. The seasonal resolver has deterministic
+    // northern-hemisphere fallbacks for empty locale/timezone inputs.
+  }
+  return resolveSeasonalAtmosphere(
+    captureSeasonalAtmosphereInput(new Date(), { locale, timeZone }),
+  )
+}
+
 const isTuningMode = () => {
   if (process.env.NODE_ENV !== 'development' || typeof window === 'undefined') return false
   return new URLSearchParams(window.location.search).get('debug') === 'true'
@@ -263,12 +286,10 @@ export default function PortfolioExperience() {
   const vibeControlsWasOpenRef = useRef(false)
   const vibeDockId = useId().replace(/:/g, '-')
 
-  // Landing seasonal atmosphere (Stage 3): computed once on mount from the
-  // local date/locale, adopted by the completed-intro scene and faded in
-  // (intensity ramp) at the options-reveal moment.
-  const [landingAmbient, setLandingAmbient] = useState<AmbientConfig | null>(null)
-  const landingAtmosphereRef = useRef<AmbientConfig | null>(null)
-  const landingAtmosphereStartedRef = useRef(false)
+  // Landing seasonal atmosphere (Stage 3): resolve during initialization so
+  // the canvas's first animated frame already includes the local seasonal
+  // mood. There is no delayed options-reveal ramp or network lookup.
+  const [landingAmbient] = useState<AmbientConfig>(resolveInitialLandingAtmosphere)
 
   // Vibe-only paint tool state (session-only; never URL-persisted) and the
   // live overlay status reported by the canvas.
@@ -959,42 +980,6 @@ export default function PortfolioExperience() {
     setUploadPending(false)
   }
 
-  // Seasonal landing atmosphere: resolve once on mount (client-only — the
-  // inputs are the local clock and Intl locale/timezone, both injected into
-  // the pure resolver). Never live weather; see engine/seasonalAtmosphere.
-  useEffect(() => {
-    const resolved = Intl.DateTimeFormat().resolvedOptions()
-    landingAtmosphereRef.current = resolveSeasonalAtmosphere(
-      captureSeasonalAtmosphereInput(new Date(), {
-        locale: resolved.locale,
-        timeZone: resolved.timeZone,
-      }),
-    )
-  }, [])
-
-  // Options-reveal moment: fade the atmosphere in by ramping its weather
-  // intensity from zero to the resolved target. Non-structural knob edits,
-  // so the ambient pool never rebuilds during the ramp; under reduced motion
-  // each step just re-renders the static pose.
-  useEffect(() => {
-    const target = landingAtmosphereRef.current
-    if (!diagnostics.optionsReady || !target || landingAtmosphereStartedRef.current) return
-    landingAtmosphereStartedRef.current = true
-    const finalIntensity = target.weather.intensity
-    let step = 0
-    const steps = 6
-    const interval = window.setInterval(() => {
-      step += 1
-      const intensity = Math.round((finalIntensity * step) / steps)
-      setLandingAmbient({
-        ...target,
-        weather: { ...target.weather, intensity },
-      })
-      if (step >= steps) window.clearInterval(interval)
-    }, 200)
-    return () => window.clearInterval(interval)
-  }, [diagnostics.optionsReady])
-
   // Closing the dock (Hide or Escape) remounts the invitation card; return
   // keyboard focus to its "Make it yours" CTA.
   useEffect(() => {
@@ -1035,13 +1020,18 @@ export default function PortfolioExperience() {
     return { kind: 'builtin' }
   }, [displayed, workDescriptor, collaborateDescriptor, vibeBlackHole, uploadedSource])
 
-  // The landing (completed intro) adopts the seasonal atmosphere; every
-  // other mode keeps its own playground config untouched.
+  // The landing always adopts its fixed sampled glyph colors and the
+  // already-resolved seasonal atmosphere. Every other mode keeps the editable
+  // playground palette/distribution untouched (including Vibe's ROYGBV).
   const scenePlayground = useMemo<PlaygroundConfig>(() => {
     if (displayed === 'work') return workDescriptor.playground
     if (displayed === 'collaborate') return collaborateDescriptor.playground
-    if (displayed === 'intro' && landingAmbient) {
-      return { ...playgroundConfig, ambient: landingAmbient }
+    if (displayed === 'intro') {
+      return {
+        ...playgroundConfig,
+        glyphColorMode: 'source-colors',
+        ambient: landingAmbient,
+      }
     }
     return playgroundConfig
   }, [displayed, workDescriptor, collaborateDescriptor, playgroundConfig, landingAmbient])

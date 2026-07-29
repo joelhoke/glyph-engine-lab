@@ -29,7 +29,7 @@ import {
 } from '../engine/animatedSource'
 import {
   applyVerticalGlyphGradient,
-  resolveLandingGlyphGradient,
+  LANDING_GLYPH_GRADIENT,
 } from '../engine/backgroundLuminance'
 import { LANDING_SOURCE_URL } from '../engine/sceneConfig'
 import { createSeededRandom, RandomSource } from '../engine/random'
@@ -1643,20 +1643,20 @@ function SceneCanvasInternal(
     const decision = resolveSourceFieldDecision({ ok: result.ok, targetCount: result.x.length, error: result.error })
     if (decision.use === 'source') {
       // Landing completed-intro: recolor the hero mark (built-in monogram or
-      // the JH logotype) with the luminance-chosen glyph gradient
-      // (engine/backgroundLuminance) — the logotype ships in the light
-      // gradient, which is too dark on the dark landing.
+      // the JH logotype) with the fixed approved vertical glyph gradient.
+      // PortfolioExperience selects source-colors for the landing so these
+      // sampled colors, rather than the editable Vibe palette, are rendered.
       const isLandingField =
         experienceRef.current === 'intro' &&
         (selection.kind === 'builtin' ||
           (selection.kind === 'static' && selection.url === LANDING_SOURCE_URL))
       if (isLandingField) {
-        const config = playgroundConfigRef.current
-        const gradient = resolveLandingGlyphGradient(
-          config.backgroundColor1,
-          config.backgroundColor2,
+        applyVerticalGlyphGradient(
+          result.colors,
+          result.normY,
+          LANDING_GLYPH_GRADIENT.from,
+          LANDING_GLYPH_GRADIENT.to,
         )
-        applyVerticalGlyphGradient(result.colors, result.normY, gradient.from, gradient.to)
       }
       setBaseField(result.x, result.y, result.colors, result.normX, result.normY)
       patchDiagnostics({

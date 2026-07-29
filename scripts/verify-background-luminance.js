@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 /**
- * Deterministic verification for the background-luminance glyph gradient
- * (Stage 3): engine/backgroundLuminance.ts.
+ * Deterministic verification for the fixed landing glyph gradient (Stage 3):
+ * engine/backgroundLuminance.ts and its production wiring.
  *
- * Checks: the sRGB relative-luminance computation, the dark/light gradient
- * pair selection at and around the threshold boundary, and the vertical
- * gradient recolor of a sampled target field (endpoints, midpoint, and
- * per-target alpha preservation).
+ * Checks: the approved fixed pair on every background, vertical recoloring
+ * (endpoints, midpoint, and alpha preservation), and the production landing's
+ * source-colors mode / first-frame atmosphere wiring.
  */
 
 const { execSync } = require('child_process')
@@ -31,9 +30,9 @@ try {
 const {
   applyVerticalGlyphGradient,
   computeRelativeLuminance,
+  LANDING_GLYPH_GRADIENT,
   LANDING_GRADIENT_DARK,
   LANDING_GRADIENT_LIGHT,
-  LANDING_LUMINANCE_THRESHOLD,
   resolveLandingGlyphGradient,
 } = require(path.join(tmpDir, 'backgroundLuminance.js'))
 const { packSourceRgba, unpackSourceA, unpackSourceB, unpackSourceG, unpackSourceR } = require(
@@ -68,42 +67,24 @@ assert(
   'malformed input resolves to 0 (treated as dark)',
 )
 
-// --- gradient selection ---------------------------------------------------------
+// --- fixed gradient selection --------------------------------------------------
 
 {
   const dark = resolveLandingGlyphGradient('#0a0a0a', '#12121a')
   assert(
-    dark.from === LANDING_GRADIENT_DARK.from && dark.to === LANDING_GRADIENT_DARK.to,
-    'dark background → the dark pair (#8FE3F5 → #2F9BC4)',
+    dark.from === '#0C5E7D' && dark.to === '#3B9EC8',
+    'dark background keeps the approved pair (#0C5E7D → #3B9EC8)',
   )
   const light = resolveLandingGlyphGradient('#eae2dc', '#f2e6d8')
   assert(
-    light.from === LANDING_GRADIENT_LIGHT.from && light.to === LANDING_GRADIENT_LIGHT.to,
-    'light background → the light pair (#0C5E7D → #3B9EC8)',
+    light.from === '#0C5E7D' && light.to === '#3B9EC8',
+    'light background keeps the same approved pair',
   )
-}
-
-// threshold boundary: sweeping grays across the threshold must flip the pair
-// exactly when the mean luminance crosses it.
-{
-  let sawDark = false
-  let sawLight = false
-  let consistent = true
-  for (let gray = 0; gray <= 255; gray += 1) {
-    const hex = `#${gray.toString(16).padStart(2, '0').repeat(3)}`
-    const luminance = computeRelativeLuminance(hex)
-    const pair = resolveLandingGlyphGradient(hex, hex)
-    const expectLight = luminance >= LANDING_LUMINANCE_THRESHOLD
-    if (expectLight) sawLight = true
-    else sawDark = true
-    const gotLight = pair.from === LANDING_GRADIENT_LIGHT.from
-    if (gotLight !== expectLight) {
-      consistent = false
-      console.error(`  boundary mismatch at ${hex} (luminance ${luminance.toFixed(4)})`)
-    }
-  }
-  assert(consistent, 'selection flips exactly at the luminance threshold across all grays')
-  assert(sawDark && sawLight, 'the gray sweep exercises both sides of the threshold')
+  assert(
+    LANDING_GRADIENT_DARK === LANDING_GLYPH_GRADIENT &&
+      LANDING_GRADIENT_LIGHT === LANDING_GLYPH_GRADIENT,
+    'legacy pair exports alias the approved fixed gradient',
+  )
 }
 
 // --- vertical gradient recolor ----------------------------------------------------
@@ -118,16 +99,16 @@ assert(
   applyVerticalGlyphGradient(
     colors,
     normY,
-    LANDING_GRADIENT_DARK.from,
-    LANDING_GRADIENT_DARK.to,
+    LANDING_GLYPH_GRADIENT.from,
+    LANDING_GLYPH_GRADIENT.to,
   )
 
   const parse = (hex) => {
     const value = parseInt(hex.replace('#', ''), 16)
     return { r: (value >> 16) & 0xff, g: (value >> 8) & 0xff, b: value & 0xff }
   }
-  const from = parse(LANDING_GRADIENT_DARK.from)
-  const to = parse(LANDING_GRADIENT_DARK.to)
+  const from = parse(LANDING_GLYPH_GRADIENT.from)
+  const to = parse(LANDING_GLYPH_GRADIENT.to)
 
   assert(
     unpackSourceR(colors[0]) === from.r &&
@@ -152,6 +133,37 @@ assert(
       Math.abs(unpackSourceG(colors[2]) - mid.g) <= 1 &&
       Math.abs(unpackSourceB(colors[2]) - mid.b) <= 1,
     'the midpoint interpolates linearly',
+  )
+}
+
+// --- production wiring ---------------------------------------------------------
+
+{
+  const portfolioSource = fs.readFileSync(
+    path.join(projectRoot, 'components', 'PortfolioExperience.tsx'),
+    'utf8',
+  )
+  const sceneSource = fs.readFileSync(
+    path.join(projectRoot, 'components', 'SceneCanvas.tsx'),
+    'utf8',
+  )
+  assert(
+    portfolioSource.includes("glyphColorMode: 'source-colors'"),
+    'the landing renders sampled source colors instead of the ROYGBV palette',
+  )
+  assert(
+    portfolioSource.includes('useState<AmbientConfig>(resolveInitialLandingAtmosphere)'),
+    'the seasonal atmosphere is resolved during initial state creation',
+  )
+  assert(
+    !portfolioSource.includes('landingAtmosphereStartedRef') &&
+      !portfolioSource.includes('setLandingAmbient'),
+    'the delayed options-reveal atmosphere ramp is absent',
+  )
+  assert(
+    sceneSource.includes('LANDING_GLYPH_GRADIENT.from') &&
+      sceneSource.includes('LANDING_GLYPH_GRADIENT.to'),
+    'SceneCanvas applies the approved fixed colors to landing source samples',
   )
 }
 
