@@ -1,3 +1,6 @@
+import { VisualSourceKind } from './visualSource'
+import { sampleTargetField } from './targetSampling'
+
 export type SvgTarget = {
   tx: number
   ty: number
@@ -16,8 +19,10 @@ export type SourceLayoutConfig = {
 }
 
 export type SvgTargetSourceOptions = {
-  /** Same-origin URL or path to a static SVG file. */
+  /** Same-origin URL or path to a static source image (SVG or raster). */
   url: string
+  /** Source format. Only used to make the load-failure message accurate. */
+  kind?: VisualSourceKind
   /** Destination bounds in CSS pixels. */
   bounds: { width: number; height: number }
   /** Pixel spacing between sample points. Smaller values produce denser targets. */
@@ -38,22 +43,47 @@ export type SvgTargetSourceOptions = {
 export type SvgTargetSourceResult = {
   ok: boolean
   targets: SvgTarget[]
+  /** Target X positions in CSS pixels (typed-array twin of `targets`). */
+  x: Float32Array
+  /** Target Y positions in CSS pixels. */
+  y: Float32Array
+  /** Packed source RGBA per target (engine/targetSampling), aligned with `targets`. */
+  colors: Uint32Array
+  /** Normalized X in [0, 1] across the sampled canvas, aligned with `targets`. */
+  normX: Float32Array
+  /** Normalized Y in [0, 1] across the sampled canvas, aligned with `targets`. */
+  normY: Float32Array
   error?: string
 }
 
+const EMPTY_FIELD = {
+  targets: [] as SvgTarget[],
+  x: new Float32Array(0),
+  y: new Float32Array(0),
+  colors: new Uint32Array(0),
+  normX: new Float32Array(0),
+  normY: new Float32Array(0),
+}
+
 /**
- * Rasterizes a static SVG into an offscreen canvas and samples visible pixels
- * to produce target points in CSS-pixel coordinates.
+ * Rasterizes a static source image (SVG or raster) into an offscreen canvas
+ * and samples visible pixels to produce target points in CSS-pixel coordinates.
  *
- * The SVG is drawn at its intrinsic aspect ratio, scaled to fit inside the
+ * The source is drawn at its intrinsic aspect ratio, scaled to fit inside the
  * destination bounds and centered. Sampling uses CSS-pixel coordinates so the
  * resulting targets align with the main canvas simulation space.
+ *
+ * This is the one-time rasterization: each kept pixel's source RGBA is packed
+ * alongside its normalized position (engine/targetSampling), so neither the
+ * color resolver nor the motion/paint systems ever read canvas pixels or parse
+ * colors per frame.
  */
 export async function loadSvgTargets(
   options: SvgTargetSourceOptions,
 ): Promise<SvgTargetSourceResult> {
   const {
     url,
+    kind = 'svg',
     bounds,
     samplingStep = 10,
     alphaThreshold = 64,
@@ -65,11 +95,11 @@ export async function loadSvgTargets(
   } = options
 
   if (!url || !url.trim()) {
-    return { ok: false, targets: [], error: 'SVG URL is empty' }
+    return { ok: false, ...EMPTY_FIELD, error: 'SVG URL is empty' }
   }
 
   if (bounds.width <= 0 || bounds.height <= 0) {
-    return { ok: false, targets: [], error: 'Invalid bounds dimensions' }
+    return { ok: false, ...EMPTY_FIELD, error: 'Invalid bounds dimensions' }
   }
 
   let image: HTMLImageElement
@@ -77,7 +107,7 @@ export async function loadSvgTargets(
     image = await loadImage(url)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    return { ok: false, targets: [], error: `Failed to load SVG: ${message}` }
+    return { ok: false, ...EMPTY_FIELD, error: `Failed to load ${kind === 'raster' ? 'image' : 'SVG'}: ${message}` }
   }
 
   const intrinsicWidth = image.naturalWidth || 1
@@ -106,7 +136,7 @@ export async function loadSvgTargets(
 
   const ctx = canvas.getContext('2d')
   if (!ctx) {
-    return { ok: false, targets: [], error: 'Could not create 2D context' }
+    return { ok: false, ...EMPTY_FIELD, error: 'Could not create 2D context' }
   }
 
   ctx.clearRect(0, 0, canvas.width, canvas.height)
@@ -117,25 +147,25 @@ export async function loadSvgTargets(
     imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    return { ok: false, targets: [], error: `Could not read pixel data: ${message}` }
+    return { ok: false, ...EMPTY_FIELD, error: `Could not read pixel data: ${message}` }
   }
 
-  const targets: SvgTarget[] = []
-  const step = Math.max(1, Math.round(samplingStep))
-  const data = imageData.data
-  const width = canvas.width
-  const height = canvas.height
+  const field = sampleTargetField(imageData, Math.max(1, Math.round(samplingStep)), alphaThreshold)
 
-  for (let y = 0; y < height; y += step) {
-    for (let x = 0; x < width; x += step) {
-      const alpha = data[(y * width + x) * 4 + 3]
-      if (alpha > alphaThreshold) {
-        targets.push({ tx: x, ty: y })
-      }
-    }
+  const targets: SvgTarget[] = new Array(field.x.length)
+  for (let i = 0; i < field.x.length; i += 1) {
+    targets[i] = { tx: field.x[i], ty: field.y[i] }
   }
 
-  return { ok: true, targets }
+  return {
+    ok: true,
+    targets,
+    x: field.x,
+    y: field.y,
+    colors: field.colors,
+    normX: field.normX,
+    normY: field.normY,
+  }
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {

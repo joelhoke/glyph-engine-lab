@@ -4,41 +4,127 @@ import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, use
 import { prepareWithSegments, layoutNextLine } from '@chenglou/pretext'
 import { createPointerListeners } from '../engine/Pointer'
 import {
-  Column,
   MeshBgs,
-  ObjBounds,
   ParagraphTarget,
   Particle,
-  Slot,
-  TextPreset,
   UnassignedGlyphBehavior,
 } from '../engine/types'
 import {
   DAMP,
-  FALL_SPEED_MAX,
-  FALL_SPEED_MIN,
-  HEAD_GLOW_BOOST,
   LOGO_PATHS,
   LOGO_TARGET_STEP,
   SPRING,
   TYPEWRITER_CPS,
   defaultSceneState,
 } from '../engine/constants'
-import { loadSvgTargets, SourceLayoutConfig, SvgTarget } from '../engine/svgTargetSource'
+import { loadSvgTargets, SourceLayoutConfig } from '../engine/svgTargetSource'
+import { resolveSourceFieldDecision } from '../engine/sourceOutcome'
+import { packSourceRgba, sampleTargetField } from '../engine/targetSampling'
+import {
+  AnimatedSourceProvider,
+  BLACK_HOLE_REDUCED_POSE_TIME,
+  createBlackHoleProvider,
+  resolveAnimatedStagingSize,
+  SceneSourceSelection,
+} from '../engine/animatedSource'
+import {
+  applyVerticalGlyphGradient,
+  resolveLandingGlyphGradient,
+} from '../engine/backgroundLuminance'
+import { LANDING_SOURCE_URL } from '../engine/sceneConfig'
+import { createSeededRandom, RandomSource } from '../engine/random'
+import {
+  isMobileViewport,
+  resolveGlyphBudget,
+  resolveRenderPixelRatio,
+  resolveSamplingStep,
+} from '../engine/displayBudget'
+import { assignGlyphsToTargets } from '../engine/glyphAssignment'
+import { applyRadialImpulse } from '../engine/impulse'
 import {
   APPROVED_PLAYGROUND_DEFAULTS,
   PlaygroundConfig,
 } from '../engine/playgroundConfig'
 import {
-  buildTargetSpatialData,
+  AMBIENT_DEFAULTS,
+  AmbientConfig,
+  clampAmbientConfig,
+} from '../engine/ambientConfig'
+import {
+  AmbientField,
+  AmbientCollisionGrid,
+  applyAmbientRadialImpulse,
+  createAmbientCollisionGrid,
+  createAmbientField,
+  rebuildAmbientCollisionGrid,
+  resolveAmbientCollisions,
+  resolveAmbientCount,
+  stepAmbientField,
+  WEATHER_PROFILES,
+} from '../engine/ambientField'
+import {
+  createQualityController,
+  EffectiveQualityBudget,
+  QualityController,
+  QualityTier,
+  resolveEffectiveQualityBudget,
+  subsampleStrided,
+} from '../engine/qualityTiers'
+import {
+  clampMotionConfig,
+  MOTION_DEFAULTS,
+  MotionConfig,
+  MotionQuality,
+  resolveMotionQuality,
+} from '../engine/motionConfig'
+import {
+  buildCreatureTopology,
+  buildMotionBaseField,
+  computeCreatureTargets,
+  computeOrganicTargets,
+  CreatureTopology,
+  MotionBaseField,
+  MotionWaveParams,
+} from '../engine/motion'
+import {
+  appendInterpolatedPoints,
+  buildTargetSpatialIndex,
+  clearPaintHistory,
+  countBackgroundStrokes,
+  createPaintHistory,
+  PAINT_BRUSH_DIAMETER_DEFAULT,
+  PAINT_BRUSH_DIAMETER_MAX,
+  PAINT_BRUSH_DIAMETER_MIN,
+  PAINT_MAX_POINTS,
+  PaintHistory,
+  PaintStatus,
+  PaintStroke,
+  PaintToolConfig,
+  popStroke,
+  pushStroke,
+  replayPaintHistory,
+  stampPoint,
+  TargetSpatialIndex,
+} from '../engine/paint'
+import {
+  buildTargetSpatialDataFromArrays,
   buildWordColorIndices,
   formatRgba,
   GlyphColorMode,
   parseHexColor,
+  resolveGlyphAlphaScale,
+  resolveGlyphColor,
   Rgb,
-  sampleImageGradient,
-  sampleRowBand,
 } from '../engine/colorDistribution'
+import {
+  createDefaultDiagnosticsSnapshot,
+  createFrameTimingAccumulator,
+  DIAGNOSTICS_PUSH_INTERVAL_MS,
+  GLYPH_INIT_SEED,
+  PointerKind,
+  SceneDiagnosticsSnapshot,
+} from '../engine/diagnostics'
+import { ExperienceMode } from '../engine/types'
 type SequenceDiagnostics = {
   phase: string
   elapsedMs: number
@@ -47,28 +133,46 @@ type SequenceDiagnostics = {
   documentHidden: boolean
 }
 
-type SceneDiagnostics = {
-  sourceStatus: string
-  targetCount: number
-  glyphCount: number
-  visibleCount: number
-  assignedCount: number
-  unassignedCount: number
-  hiddenCount: number
-  mode: string
-}
+type SceneDiagnostics = SceneDiagnosticsSnapshot
 
-type SceneMode = 'svg' | 'paragraph' | 'matrix' | 'weather'
+type SceneMode = 'svg' | 'paragraph'
 
 const QUOTE = "Voilà! In view, a humble vaudevillian veteran cast vicariously as both victim and villain by the vicissitudes of Fate... you may call me 'V'."
 const FULL_TEXT = Array(25).fill(QUOTE).join(' ')
 
+const RESIZE_DEBOUNCE_MS = 150
+
+/** Deterministic representative pose time (seconds) for reduced-motion users. */
+const MOTION_REDUCED_POSE_TIME = 0.8
+
+/** Fixed tick count advanced from initialization to reach the reduced-motion
+ *  static ambient pose (deterministic — same seed, same frame). */
+const AMBIENT_REDUCED_POSE_TICKS = 90
+
+/** Pointer repel strength on ambient agents scales the scene's weather repel
+ *  multiplier into the pool's velocity-impulse integration. */
+const AMBIENT_POINTER_REPEL_SCALE = 0.15
+
+/** EMA smoothing for the collision-pass cost diagnostic. */
+const AMBIENT_COLLISION_COST_SMOOTHING = 0.2
+
+/** Matrix trail fade per frame, mapped from trailStrength 0–100: short trails
+ *  fade fast, long trails persist. */
+const matrixTrailFade = (trailStrength: number) =>
+  lerp(0.35, 0.05, clamp(trailStrength, 0, 100) / 100)
+
+const DISABLED_PAINT_TOOL: PaintToolConfig = {
+  enabled: false,
+  tool: 'paint',
+  glyphColor: 'none',
+  backgroundColor: 'none',
+  brushDiameter: PAINT_BRUSH_DIAMETER_DEFAULT,
+}
+
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
-function buildMeshBg(colorA: string, colorB: string, base: string) {
-  const W = window.innerWidth
-  const H = window.innerHeight
+function buildMeshBg(colorA: string, colorB: string, base: string, W: number, H: number) {
   const cv = document.createElement('canvas')
   cv.width = W
   cv.height = H
@@ -100,10 +204,23 @@ type SceneCanvasProps = {
   mouseR?: number
   particleRepel?: number
   weatherRepelMult?: number
+  clickImpulseRadius?: number
+  clickImpulseForce?: number
   sourceLayout?: SourceLayoutConfig
-  uploadedSvgUrl?: string | null
+  /** What the field samples its targets from (built-in mark, static image,
+   *  or an animated provider). Defaults to the built-in mark. */
+  source?: SceneSourceSelection
   playgroundConfig?: PlaygroundConfig
-  onDiagnosticsUpdate?: (patch: Partial<SceneDiagnostics>) => void
+  /** Vibe-only paint tool state; undefined disables painting entirely. */
+  paintTool?: PaintToolConfig
+  onPaintStatusChange?: (status: PaintStatus) => void
+  experience?: ExperienceMode
+  sceneId?: string
+  onDiagnosticsUpdate?: (snapshot: SceneDiagnostics) => void
+  /** Dev tuning override for the adaptive quality tier; null/undefined = Auto. */
+  qualityTierOverride?: QualityTier | null
+  /** Fired when the adaptive controller actually changes tier (auto or override). */
+  onQualityTierChange?: (from: QualityTier, to: QualityTier) => void
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -116,6 +233,10 @@ function hexToRgba(hex: string, alpha: number): string {
 
 export type SceneCanvasHandle = {
   getCanvas: () => HTMLCanvasElement | null
+  undoPaint: () => void
+  redoPaint: () => void
+  clearPaint: () => void
+  getPaintStatus: () => PaintStatus
 }
 
 function SceneCanvasInternal(
@@ -126,10 +247,18 @@ function SceneCanvasInternal(
     mouseR = defaultSceneState.mouseR,
     particleRepel = 0.48,
     weatherRepelMult = 6,
+    clickImpulseRadius = 200,
+    clickImpulseForce = 10,
     sourceLayout,
-    uploadedSvgUrl,
+    source,
     playgroundConfig,
+    paintTool,
+    onPaintStatusChange,
+    experience = 'intro',
+    sceneId = 'intro',
     onDiagnosticsUpdate,
+    qualityTierOverride = null,
+    onQualityTierChange,
   }: SceneCanvasProps,
   ref: React.ForwardedRef<SceneCanvasHandle>,
 ) {
@@ -138,28 +267,83 @@ function SceneCanvasInternal(
 
   useImperativeHandle(ref, () => ({
     getCanvas: () => canvasRef.current,
+    undoPaint,
+    redoPaint,
+    clearPaint,
+    getPaintStatus,
   }))
   const meshBgsRef = useRef<MeshBgs | null>(null)
   const particlesRef = useRef<Particle[]>([])
   const paragraphTargetsRef = useRef<ParagraphTarget[]>([])
-  const matrixSlotsRef = useRef<Slot[]>([])
-  const columnsRef = useRef<Column[]>([])
   const sourceCharsRef = useRef<string[]>([])
   const logoTargetsRef = useRef<{ tx: number; ty: number }[]>([])
   const preparedTextRef = useRef<any>(null)
   const totalCharsRef = useRef(0)
   const typewriterStartRef = useRef<number>(0)
   const animationRef = useRef<number | null>(null)
+  // Re-arms a single frame when the render loop is stopped (reduced-motion
+  // static path, hidden tab). The loop effect below installs the real
+  // implementation; calling it while the loop runs is a no-op.
+  const renderOnceRef = useRef<() => void>(() => {})
   const mouseRRef = useRef(defaultSceneState.mouseR)
   const sceneModeRef = useRef<SceneMode>('svg')
-  const svgTargetsRef = useRef<SvgTarget[]>([])
+  // Immutable base target field (typed arrays from the one-time rasterization)
+  // plus the effective field the draw loop reads. Motion Off points the active
+  // arrays straight at the base; organic/creature modes point them at the
+  // reusable motion buffers.
+  const baseTargetsXRef = useRef<Float32Array>(new Float32Array(0))
+  const baseTargetsYRef = useRef<Float32Array>(new Float32Array(0))
+  const baseColorsRef = useRef<Uint32Array>(new Uint32Array(0))
+  const baseCountRef = useRef(0)
+  // Full-resolution source field, kept unsampled so quality-tier transitions
+  // can re-derive the tier-capped base field without reloading the source.
+  const fullFieldXRef = useRef<Float32Array>(new Float32Array(0))
+  const fullFieldYRef = useRef<Float32Array>(new Float32Array(0))
+  const fullFieldColorsRef = useRef<Uint32Array>(new Uint32Array(0))
+  const fullFieldNormXRef = useRef<Float32Array>(new Float32Array(0))
+  const fullFieldNormYRef = useRef<Float32Array>(new Float32Array(0))
+  const motionFieldRef = useRef<MotionBaseField>(buildMotionBaseField(
+    new Float32Array(0),
+    new Float32Array(0),
+    new Float32Array(0),
+    new Float32Array(0),
+  ))
+  const activeTargetsXRef = useRef<Float32Array>(new Float32Array(0))
+  const activeTargetsYRef = useRef<Float32Array>(new Float32Array(0))
+  const activeSourceColorsRef = useRef<Uint32Array>(new Uint32Array(0))
+  const activeCountRef = useRef(0)
+  const motionBuffersXRef = useRef<Float32Array>(new Float32Array(0))
+  const motionBuffersYRef = useRef<Float32Array>(new Float32Array(0))
+  const creatureTopologyRef = useRef<CreatureTopology | null>(null)
   const svgTargetMapRef = useRef<Int32Array>(new Int32Array(0))
   const sceneStartRef = useRef<number>(0)
   const reducedMotionRef = useRef(false)
   const unassignedBehaviorRef = useRef<UnassignedGlyphBehavior>('hidden')
   const tuningModeRef = useRef<boolean>(false)
-  const sourceLayoutRef = useRef<SourceLayoutConfig | undefined>(undefined)
+  // Stable prop mirrors: every source rebuild reads the latest selection and
+  // layout from these refs, so the mount-time ResizeObserver (and any
+  // in-flight async load) can never retain a stale initial-props closure.
+  const sourceLayoutRef = useRef<SourceLayoutConfig | undefined>(sourceLayout)
+  const sourceSelectionRef = useRef<SceneSourceSelection | undefined>(source)
   const rebuildSvgTimeoutRef = useRef<number | null>(null)
+  const resizeTimeoutRef = useRef<number | null>(null)
+  const svgLoadRequestRef = useRef(0)
+  // Animated source (Stage 3): the provider owns its offscreen canvas; the
+  // staging canvas is the only surface getImageData ever touches. The last
+  // sampled field survives provider errors; the JH fallback only appears
+  // when no valid frame exists at all.
+  const animatedProviderRef = useRef<AnimatedSourceProvider | null>(null)
+  const animatedProviderCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const animatedStagingRef = useRef<HTMLCanvasElement | null>(null)
+  const animatedTimeRef = useRef(0)
+  const animatedLastNowRef = useRef(0)
+  const animatedLastSampleRef = useRef(0)
+  const animatedHasValidFieldRef = useRef(false)
+  const viewportSizeRef = useRef({ width: 0, height: 0 })
+  // Capped render pixel ratio (see engine/displayBudget); refreshed on resize
+  // and read by the draw functions instead of the raw global.
+  const pixelRatioRef = useRef(1)
+  const glyphRandomRef = useRef<RandomSource>(createSeededRandom(GLYPH_INIT_SEED))
   const prevTargetCountRef = useRef<number>(0)
   const playgroundConfigRef = useRef<PlaygroundConfig>(
     playgroundConfig ?? APPROVED_PLAYGROUND_DEFAULTS,
@@ -171,33 +355,109 @@ function SceneCanvasInternal(
   const wordColorRef = useRef<number[]>([])
   const targetGradientRef = useRef<Float32Array>(new Float32Array(0))
   const targetRowRef = useRef<Float32Array>(new Float32Array(0))
-  const [diagnostics, setDiagnostics] = useState<SceneDiagnostics>({
-    sourceStatus: 'idle',
-    targetCount: 0,
-    glyphCount: 0,
-    visibleCount: 0,
-    assignedCount: 0,
-    unassignedCount: 0,
-    hiddenCount: 0,
-    mode: 'svg',
-  })
+  // Motion system: clamped config mirror, device-aware quality, procedural
+  // clock (frozen while painting), and rate-limited compute bookkeeping.
+  const motionConfigRef = useRef<MotionConfig>(
+    clampMotionConfig(playgroundConfig?.motion ?? MOTION_DEFAULTS),
+  )
+  const motionQualityRef = useRef<MotionQuality>({ effectiveDensity: 0, effectiveUpdateRate: 0 })
+  const motionTimeRef = useRef(0)
+  const motionLastNowRef = useRef(0)
+  const lastMotionComputeRef = useRef(0)
+  const motionDirtyRef = useRef(true)
+  // Ambient layer (Stage 2): a separate typed-array agent pool for the
+  // weather/matrix overlay, created/destroyed when ambient.mode changes. The
+  // offscreen canvas gives matrix its trail fade without dimming the scene;
+  // the collision grid and main-glyph impulse buffers are rebuilt per tick.
+  const ambientConfigRef = useRef<AmbientConfig>(
+    clampAmbientConfig(playgroundConfig?.ambient ?? AMBIENT_DEFAULTS),
+  )
+  const ambientFieldRef = useRef<AmbientField | null>(null)
+  const ambientRandomRef = useRef<RandomSource>(createSeededRandom(GLYPH_INIT_SEED ^ 0x51f15e))
+  const ambientGridRef = useRef<AmbientCollisionGrid | null>(null)
+  const ambientMainXRef = useRef<Float32Array>(new Float32Array(0))
+  const ambientMainYRef = useRef<Float32Array>(new Float32Array(0))
+  const ambientMainImpulseXRef = useRef<Float32Array>(new Float32Array(0))
+  const ambientMainImpulseYRef = useRef<Float32Array>(new Float32Array(0))
+  const ambientCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const ambientLastTickRef = useRef(0)
+  const ambientTickAccumRef = useRef(0)
+  const ambientCollisionMsRef = useRef(0)
+  const ambientStaticPoseDirtyRef = useRef(true)
+  const matrixFontCacheRef = useRef<Map<number, string>>(new Map())
+  // Pointer velocity (px/s) for the ambient drag force: smoothed per-frame
+  // deltas of the repel pointer.
+  const pointerVelocityRef = useRef({ vx: 0, vy: 0, lastX: -9999, lastY: -9999, lastNow: 0 })
+  // Adaptive quality (Stage 2): the hysteresis controller and the effective
+  // budgets it currently imposes. Created lazily on mount so the mobile start
+  // tier and warm-up clock anchor to the real viewport and timestamp.
+  const qualityControllerRef = useRef<QualityController | null>(null)
+  const qualityBudgetRef = useRef<EffectiveQualityBudget>(
+    resolveEffectiveQualityBudget(0, 0),
+  )
+  const qualityTierOverrideRef = useRef<QualityTier | null>(qualityTierOverride)
+  const onQualityTierChangeRef = useRef(onQualityTierChange)
+  const qualityResizePendingRef = useRef(false)
+  const qualityRebuildPendingRef = useRef(false)
+  // Paint overlay: per-target packed-RGBA overrides (0 = unpainted), bounded
+  // normalized stroke history, redo stack, and the gesture in progress.
+  const paintedColorsRef = useRef<Uint32Array>(new Uint32Array(0))
+  const paintedCountRef = useRef(0)
+  const paintHistoryRef = useRef<PaintHistory>(createPaintHistory())
+  const redoStrokesRef = useRef<PaintStroke[]>([])
+  const spatialIndexRef = useRef<TargetSpatialIndex | null>(null)
+  const paintToolRef = useRef<PaintToolConfig>(paintTool ?? DISABLED_PAINT_TOOL)
+  const onPaintStatusChangeRef = useRef(onPaintStatusChange)
+  const activeStrokeRef = useRef<{
+    pointerId: number
+    tool: 'paint' | 'erase'
+    glyphColor: number | null
+    backgroundColor: number | null
+    radiusNorm: number
+    points: number[]
+    lastX: number
+    lastY: number
+    stepPx: number
+  } | null>(null)
+  const pendingPaintPointsRef = useRef<number[]>([])
+  const strokeSegmentRef = useRef<number[]>([])
+  // Background paint channel: an offscreen layer composited between the bg
+  // gradient and the glyphs. Soft-brush sprites are cached by color+size;
+  // the layer is re-rendered from stroke history on replay/resize.
+  const bgPaintCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const bgPaintCtxRef = useRef<CanvasRenderingContext2D | null>(null)
+  const bgBrushCacheRef = useRef<Map<string, HTMLCanvasElement>>(new Map())
+  // Photoshop-style brush ring: a DOM overlay (not drawn to canvas, so PNG
+  // exports stay clean) positioned imperatively from the pointer handlers.
+  const brushRingRef = useRef<HTMLDivElement | null>(null)
+  const [diagnostics, setDiagnostics] = useState<SceneDiagnostics>(() =>
+    createDefaultDiagnosticsSnapshot(),
+  )
+  // Mutable mirror of the diagnostics state: the frame loop reads/writes it
+  // without React state updates and hands a copy to React at a throttled rate.
+  const diagnosticsRef = useRef<SceneDiagnostics>(createDefaultDiagnosticsSnapshot())
+  const frameTimingRef = useRef(createFrameTimingAccumulator())
+  const lastDiagnosticsPushRef = useRef(0)
+  const visibleCountRef = useRef(0)
+  const hiddenCountRef = useRef(0)
+  const experienceRef = useRef<ExperienceMode>(experience)
+  const sceneIdRef = useRef(sceneId)
+  const onDiagnosticsUpdateRef = useRef(onDiagnosticsUpdate)
+
+  // Event-driven diagnostic updates (source loads, mode switches, rebuilds)
+  // are rare, so they patch both the mirror and React state directly.
+  const patchDiagnostics = (patch: Partial<SceneDiagnostics>) => {
+    Object.assign(diagnosticsRef.current, patch)
+    setDiagnostics((prev) => ({ ...prev, ...patch }))
+  }
 
   const particleRepelRef = useRef(particleRepel)
   const weatherRepelRef = useRef(weatherRepelMult)
+  const clickImpulseRadiusRef = useRef(clickImpulseRadius)
+  const clickImpulseForceRef = useRef(clickImpulseForce)
 
-  const [matrixEnabled, setMatrixEnabled] = useState(false)
-  const [weatherEnabled, setWeatherEnabled] = useState(true)
-  const [weatherPreset, setWeatherPreset] = useState<TextPreset>('rain')
-  const [liveWeatherActive, setLiveWeatherActive] = useState(false)
   const [fontSize, setFontSize] = useState(defaultSceneState.fontSize)
   const [textAmount, setTextAmount] = useState(defaultSceneState.textAmount)
-  const [matrixSpread, setMatrixSpread] = useState(defaultSceneState.matrixSpread)
-  const [matrixSpeed, setMatrixSpeed] = useState(defaultSceneState.matrixSpeed)
-  const [matrixVolume, setMatrixVolume] = useState(defaultSceneState.matrixVolume)
-  const [weatherWind, setWeatherWind] = useState(defaultSceneState.weatherWind)
-  const [weatherIntensity, setWeatherIntensity] = useState(defaultSceneState.weatherIntensity)
-  const [weatherTurbulence, setWeatherTurbulence] = useState(defaultSceneState.weatherTurbulence)
-  const [weatherBlur, setWeatherBlur] = useState(defaultSceneState.weatherBlur)
 
   const glyphScale = playgroundConfig?.glyphScale ?? APPROVED_PLAYGROUND_DEFAULTS.glyphScale
 
@@ -210,20 +470,16 @@ function SceneCanvasInternal(
   const fontRef = useRef(font)
   const lineHeightRef = useRef(lineHeight)
   const glyphScaleRef = useRef(glyphScale)
-  const matrixEnabledRef = useRef(matrixEnabled)
-  const weatherEnabledRef = useRef(weatherEnabled)
-  const matrixSpeedRef = useRef(matrixSpeed)
-  const matrixVolumeRef = useRef(matrixVolume)
-  const weatherPresetRef = useRef(weatherPreset)
-  const weatherWindRef = useRef(weatherWind)
-  const weatherIntensityRef = useRef(weatherIntensity)
-  const weatherTurbulenceRef = useRef(weatherTurbulence)
-  const weatherBlurRef = useRef(weatherBlur)
 
   useEffect(() => {
     const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
     const updateReducedMotion = () => {
       reducedMotionRef.current = reducedMotionQuery.matches
+      // Animated sources re-sample their single deterministic pose frame.
+      scheduleSvgTargetRebuild()
+      // Turning reduced motion on renders one last settled frame before the
+      // loop stops; turning it off restarts the continuous loop.
+      renderOnceRef.current()
     }
 
     updateReducedMotion()
@@ -234,19 +490,58 @@ function SceneCanvasInternal(
   useEffect(() => { fontRef.current = font }, [font])
   useEffect(() => { lineHeightRef.current = lineHeight }, [lineHeight])
   useEffect(() => { glyphScaleRef.current = glyphScale }, [glyphScale])
-  useEffect(() => { matrixEnabledRef.current = matrixEnabled }, [matrixEnabled])
-  useEffect(() => { weatherEnabledRef.current = weatherEnabled }, [weatherEnabled])
-  useEffect(() => { weatherPresetRef.current = weatherPreset }, [weatherPreset])
-  useEffect(() => { matrixSpeedRef.current = matrixSpeed }, [matrixSpeed])
-  useEffect(() => { matrixVolumeRef.current = matrixVolume }, [matrixVolume])
-  useEffect(() => { weatherWindRef.current = weatherWind }, [weatherWind])
-  useEffect(() => { weatherIntensityRef.current = weatherIntensity }, [weatherIntensity])
-  useEffect(() => { weatherTurbulenceRef.current = weatherTurbulence }, [weatherTurbulence])
-  useEffect(() => { weatherBlurRef.current = weatherBlur }, [weatherBlur])
+  useEffect(() => { qualityTierOverrideRef.current = qualityTierOverride }, [qualityTierOverride])
+  useEffect(() => { onQualityTierChangeRef.current = onQualityTierChange }, [onQualityTierChange])
+  // Debug tier override (dev tuning UI): force a tier or return to Auto.
+  useEffect(() => {
+    const controller = qualityControllerRef.current
+    if (!controller) return
+    const transition = controller.setOverride(qualityTierOverride ?? null, performance.now())
+    if (transition) applyQualityTier()
+    patchAmbientDiagnostics()
+  }, [qualityTierOverride])
   useEffect(() => { mouseRRef.current = mouseR }, [mouseR])
   useEffect(() => { particleRepelRef.current = particleRepel }, [particleRepel])
   useEffect(() => { weatherRepelRef.current = weatherRepelMult }, [weatherRepelMult])
+  useEffect(() => { clickImpulseRadiusRef.current = clickImpulseRadius }, [clickImpulseRadius])
+  useEffect(() => { clickImpulseForceRef.current = clickImpulseForce }, [clickImpulseForce])
   useEffect(() => { tuningModeRef.current = tuningMode ?? false }, [tuningMode])
+  useEffect(() => { experienceRef.current = experience }, [experience])
+  useEffect(() => { sceneIdRef.current = sceneId }, [sceneId])
+  useEffect(() => { onDiagnosticsUpdateRef.current = onDiagnosticsUpdate }, [onDiagnosticsUpdate])
+  useEffect(() => { onPaintStatusChangeRef.current = onPaintStatusChange }, [onPaintStatusChange])
+  useEffect(() => {
+    paintToolRef.current = paintTool ?? DISABLED_PAINT_TOOL
+    // Toggling paint mode off mid-gesture settles the stroke gracefully.
+    if (!paintToolRef.current.enabled && activeStrokeRef.current) {
+      endPaintStroke()
+    }
+    // Keep the brush ring in sync with the tool: diameter and erase style.
+    const ring = brushRingRef.current
+    if (ring) {
+      const tool = paintToolRef.current
+      const diameter = clamp(
+        tool.brushDiameter,
+        PAINT_BRUSH_DIAMETER_MIN,
+        PAINT_BRUSH_DIAMETER_MAX,
+      )
+      ring.style.width = `${diameter}px`
+      ring.style.height = `${diameter}px`
+      ring.classList.toggle('paint-brush-ring-erase', tool.tool === 'erase')
+      if (!tool.enabled) ring.style.opacity = '0'
+    }
+  }, [paintTool])
+
+  // Move/show the brush ring at a canvas-space point (touch gets the same
+  // finger-offset the repel pointer uses). DOM-only — no React state.
+  const updateBrushRing = (x: number, y: number, visible: boolean) => {
+    const ring = brushRingRef.current
+    if (!ring) return
+    ring.style.opacity = visible ? '1' : '0'
+    if (visible) {
+      ring.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`
+    }
+  }
   const updateColorMetadata = (config: PlaygroundConfig) => {
     const palette =
       config.glyphPalette.length > 0 ? config.glyphPalette : APPROVED_PLAYGROUND_DEFAULTS.glyphPalette
@@ -269,11 +564,61 @@ function SceneCanvasInternal(
         : APPROVED_PLAYGROUND_DEFAULTS.glyphText,
     )
     updateColorMetadata(playgroundConfigRef.current)
+
+    // Motion configuration: clamp the requested values, resolve device-aware
+    // quality, and only rebuild the target field for structural changes
+    // (mode/variant/effective density). Ordinary parameter changes just mark
+    // the next compute dirty, so paint and the population are preserved.
+    const nextMotion = clampMotionConfig(
+      playgroundConfigRef.current.motion ?? MOTION_DEFAULTS,
+    )
+    const prevMotion = motionConfigRef.current
+    const prevQuality = motionQualityRef.current
+    motionConfigRef.current = nextMotion
+    motionQualityRef.current = resolveEffectiveMotionQuality(nextMotion)
+    patchMotionDiagnostics()
+    const structuralChange =
+      prevMotion.mode !== nextMotion.mode ||
+      (nextMotion.mode === 'parametric-creature' &&
+        (prevMotion.variant !== nextMotion.variant ||
+          prevQuality.effectiveDensity !== motionQualityRef.current.effectiveDensity ||
+          // Custom-lab structural knobs (form/symmetry) rebuild the topology;
+          // travel/pulse/waves are compute-time and stay non-destructive.
+          (nextMotion.variant === 'custom' &&
+            (prevMotion.custom.form !== nextMotion.custom.form ||
+              prevMotion.custom.symmetry !== nextMotion.custom.symmetry))))
+    if (structuralChange) {
+      applyMotionField()
+    } else if (nextMotion.mode !== 'off') {
+      motionDirtyRef.current = true
+      renderOnceRef.current()
+    }
+
+    // Ambient configuration: clamp, then rebuild the agent pool only for
+    // structural changes (mode, weather preset, matrix spread) — every other
+    // knob is read per physics tick, so the pool and its agents survive.
+    const nextAmbient = clampAmbientConfig(
+      playgroundConfigRef.current.ambient ?? AMBIENT_DEFAULTS,
+    )
+    const prevAmbient = ambientConfigRef.current
+    ambientConfigRef.current = nextAmbient
+    if (
+      prevAmbient.mode !== nextAmbient.mode ||
+      prevAmbient.weather.preset !== nextAmbient.weather.preset ||
+      prevAmbient.matrix.spread !== nextAmbient.matrix.spread
+    ) {
+      rebuildAmbientField()
+    } else {
+      // Non-structural knob edits still refresh the reduced-motion pose.
+      ambientStaticPoseDirtyRef.current = true
+      renderOnceRef.current()
+    }
+    patchAmbientDiagnostics()
   }, [playgroundConfig])
   useEffect(() => {
     if (onDiagnosticsUpdate && diagnostics.targetCount !== prevTargetCountRef.current) {
       prevTargetCountRef.current = diagnostics.targetCount
-      onDiagnosticsUpdate({ targetCount: diagnostics.targetCount })
+      onDiagnosticsUpdate({ ...diagnosticsRef.current })
     }
   }, [diagnostics.targetCount, onDiagnosticsUpdate])
   useEffect(() => {
@@ -282,8 +627,9 @@ function SceneCanvasInternal(
   }, [sourceLayout])
 
   useEffect(() => {
+    sourceSelectionRef.current = source
     scheduleSvgTargetRebuild()
-  }, [uploadedSvgUrl])
+  }, [source])
 
   const scheduleSvgTargetRebuild = () => {
     if (rebuildSvgTimeoutRef.current !== null) {
@@ -313,19 +659,37 @@ function SceneCanvasInternal(
     return FULL_TEXT.substring(0, len)
   }
 
+  // The observed canvas-container size is the source of truth; the window
+  // dimensions are only a fallback until the ResizeObserver has reported.
+  const getViewportSize = () => {
+    const observed = viewportSizeRef.current
+    if (observed.width > 0 && observed.height > 0) return observed
+    return { width: window.innerWidth, height: window.innerHeight }
+  }
+
   const ensureParticleCount = (count: number) => {
     const particles = particlesRef.current
     const fallback = paragraphTargetsRef.current[0]
-    while (particles.length < count) {
+    const random = glyphRandomRef.current
+    const viewport = getViewportSize()
+    // Mobile budget: cap the live population on small viewports (unassigned
+    // targets simply stay dark, per the existing assignment behavior). The
+    // adaptive quality tier composes its own glyph cap through min().
+    const tierCap = qualityBudgetRef.current.glyphCap
+    const budgeted = Math.min(
+      resolveGlyphBudget(count, viewport.width),
+      tierCap > 0 ? tierCap : Number.MAX_SAFE_INTEGER,
+    )
+    while (particles.length < budgeted) {
       const i = particles.length
-      const tx = fallback ? fallback.tx : window.innerWidth * 0.5
-      const ty = fallback ? fallback.ty : window.innerHeight * 0.5
+      const tx = fallback ? fallback.tx : viewport.width * 0.5
+      const ty = fallback ? fallback.ty : viewport.height * 0.5
       particles.push({
         char: sourceCharsRef.current[i % Math.max(1, sourceCharsRef.current.length)] || ' ',
         tx,
         ty,
-        x: tx + (Math.random() - 0.5) * 20,
-        y: ty + (Math.random() - 0.5) * 20,
+        x: tx + (random() - 0.5) * 20,
+        y: ty + (random() - 0.5) * 20,
         vx: 0,
         vy: 0,
         hue: 120,
@@ -333,7 +697,7 @@ function SceneCanvasInternal(
         head: false,
       })
     }
-    if (particles.length > count) particles.length = count
+    if (particles.length > budgeted) particles.length = budgeted
   }
 
   const buildParagraphTargets = () => {
@@ -344,7 +708,7 @@ function SceneCanvasInternal(
     preparedTextRef.current = prepareWithSegments(text, fontRef.current)
     paragraphTargetsRef.current = []
     ctx.font = fontRef.current
-    const W = window.innerWidth
+    const W = getViewportSize().width
     const baseWidth = W * 0.78
     const marginLeft = W * 0.11
     const startY = 40
@@ -375,89 +739,92 @@ function SceneCanvasInternal(
     }
   }
 
-  const buildMatrixStructure = () => {
-    const ctx = ctxRef.current
-    if (!ctx) return
-    const sourceChars = sourceCharsRef.current
-    if (sourceChars.length === 0) return
-    const W = window.innerWidth
-    const H = window.innerHeight
-    ctx.font = fontRef.current
-    const glyphW = Math.max(1, ctx.measureText('M').width)
-    const spreadFactor = matrixSpread / 100
-    const colStep = Math.max(glyphW * 1.05 * spreadFactor, glyphW * 0.7)
-    const columnCount = Math.max(6, Math.floor((W * 0.9) / colStep))
-    const startX = (W - (columnCount - 1) * colStep) / 2
-    const rowsPerColumn = Math.max(14, Math.ceil(H / lineHeightRef.current) + 8)
-    columnsRef.current = []
-    matrixSlotsRef.current = []
-    for (let c = 0; c < columnCount; c += 1) {
-      columnsRef.current.push({
-        x: startX + c * colStep,
-        speed: FALL_SPEED_MIN + Math.random() * (FALL_SPEED_MAX - FALL_SPEED_MIN),
-        phase: Math.random() * rowsPerColumn,
-        sway: (Math.random() - 0.5) * 0.12,
-        headRow: 0,
-        rowsPerColumn,
-      })
+  // --- Ambient layer (weather/matrix overlay) --------------------------------
+
+  // Create/destroy the typed-array ambient pool. Runs on mode/preset/spread
+  // changes, tier-capacity changes, and resize; parameter knobs (intensity,
+  // wind, speed, volume, …) are read per tick instead, so they never rebuild.
+  const rebuildAmbientField = () => {
+    const config = ambientConfigRef.current
+    ambientStaticPoseDirtyRef.current = true
+    ambientTickAccumRef.current = 0
+    ambientLastTickRef.current = 0
+    if (config.mode === 'off') {
+      ambientFieldRef.current = null
+      ambientGridRef.current = null
+      ambientCanvasRef.current = null
+      ambientCollisionMsRef.current = 0
+      renderOnceRef.current()
+      return
     }
-    for (let c = 0; c < columnCount; c += 1) {
-      for (let r = 0; r < rowsPerColumn; r += 1) {
-        matrixSlotsRef.current.push({ stream: c, row: r })
-      }
-    }
-    const desired = Math.max(paragraphTargetsRef.current.length, matrixSlotsRef.current.length, logoTargetsRef.current.length)
-    ensureParticleCount(desired)
+    const { width, height } = getViewportSize()
+    const budget = qualityBudgetRef.current
+    const field = createAmbientField(
+      config.mode,
+      budget.ambientCap,
+      width,
+      height,
+      config,
+      ambientRandomRef.current,
+    )
+    ambientFieldRef.current = field
+    ambientGridRef.current = createAmbientCollisionGrid(
+      width,
+      height,
+      field.capacity + particlesRef.current.length,
+    )
+    renderOnceRef.current()
   }
 
-  const buildWeatherParticles = () => {
-    const W = window.innerWidth
-    const H = window.innerHeight
-    const sourceChars = sourceCharsRef.current
-    const intFactor = weatherIntensity / 100
-    const windMul = weatherWind / 50
-    const turbMul = weatherTurbulence / 60
-    const preset = weatherPreset
-    const desired = Math.max(paragraphTargetsRef.current.length, matrixSlotsRef.current.length, logoTargetsRef.current.length)
-    ensureParticleCount(desired)
-    const count = preset === 'rain' ? Math.floor(120 * turbMul * intFactor) : Math.floor(120 * intFactor)
-    const particles = particlesRef.current
-    for (let i = 0; i < count; i += 1) {
-      const p = particles[i]
-      p.char = sourceChars[Math.floor(Math.random() * sourceChars.length)] || (preset === 'rain' ? '|' : '.')
-      p.alpha = preset === 'rain' ? 0.2 + Math.random() * 0.55 : 0.15 + Math.random() * 0.3
-      p.hue = preset === 'rain' ? 200 : 180
-      p.speed = preset === 'rain' ? 1.5 + Math.random() * 2.5 * intFactor : 0.1 + Math.random() * 0.3
-      p.drift = preset === 'rain' ? (Math.random() - 0.45) * 0.4 : 0
-      p.phase = Math.random() * Math.PI * 2
-      p.homeX = Math.random() * W
-      p.homeY = Math.random() * H
-      p.tx = p.x
-      p.ty = p.y
-      p.row = 0
-      p.head = false
-    }
+  const patchAmbientDiagnostics = () => {
+    const field = ambientFieldRef.current
+    const controller = qualityControllerRef.current
+    const budget = qualityBudgetRef.current
+    patchDiagnostics({
+      ambientMode: ambientConfigRef.current.mode,
+      ambientAgentCount: field ? field.count : 0,
+      ambientCollisionMs: ambientCollisionMsRef.current,
+      qualityTier: budget.tier,
+      qualityTierOverride: controller ? controller.isOverrideActive() : false,
+      qualityLastTransition: controller ? controller.getLastTransitionReason() : 'initial',
+      qualityGlyphCap: budget.glyphCap,
+      qualityCreatureCap: budget.creatureCap,
+      qualityCreatureRate: budget.creatureRate,
+      qualityAmbientCap: budget.ambientCap,
+      qualityAmbientTickHz: budget.ambientTickHz,
+    })
   }
 
   const buildAllMeshBgs = () => {
+    const { width: W, height: H } = getViewportSize()
     meshBgsRef.current = {
-      clear: buildMeshBg('#DDEBEE', '#F2E6D8', '#EAE2DC'),
-      rain: buildMeshBg('#012840', '#364F59', '#1A3A4A'),
-      storm: buildMeshBg('#070926', '#281259', '#170E40'),
-      wind: buildMeshBg('#6D808C', '#BDAC89', '#94968C'),
-      fog: buildMeshBg('#6E6E6E', '#222222', '#454545'),
-      snow: buildMeshBg('#0D0D0D', '#1C2B3E', '#141C2A'),
+      clear: buildMeshBg('#DDEBEE', '#F2E6D8', '#EAE2DC', W, H),
+      rain: buildMeshBg('#012840', '#364F59', '#1A3A4A', W, H),
+      storm: buildMeshBg('#070926', '#281259', '#170E40', W, H),
+      wind: buildMeshBg('#6D808C', '#BDAC89', '#94968C', W, H),
+      fog: buildMeshBg('#6E6E6E', '#222222', '#454545', W, H),
+      snow: buildMeshBg('#0D0D0D', '#1C2B3E', '#141C2A', W, H),
     }
   }
 
+  // Rasterizes the bundled logo paths into a point field. Doubles as the
+  // fallback target field when the configured SVG source is unusable; only a
+  // genuine load failure may switch the scene to this JH fallback.
   const buildLogoTargets = () => {
-    const W = window.innerWidth
-    const H = window.innerHeight
+    const { width: W, height: H } = getViewportSize()
     const cv = document.createElement('canvas')
     cv.width = W
     cv.height = H
     const ctx = cv.getContext('2d')
-    if (!ctx) return
+    if (!ctx) {
+      return {
+        x: new Float32Array([W * 0.5]),
+        y: new Float32Array([H * 0.5]),
+        colors: new Uint32Array([packSourceRgba(255, 255, 255, 255)]),
+        normX: new Float32Array([0.5]),
+        normY: new Float32Array([0.5]),
+      }
+    }
     ctx.clearRect(0, 0, W, H)
     ctx.save()
     const scale = Math.min(W, H) / 320
@@ -469,40 +836,631 @@ function SceneCanvasInternal(
     ctx.restore()
 
     const imageData = ctx.getImageData(0, 0, W, H)
-    const targets: { tx: number; ty: number }[] = []
-    for (let y = 0; y < H; y += LOGO_TARGET_STEP) {
-      for (let x = 0; x < W; x += LOGO_TARGET_STEP) {
-        const alpha = imageData.data[(y * W + x) * 4 + 3]
-        if (alpha > 64) targets.push({ tx: x, ty: y })
+    const field = sampleTargetField(imageData, resolveSamplingStep(LOGO_TARGET_STEP, W), 64)
+    if (field.x.length === 0) {
+      return {
+        x: new Float32Array([W * 0.5]),
+        y: new Float32Array([H * 0.5]),
+        colors: new Uint32Array([packSourceRgba(255, 255, 255, 255)]),
+        normX: new Float32Array([0.5]),
+        normY: new Float32Array([0.5]),
       }
     }
-    if (targets.length === 0) {
-      targets.push({ tx: W * 0.5, ty: H * 0.5 })
+    // Keep the legacy object-array ref warm for matrix/weather sizing.
+    const targets: { tx: number; ty: number }[] = new Array(field.x.length)
+    for (let i = 0; i < field.x.length; i += 1) {
+      targets[i] = { tx: field.x[i], ty: field.y[i] }
     }
     logoTargetsRef.current = targets
+    return field
+  }
+
+  // Update target metadata from a freshly sampled source field. The full
+  // field is kept unsampled so tier transitions can re-derive the capped
+  // field; the required order then runs through applyTierSubsample →
+  // applyMotionField (population ensured against the new count, assignment
+  // rebuilt, paint replayed).
+  const setBaseField = (
+    x: Float32Array,
+    y: Float32Array,
+    colors: Uint32Array,
+    normX: Float32Array,
+    normY: Float32Array,
+  ) => {
+    fullFieldXRef.current = x
+    fullFieldYRef.current = y
+    fullFieldColorsRef.current = colors
+    fullFieldNormXRef.current = normX
+    fullFieldNormYRef.current = normY
+    applyTierSubsample()
+  }
+
+  // Derive the tier-capped base field from the full source field via
+  // deterministic stride subsampling (engine/qualityTiers). The previous
+  // field stays live until the new arrays are fully assembled — the canvas
+  // is never blanked mid-transition.
+  const applyTierSubsample = () => {
+    const full = fullFieldXRef.current
+    const cap = qualityBudgetRef.current.glyphCap
+    const indices = cap > 0 ? subsampleStrided(full.length, cap) : null
+    const count = indices ? indices.length : full.length
+    let x: Float32Array
+    let y: Float32Array
+    let colors: Uint32Array
+    let normX: Float32Array
+    let normY: Float32Array
+    if (!indices || count === full.length) {
+      x = fullFieldXRef.current
+      y = fullFieldYRef.current
+      colors = fullFieldColorsRef.current
+      normX = fullFieldNormXRef.current
+      normY = fullFieldNormYRef.current
+    } else {
+      x = new Float32Array(count)
+      y = new Float32Array(count)
+      colors = new Uint32Array(count)
+      normX = new Float32Array(count)
+      normY = new Float32Array(count)
+      for (let i = 0; i < count; i += 1) {
+        const j = indices[i]
+        x[i] = fullFieldXRef.current[j]
+        y[i] = fullFieldYRef.current[j]
+        colors[i] = fullFieldColorsRef.current[j]
+        normX[i] = fullFieldNormXRef.current[j]
+        normY[i] = fullFieldNormYRef.current[j]
+      }
+    }
+    baseTargetsXRef.current = x
+    baseTargetsYRef.current = y
+    baseColorsRef.current = colors
+    baseCountRef.current = x.length
+    motionFieldRef.current = buildMotionBaseField(x, y, normX, normY)
+    const { gradientT, rowT } = buildTargetSpatialDataFromArrays(x, y)
+    targetGradientRef.current = gradientT
+    targetRowRef.current = rowT
+  }
+
+  const ensureMotionBuffers = (size: number) => {
+    if (motionBuffersXRef.current.length < size) {
+      motionBuffersXRef.current = new Float32Array(size)
+      motionBuffersYRef.current = new Float32Array(size)
+    }
+  }
+
+  // Device-aware motion quality composed with the active quality tier through
+  // min(): the tier caps creature density and compute rate on top of the
+  // existing desktop/mobile ceilings (engine/qualityTiers).
+  const resolveEffectiveMotionQuality = (config: MotionConfig): MotionQuality => {
+    const quality = resolveMotionQuality(config, getViewportSize().width)
+    const budget = qualityBudgetRef.current
+    return {
+      effectiveDensity: Math.min(quality.effectiveDensity, budget.creatureCap),
+      effectiveUpdateRate: Math.min(quality.effectiveUpdateRate, budget.creatureRate),
+    }
+  }
+
+  // Parametric creature: replace target positions with a generated creature of
+  // the effective density while retaining the glyph population and inheriting
+  // source colors proportionally from the base field.
+  const rebuildCreatureField = () => {
+    const config = motionConfigRef.current
+    const quality = resolveEffectiveMotionQuality(config)
+    motionQualityRef.current = quality
+    const needed = quality.effectiveDensity
+    if (
+      !creatureTopologyRef.current ||
+      creatureTopologyRef.current.count !== needed ||
+      creatureTopologyRef.current.variant !== config.variant ||
+      (config.variant === 'custom' &&
+        (creatureTopologyRef.current.customForm !== config.custom.form ||
+          creatureTopologyRef.current.customSymmetry !== config.custom.symmetry))
+    ) {
+      creatureTopologyRef.current = buildCreatureTopology(needed, config.variant, config.custom)
+    }
+    const base = baseColorsRef.current
+    const colors = new Uint32Array(needed)
+    if (base.length > 0 && needed > 0) {
+      for (let i = 0; i < needed; i += 1) {
+        colors[i] = base[Math.min(base.length - 1, Math.floor((i * base.length) / needed))]
+      }
+    }
+    activeSourceColorsRef.current = colors
+    ensureMotionBuffers(needed)
+    // Seed the buffers with the base centroid so the first frame before the
+    // next compute is finite even when the base field is empty.
+    motionBuffersXRef.current.fill(viewportCenter().x, 0, needed)
+    motionBuffersYRef.current.fill(viewportCenter().y, 0, needed)
+    activeTargetsXRef.current = motionBuffersXRef.current
+    activeTargetsYRef.current = motionBuffersYRef.current
+    activeCountRef.current = needed
+    motionDirtyRef.current = true
+  }
+
+  const viewportCenter = () => {
+    const { width, height } = getViewportSize()
+    return { x: width * 0.5, y: height * 0.5 }
+  }
+
+  // Point the draw loop at the right target arrays for the active motion
+  // mode, ensure the particle population against the effective target count,
+  // rebuild assignment, then replay the paint overlay over the fresh field.
+  const applyMotionField = () => {
+    const mode = motionConfigRef.current.mode
+    if (mode === 'parametric-creature') {
+      rebuildCreatureField()
+    } else if (mode === 'organic-flow') {
+      const count = baseCountRef.current
+      ensureMotionBuffers(count)
+      motionBuffersXRef.current.set(baseTargetsXRef.current.subarray(0, count))
+      motionBuffersYRef.current.set(baseTargetsYRef.current.subarray(0, count))
+      activeTargetsXRef.current = motionBuffersXRef.current
+      activeTargetsYRef.current = motionBuffersYRef.current
+      activeSourceColorsRef.current = baseColorsRef.current
+      activeCountRef.current = count
+      motionDirtyRef.current = true
+    } else {
+      // Motion Off: the active arrays alias the base field directly — no
+      // per-frame procedural work of any kind.
+      activeTargetsXRef.current = baseTargetsXRef.current
+      activeTargetsYRef.current = baseTargetsYRef.current
+      activeSourceColorsRef.current = baseColorsRef.current
+      activeCountRef.current = baseCountRef.current
+    }
+    ensureParticleCount(
+      Math.max(
+        paragraphTargetsRef.current.length,
+        activeCountRef.current,
+        120,
+      ),
+    )
+    buildSvgTargetAssignment()
+    rebuildPaintIndexAndReplay()
+    const assignedCount = countAssignedTargets()
+    patchDiagnostics({
+      targetCount: activeCountRef.current,
+      glyphCount: particlesRef.current.length,
+      assignedCount,
+      unassignedCount: particlesRef.current.length - assignedCount,
+      hiddenCount:
+        unassignedBehaviorRef.current === 'hidden'
+          ? particlesRef.current.length - assignedCount
+          : 0,
+    })
+    // Quality may have been re-resolved against a new viewport (resize); keep
+    // the reported requested/effective values in sync.
+    patchMotionDiagnostics()
+    renderOnceRef.current()
+  }
+
+  // Apply the current controller tier: re-resolve the composed budgets, then
+  // rebuild only what the new budgets actually change. The last good field
+  // stays live until its replacement is fully assembled (synchronous), so the
+  // canvas never blanks; the existing resize paint-replay path re-projects
+  // the normalized stroke history onto the re-derived field.
+  const applyQualityTier = () => {
+    const controller = qualityControllerRef.current
+    if (!controller) return
+    const viewport = getViewportSize()
+    const previous = qualityBudgetRef.current
+    const budget = resolveEffectiveQualityBudget(controller.getTier(), viewport.width)
+    qualityBudgetRef.current = budget
+    if (budget.tier !== previous.tier) {
+      onQualityTierChangeRef.current?.(previous.tier, budget.tier)
+    }
+
+    // Render budget: cap the backing-store pixel ratio and resize the canvas
+    // if it changed (same transform idiom as resizeScene).
+    const pixelRatio = Math.min(
+      resolveRenderPixelRatio(window.devicePixelRatio || 1),
+      budget.renderPixelRatioCap,
+    )
+    if (pixelRatio !== pixelRatioRef.current) {
+      pixelRatioRef.current = pixelRatio
+      const canvas = canvasRef.current
+      const ctx = ctxRef.current
+      if (canvas && ctx) {
+        canvas.width = viewport.width * pixelRatio
+        canvas.height = viewport.height * pixelRatio
+        canvas.style.width = `${viewport.width}px`
+        canvas.style.height = `${viewport.height}px`
+        ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
+        ctx.font = fontRef.current
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+      }
+      // The background paint layer renders at its own tier-dependent ratio;
+      // re-project it so the new backing store keeps the strokes.
+      rebuildBackgroundPaintLayer()
+    } else if (budget.backgroundPaintPixelRatio !== previous.backgroundPaintPixelRatio) {
+      rebuildBackgroundPaintLayer()
+    }
+
+    if (budget.glyphCap !== previous.glyphCap) {
+      applyTierSubsample()
+      applyMotionField()
+    }
+    // Creature budgets may tighten even when the glyph cap is unchanged.
+    const nextQuality = resolveEffectiveMotionQuality(motionConfigRef.current)
+    if (
+      nextQuality.effectiveDensity !== motionQualityRef.current.effectiveDensity ||
+      nextQuality.effectiveUpdateRate !== motionQualityRef.current.effectiveUpdateRate
+    ) {
+      motionQualityRef.current = nextQuality
+      if (motionConfigRef.current.mode === 'parametric-creature') {
+        applyMotionField()
+      } else {
+        motionDirtyRef.current = true
+      }
+      patchMotionDiagnostics()
+    }
+    if (budget.ambientCap !== previous.ambientCap && ambientFieldRef.current) {
+      rebuildAmbientField()
+    }
+    patchAmbientDiagnostics()
+    renderOnceRef.current()
+  }
+
+  const patchMotionDiagnostics = () => {
+    const config = motionConfigRef.current
+    const quality = motionQualityRef.current
+    patchDiagnostics({
+      motionMode: config.mode,
+      motionVariant: config.variant,
+      motionRequestedDensity: config.density,
+      motionEffectiveDensity: quality.effectiveDensity,
+      motionRequestedUpdateRate: config.updateRate,
+      motionEffectiveUpdateRate: config.mode === 'off' ? 0 : quality.effectiveUpdateRate,
+      paintedTargetCount: paintedCountRef.current,
+      paintedBackgroundStrokeCount: countBackgroundStrokes(paintHistoryRef.current),
+    })
+  }
+
+  // Rebuild the target spatial index for the current field and replay the
+  // normalized stroke history onto it. Paint survives resizes, density
+  // changes, and ordinary motion parameter changes this way; clearing the
+  // history (upload/preset/parametric transitions/leaving vibe) makes this a
+  // no-op wipe.
+  const rebuildPaintIndexAndReplay = () => {
+    const count = activeCountRef.current
+    if (paintedColorsRef.current.length !== count) {
+      paintedColorsRef.current = new Uint32Array(count)
+    }
+    const { width, height } = getViewportSize()
+    spatialIndexRef.current = buildTargetSpatialIndex(
+      activeTargetsXRef.current.subarray(0, count),
+      activeTargetsYRef.current.subarray(0, count),
+      width,
+      height,
+    )
+    paintedCountRef.current = replayPaintHistory(
+      paintHistoryRef.current,
+      spatialIndexRef.current,
+      paintedColorsRef.current,
+    )
+    // Resize/normalized-history replay covers the background channel too.
+    rebuildBackgroundPaintLayer()
+    pushPaintStatus()
+  }
+
+  const replayPaint = () => {
+    const index = spatialIndexRef.current
+    if (!index) {
+      paintedColorsRef.current.fill(0)
+      paintedCountRef.current = 0
+    } else {
+      paintedCountRef.current = replayPaintHistory(
+        paintHistoryRef.current,
+        index,
+        paintedColorsRef.current,
+      )
+    }
+    rebuildBackgroundPaintLayer()
+    patchPaintDiagnostics()
+    pushPaintStatus()
+    renderOnceRef.current()
+  }
+
+  const getPaintStatus = (): PaintStatus => ({
+    paintedTargetCount: paintedCountRef.current,
+    strokeCount: paintHistoryRef.current.strokes.length,
+    backgroundStrokeCount: countBackgroundStrokes(paintHistoryRef.current),
+    canUndo: paintHistoryRef.current.strokes.length > 0,
+    canRedo: redoStrokesRef.current.length > 0,
+    active: activeStrokeRef.current !== null,
+  })
+
+  const pushPaintStatus = () => {
+    onPaintStatusChangeRef.current?.(getPaintStatus())
+  }
+
+  const patchPaintDiagnostics = () => {
+    patchDiagnostics({
+      paintedTargetCount: paintedCountRef.current,
+      paintedBackgroundStrokeCount: countBackgroundStrokes(paintHistoryRef.current),
+    })
+  }
+
+  // --- Background paint channel (soft-brush offscreen layer) ---------------
+
+  const ensureBackgroundPaintLayer = () => {
+    const { width, height } = getViewportSize()
+    // The background channel renders at its own (cheaper) ratio on the lower
+    // quality tiers — the soft-brush layer is blurred regardless.
+    const pixelRatio = Math.min(
+      pixelRatioRef.current,
+      qualityBudgetRef.current.backgroundPaintPixelRatio,
+    )
+    const layer = bgPaintCanvasRef.current
+    if (
+      !layer ||
+      layer.width !== Math.max(1, Math.round(width * pixelRatio)) ||
+      layer.height !== Math.max(1, Math.round(height * pixelRatio))
+    ) {
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(width * pixelRatio))
+      canvas.height = Math.max(1, Math.round(height * pixelRatio))
+      bgPaintCanvasRef.current = canvas
+      bgPaintCtxRef.current = canvas.getContext('2d')
+      return true
+    }
+    return false
+  }
+
+  // Soft radial brush sprite, tinted and cached by color+size. Erase uses the
+  // same sprite shape with destination-out compositing (color irrelevant).
+  const getBackgroundBrush = (color: number | null, radiusPx: number) => {
+    const key = `${color ?? 'erase'}:${Math.round(radiusPx)}`
+    const cache = bgBrushCacheRef.current
+    const cached = cache.get(key)
+    if (cached) return cached
+    if (cache.size > 24) cache.clear()
+    const size = Math.max(2, Math.ceil(radiusPx * 2))
+    const canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    const ctx = canvas.getContext('2d')!
+    const r = color === null ? 255 : color & 0xff
+    const g = color === null ? 255 : (color >>> 8) & 0xff
+    const b = color === null ? 255 : (color >>> 16) & 0xff
+    const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+    gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.9)`)
+    gradient.addColorStop(0.65, `rgba(${r}, ${g}, ${b}, 0.5)`)
+    gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`)
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, size, size)
+    cache.set(key, canvas)
+    return canvas
+  }
+
+  const stampBackgroundPoint = (
+    tool: 'paint' | 'erase',
+    color: number | null,
+    px: number,
+    py: number,
+    radiusPx: number,
+  ) => {
+    if (tool === 'paint' && color === null) return
+    ensureBackgroundPaintLayer()
+    const ctx = bgPaintCtxRef.current
+    if (!ctx) return
+    const pixelRatio = Math.min(
+      pixelRatioRef.current,
+      qualityBudgetRef.current.backgroundPaintPixelRatio,
+    )
+    const brushRadius = Math.max(1, radiusPx * pixelRatio)
+    const brush = getBackgroundBrush(tool === 'erase' ? null : color, brushRadius)
+    ctx.save()
+    if (tool === 'erase') ctx.globalCompositeOperation = 'destination-out'
+    ctx.drawImage(brush, px * pixelRatio - brushRadius, py * pixelRatio - brushRadius)
+    ctx.restore()
+  }
+
+  const stampBackgroundStroke = (stroke: PaintStroke) => {
+    const { width, height } = getViewportSize()
+    const radiusPx = stroke.radiusNorm * Math.min(width, height)
+    const points = stroke.points
+    for (let p = 0; p + 1 < points.length; p += 2) {
+      stampBackgroundPoint(
+        stroke.tool,
+        stroke.backgroundColor,
+        points[p] * width,
+        points[p + 1] * height,
+        radiusPx,
+      )
+    }
+  }
+
+  // Rebuild the background layer from stroke history (replay/resize/undo).
+  const rebuildBackgroundPaintLayer = () => {
+    ensureBackgroundPaintLayer()
+    const layer = bgPaintCanvasRef.current
+    const ctx = bgPaintCtxRef.current
+    if (!layer || !ctx) return
+    ctx.save()
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.clearRect(0, 0, layer.width, layer.height)
+    ctx.restore()
+    const strokes = paintHistoryRef.current.strokes
+    for (let i = 0; i < strokes.length; i += 1) {
+      stampBackgroundStroke(strokes[i])
+    }
+  }
+
+  const undoPaint = () => {
+    const stroke = popStroke(paintHistoryRef.current)
+    if (!stroke) return
+    redoStrokesRef.current.push(stroke)
+    replayPaint()
+  }
+
+  const redoPaint = () => {
+    const stroke = redoStrokesRef.current.pop()
+    if (!stroke) return
+    pushStroke(paintHistoryRef.current, stroke)
+    replayPaint()
+  }
+
+  // Immediate wipe used by Full Reset and by the confirmed destructive flows
+  // (upload, preset, parametric transitions, leaving vibe).
+  const clearPaint = () => {
+    activeStrokeRef.current = null
+    pendingPaintPointsRef.current.length = 0
+    clearPaintHistory(paintHistoryRef.current)
+    redoStrokesRef.current = []
+    paintedColorsRef.current.fill(0)
+    paintedCountRef.current = 0
+    rebuildBackgroundPaintLayer()
+    patchPaintDiagnostics()
+    pushPaintStatus()
+    renderOnceRef.current()
+  }
+
+  // Stamp newly sampled pointer positions into the overlay. Runs at most once
+  // per animation frame (from the RAF loop and from reduced-motion re-arms);
+  // pointer positions are interpolated so fast gestures leave no gaps.
+  const processPaintQueue = () => {
+    const stroke = activeStrokeRef.current
+    const pending = pendingPaintPointsRef.current
+    if (!stroke) {
+      pending.length = 0
+      return
+    }
+    if (pending.length === 0) return
+    const index = spatialIndexRef.current
+    const { width, height } = getViewportSize()
+    const radiusPx = stroke.radiusNorm * Math.min(width, height)
+    const segment = strokeSegmentRef.current
+    let delta = 0
+    for (let i = 0; i + 1 < pending.length; i += 2) {
+      const x = pending[i]
+      const y = pending[i + 1]
+      const remaining =
+        PAINT_MAX_POINTS - paintHistoryRef.current.totalPoints - stroke.points.length / 2
+      if (remaining <= 0) break
+      segment.length = 0
+      appendInterpolatedPoints(
+        segment,
+        stroke.lastX,
+        stroke.lastY,
+        x,
+        y,
+        stroke.stepPx,
+        width,
+        height,
+      )
+      const usable = Math.min(segment.length / 2, remaining)
+      for (let p = 0; p + 1 < usable * 2; p += 2) {
+        stroke.points.push(segment[p], segment[p + 1])
+        const px = segment[p] * width
+        const py = segment[p + 1] * height
+        if (index && (stroke.tool === 'erase' || stroke.glyphColor !== null)) {
+          delta += stampPoint(
+            index,
+            stroke.tool,
+            stroke.glyphColor ?? 0,
+            px,
+            py,
+            radiusPx,
+            paintedColorsRef.current,
+          )
+        }
+        stampBackgroundPoint(stroke.tool, stroke.backgroundColor, px, py, radiusPx)
+      }
+      stroke.lastX = x
+      stroke.lastY = y
+    }
+    pending.length = 0
+    if (delta !== 0) {
+      paintedCountRef.current += delta
+      patchPaintDiagnostics()
+      pushPaintStatus()
+    }
+  }
+
+  const beginPaintStroke = (event: PointerEvent, point: { x: number; y: number }) => {
+    const tool = paintToolRef.current
+    const { width, height } = getViewportSize()
+    const diameter = clamp(
+      tool.brushDiameter,
+      PAINT_BRUSH_DIAMETER_MIN,
+      PAINT_BRUSH_DIAMETER_MAX,
+    )
+    const radiusPx = diameter / 2
+    const glyphRgb =
+      tool.glyphColor === 'none' ? null : parseHexColor(tool.glyphColor)
+    const backgroundRgb =
+      tool.backgroundColor === 'none' ? null : parseHexColor(tool.backgroundColor)
+    // Both channels set to 'none': a paint stroke would touch nothing.
+    if (tool.tool === 'paint' && !glyphRgb && !backgroundRgb) return
+    // Refresh the spatial index against the targets' current (possibly
+    // motion-displaced, now frozen) positions so the brush hits what is
+    // actually under the pointer.
+    const count = activeCountRef.current
+    spatialIndexRef.current = buildTargetSpatialIndex(
+      activeTargetsXRef.current.subarray(0, count),
+      activeTargetsYRef.current.subarray(0, count),
+      width,
+      height,
+    )
+    activeStrokeRef.current = {
+      pointerId: event.pointerId,
+      tool: tool.tool,
+      glyphColor: glyphRgb ? packSourceRgba(glyphRgb.r, glyphRgb.g, glyphRgb.b, 255) : null,
+      backgroundColor: backgroundRgb
+        ? packSourceRgba(backgroundRgb.r, backgroundRgb.g, backgroundRgb.b, 255)
+        : null,
+      radiusNorm: radiusPx / Math.max(1, Math.min(width, height)),
+      points: [],
+      lastX: point.x,
+      lastY: point.y,
+      stepPx: Math.max(2, radiusPx * 0.4),
+    }
+    pendingPaintPointsRef.current.push(point.x, point.y)
+    // While painting, the pointer repel fades out and click impulses are
+    // suppressed; procedural target time freezes in the motion update.
+    startFade()
+    try {
+      canvasRef.current?.setPointerCapture(event.pointerId)
+    } catch {}
+    updateBrushRing(point.x, point.y, true)
+    processPaintQueue()
+    pushPaintStatus()
+    renderOnceRef.current()
+  }
+
+  const endPaintStroke = () => {
+    const stroke = activeStrokeRef.current
+    if (!stroke) return
+    processPaintQueue()
+    activeStrokeRef.current = null
+    try {
+      canvasRef.current?.releasePointerCapture(stroke.pointerId)
+    } catch {}
+    if (stroke.points.length >= 2) {
+      const evicted = pushStroke(paintHistoryRef.current, {
+        tool: stroke.tool,
+        glyphColor: stroke.glyphColor,
+        backgroundColor: stroke.backgroundColor,
+        radiusNorm: stroke.radiusNorm,
+        points: Float32Array.from(stroke.points),
+      })
+      // A new gesture invalidates the redo stack.
+      redoStrokesRef.current = []
+      if (evicted) {
+        // History bounds dropped the oldest gesture(s); the visible overlay
+        // must be rebuilt from the remaining history.
+        replayPaint()
+        return
+      }
+    }
+    patchPaintDiagnostics()
+    pushPaintStatus()
+    renderOnceRef.current()
   }
 
   const buildSvgTargetAssignment = () => {
-    const targets = svgTargetsRef.current
-    const particles = particlesRef.current
-    const count = particles.length
-    const targetCount = targets.length
-    const map = new Int32Array(count)
-    if (targetCount === 0) {
-      map.fill(-1)
-      svgTargetMapRef.current = map
-      return
-    }
-    for (let i = 0; i < count; i += 1) {
-      if (count >= targetCount) {
-        // Every target receives one glyph; remaining glyphs become ambient.
-        map[i] = i < targetCount ? i : -1
-      } else {
-        // Fewer glyphs than targets: spread glyphs evenly across the silhouette.
-        map[i] = Math.floor((i * targetCount) / count)
-      }
-    }
-    svgTargetMapRef.current = map
+    const assignment = assignGlyphsToTargets(particlesRef.current.length, activeCountRef.current)
+    svgTargetMapRef.current = assignment.glyphToTarget
   }
 
   const countAssignedTargets = () => {
@@ -514,100 +1472,243 @@ function SceneCanvasInternal(
     return count
   }
 
-  const buildSvgTargets = async () => {
-    const W = window.innerWidth
-    const H = window.innerHeight
-    setDiagnostics((prev) => ({ ...prev, sourceStatus: 'loading' }))
-    const result = await loadSvgTargets({
-      url: uploadedSvgUrl ?? '/assets/test-source.svg',
-      bounds: { width: W, height: H },
-      samplingStep: sourceLayout?.samplingStep ?? LOGO_TARGET_STEP,
-      alphaThreshold: sourceLayout?.alphaThreshold,
-      margin: sourceLayout?.margin,
-      fit: sourceLayout?.fit,
-      scale: sourceLayout?.scale,
-      offsetX: sourceLayout?.offsetX,
-      offsetY: sourceLayout?.offsetY,
-    })
-    if (result.ok) {
-      svgTargetsRef.current = result.targets
-      const { gradientT, rowT } = buildTargetSpatialData(result.targets)
-      targetGradientRef.current = gradientT
-      targetRowRef.current = rowT
-      setDiagnostics((prev) => ({
-        ...prev,
-        sourceStatus: 'loaded',
-        targetCount: result.targets.length,
-      }))
-    } else {
-      svgTargetsRef.current = []
-      setDiagnostics((prev) => ({
-        ...prev,
-        sourceStatus: `error: ${result.error}`,
-        targetCount: 0,
-      }))
+  // Lazily create (and start) the Black hole provider. The owned canvas is
+  // captured in the factory closure so the staging downscale can draw from it.
+  const ensureAnimatedProvider = () => {
+    if (!animatedProviderRef.current) {
+      animatedProviderRef.current = createBlackHoleProvider({
+        createCanvas: (w, h) => {
+          const canvas = document.createElement('canvas')
+          canvas.width = w
+          canvas.height = h
+          animatedProviderCanvasRef.current = canvas
+          return canvas
+        },
+      })
     }
-    buildSvgTargetAssignment()
-    const assignedCount = countAssignedTargets()
-    setDiagnostics((prev) => ({
-      ...prev,
-      glyphCount: particlesRef.current.length,
-      assignedCount,
-      unassignedCount: particlesRef.current.length - assignedCount,
-      hiddenCount: unassignedBehaviorRef.current === 'hidden' ? particlesRef.current.length - assignedCount : 0,
-    }))
+    const provider = animatedProviderRef.current
+    if (!provider.isRunning()) {
+      const { width, height } = getViewportSize()
+      provider.start({ width, height })
+    }
+    return provider
+  }
+
+  // Leaving an animated selection releases the provider and its canvas.
+  const stopAnimatedProvider = () => {
+    animatedProviderRef.current?.stop()
+    animatedProviderCanvasRef.current = null
+    animatedHasValidFieldRef.current = false
+  }
+
+  // Render one provider frame, downscale it into the tier-sized staging
+  // canvas, and sample the staging pixels into a fresh base field. Returns
+  // false when the provider could not produce a frame or the frame sampled
+  // empty — the caller then keeps the last valid field (or falls back to the
+  // JH mark when none exists).
+  const sampleAnimatedProviderFrame = (timeSeconds: number): boolean => {
+    const provider = animatedProviderRef.current
+    const providerCanvas = animatedProviderCanvasRef.current
+    if (!provider || !providerCanvas) return false
+    if (!provider.renderFrame(timeSeconds)) return false
+    const { width: W, height: H } = getViewportSize()
+    const stagingSize = resolveAnimatedStagingSize(W, H, qualityBudgetRef.current.tier)
+    let staging = animatedStagingRef.current
+    if (!staging) {
+      staging = document.createElement('canvas')
+      animatedStagingRef.current = staging
+    }
+    if (staging.width !== stagingSize.width || staging.height !== stagingSize.height) {
+      staging.width = stagingSize.width
+      staging.height = stagingSize.height
+    }
+    const stagingCtx = staging.getContext('2d')
+    if (!stagingCtx) return false
+    stagingCtx.clearRect(0, 0, staging.width, staging.height)
+    stagingCtx.drawImage(providerCanvas, 0, 0, staging.width, staging.height)
+    let imageData: ImageData
+    try {
+      imageData = stagingCtx.getImageData(0, 0, staging.width, staging.height)
+    } catch {
+      return false
+    }
+    const layout = sourceLayoutRef.current
+    const field = sampleTargetField(
+      imageData,
+      resolveSamplingStep(layout?.samplingStep ?? LOGO_TARGET_STEP, staging.width),
+      layout?.alphaThreshold ?? 64,
+    )
+    if (field.x.length === 0) return false
+    // Staging pixels are a downscale of the viewport: project the sampled
+    // positions back into CSS-pixel scene space (normX/normY are scale-free).
+    const scaleX = W / staging.width
+    const scaleY = H / staging.height
+    for (let i = 0; i < field.x.length; i += 1) {
+      field.x[i] *= scaleX
+      field.y[i] *= scaleY
+    }
+    setBaseField(field.x, field.y, field.colors, field.normX, field.normY)
+    return true
+  }
+
+  const buildSvgTargets = async () => {
+    const { width: W, height: H } = getViewportSize()
+    const requestId = ++svgLoadRequestRef.current
+    // Read the latest source identity from stable refs — never from a render
+    // closure — so resize-triggered rebuilds keep the active story/upload.
+    const selection = sourceSelectionRef.current ?? { kind: 'builtin' as const }
+    const layout = sourceLayoutRef.current
+
+    if (selection.kind === 'animated') {
+      const provider = ensureAnimatedProvider()
+      provider.setPaused(document.hidden)
+      provider.resize(W, H)
+      patchDiagnostics({
+        sourceStatus: 'loading',
+        sourceError: null,
+        sourceId: selection.provider,
+        sourceKind: 'animated',
+      })
+      const sampleStart = performance.now()
+      // Reduced motion samples the one deterministic pose frame and never
+      // animates; the live clock drives all other tiers (T3 freezes it).
+      const time = reducedMotionRef.current
+        ? BLACK_HOLE_REDUCED_POSE_TIME
+        : animatedTimeRef.current
+      const sampled = sampleAnimatedProviderFrame(time)
+      const sourceDecodeMs = performance.now() - sampleStart
+      if (requestId !== svgLoadRequestRef.current) return
+      if (sampled) {
+        animatedHasValidFieldRef.current = true
+        patchDiagnostics({
+          sourceStatus: 'ready',
+          sourceError: null,
+          sourceDecodeMs,
+          targetRebuildCount: diagnosticsRef.current.targetRebuildCount + 1,
+        })
+      } else if (animatedHasValidFieldRef.current) {
+        // Provider error with a valid field in hand: keep the last sampled
+        // frame; the JH fallback is reserved for "no valid frame at all".
+        patchDiagnostics({
+          sourceStatus: 'error',
+          sourceError: provider.getLastError() ?? 'animated frame unavailable',
+          sourceDecodeMs,
+        })
+        return
+      } else {
+        const fallback = buildLogoTargets()
+        setBaseField(fallback.x, fallback.y, fallback.colors, fallback.normX, fallback.normY)
+        patchDiagnostics({
+          sourceStatus: 'error',
+          sourceError: provider.getLastError() ?? 'animated frame unavailable',
+          sourceKind: 'fallback',
+          sourceDecodeMs,
+          targetRebuildCount: diagnosticsRef.current.targetRebuildCount + 1,
+        })
+      }
+      qualityRebuildPendingRef.current = true
+      applyMotionField()
+      return
+    }
+
+    // Static selections never keep the animated provider alive.
+    stopAnimatedProvider()
+    const activeUrl = selection.kind === 'static' ? selection.url : '/assets/test-source.svg'
+    const activeKind = selection.kind === 'static' ? selection.sourceKind : 'svg'
+    const sourceId = selection.kind === 'static' ? selection.url : 'default'
+    patchDiagnostics({
+      sourceStatus: 'loading',
+      sourceError: null,
+      sourceId,
+      sourceKind: selection.kind === 'static' ? selection.sourceKind : 'builtin',
+    })
+    const decodeStart = performance.now()
+    const result = await loadSvgTargets({
+      url: activeUrl,
+      kind: activeKind,
+      bounds: { width: W, height: H },
+      samplingStep: resolveSamplingStep(layout?.samplingStep ?? LOGO_TARGET_STEP, W),
+      alphaThreshold: layout?.alphaThreshold,
+      margin: layout?.margin,
+      fit: layout?.fit,
+      scale: layout?.scale,
+      offsetX: layout?.offsetX,
+      offsetY: layout?.offsetY,
+    })
+    const sourceDecodeMs = performance.now() - decodeStart
+    if (requestId !== svgLoadRequestRef.current) {
+      // A newer load was requested while this one was in flight; let it win.
+      return
+    }
+    const decision = resolveSourceFieldDecision({ ok: result.ok, targetCount: result.x.length, error: result.error })
+    if (decision.use === 'source') {
+      // Landing completed-intro: recolor the hero mark (built-in monogram or
+      // the JH logotype) with the luminance-chosen glyph gradient
+      // (engine/backgroundLuminance) — the logotype ships in the light
+      // gradient, which is too dark on the dark landing.
+      const isLandingField =
+        experienceRef.current === 'intro' &&
+        (selection.kind === 'builtin' ||
+          (selection.kind === 'static' && selection.url === LANDING_SOURCE_URL))
+      if (isLandingField) {
+        const config = playgroundConfigRef.current
+        const gradient = resolveLandingGlyphGradient(
+          config.backgroundColor1,
+          config.backgroundColor2,
+        )
+        applyVerticalGlyphGradient(result.colors, result.normY, gradient.from, gradient.to)
+      }
+      setBaseField(result.x, result.y, result.colors, result.normX, result.normY)
+      patchDiagnostics({
+        sourceStatus: 'ready',
+        sourceError: null,
+        sourceDecodeMs,
+        targetRebuildCount: diagnosticsRef.current.targetRebuildCount + 1,
+      })
+    } else {
+      // Missing, invalid, or zero-alpha source: fall back to the logo field
+      // so the scene stays readable instead of going blank.
+      const fallback = buildLogoTargets()
+      setBaseField(fallback.x, fallback.y, fallback.colors, fallback.normX, fallback.normY)
+      patchDiagnostics({
+        sourceStatus: 'error',
+        sourceError: decision.reason,
+        sourceKind: 'fallback',
+        sourceDecodeMs,
+        targetRebuildCount: diagnosticsRef.current.targetRebuildCount + 1,
+      })
+    }
+    // Population, assignment, paint replay, counts, and renderOnce all run in
+    // the required order inside applyMotionField. The quality controller
+    // ignores the evaluation window this rebuild lands in.
+    qualityRebuildPendingRef.current = true
+    applyMotionField()
   }
 
   const activateSceneMode = (mode: SceneMode) => {
     sceneModeRef.current = mode
-    if (mode === 'matrix') {
-      setMatrixEnabled(true)
-      setWeatherEnabled(false)
-      buildMatrixStructure()
-    } else if (mode === 'weather') {
-      setMatrixEnabled(false)
-      setWeatherEnabled(true)
-      buildWeatherParticles()
-    } else if (mode === 'paragraph') {
-      setMatrixEnabled(false)
-      setWeatherEnabled(false)
-    } else if (mode === 'svg') {
-      setMatrixEnabled(false)
-      setWeatherEnabled(false)
+    if (mode === 'svg') {
       sceneStartRef.current = performance.now()
     }
-    setDiagnostics((prev) => ({
-      ...prev,
+    patchDiagnostics({
       mode,
       glyphCount: particlesRef.current.length,
       assignedCount: countAssignedTargets(),
-    }))
-    if (typeof document !== 'undefined') {
-      document.body.style.overflowY = mode === 'matrix' || mode === 'weather' ? 'hidden' : 'auto'
-    }
+    })
+    renderOnceRef.current()
   }
 
   const getLogoTarget = (index: number) => {
     const targets = logoTargetsRef.current
-    if (targets.length === 0) return { tx: window.innerWidth * 0.5, ty: window.innerHeight * 0.5 }
+    if (targets.length === 0) {
+      const viewport = getViewportSize()
+      return { tx: viewport.width * 0.5, ty: viewport.height * 0.5 }
+    }
     return targets[index % targets.length]
   }
 
   const getAmbientTarget = (p: Particle, index: number, now: number) => {
-    if (matrixEnabledRef.current && matrixSlotsRef.current[index]) {
-      const slot = matrixSlotsRef.current[index]
-      const col = columnsRef.current[slot.stream]
-      if (col) {
-        const elapsed = now - typewriterStartRef.current
-        const rainOffset = ((elapsed / 16.666) * col.speed * (matrixSpeedRef.current / 100) * lineHeightRef.current) % ((col.rowsPerColumn + 4) * lineHeightRef.current)
-        const baseY = (slot.row - 4) * lineHeightRef.current
-        return {
-          tx: col.x + Math.sin(elapsed * 0.0015 + slot.row * 0.35) * (fontSize * 0.08) + col.sway * elapsed * 0.01,
-          ty: ((baseY + rainOffset) % ((col.rowsPerColumn + 4) * lineHeightRef.current)) - lineHeightRef.current * 2,
-        }
-      }
-    }
-    if (!weatherEnabledRef.current && paragraphTargetsRef.current[index]) {
+    if (paragraphTargetsRef.current[index]) {
       return {
         tx: paragraphTargetsRef.current[index].tx,
         ty: paragraphTargetsRef.current[index].ty,
@@ -625,37 +1726,109 @@ function SceneCanvasInternal(
     const canvas = canvasRef.current
     const ctx = ctxRef.current
     if (!canvas || !ctx) return
-    const W = window.innerWidth
-    const H = window.innerHeight
+    // Settle any in-progress paint stroke before the field is rebuilt.
+    if (activeStrokeRef.current) endPaintStroke()
+    // The adaptive quality controller ignores the window this resize lands in.
+    qualityResizePendingRef.current = true
+    const { width: W, height: H } = getViewportSize()
+    const pixelRatio = Math.min(
+      resolveRenderPixelRatio(window.devicePixelRatio || 1),
+      qualityBudgetRef.current.renderPixelRatioCap,
+    )
+    pixelRatioRef.current = pixelRatio
     let contentH = H
     if (sceneModeRef.current === 'paragraph' && paragraphTargetsRef.current.length > 0) {
       const lastTarget = paragraphTargetsRef.current[paragraphTargetsRef.current.length - 1]
       contentH = Math.max(H, lastTarget.ty + lineHeightRef.current * 2)
     }
-    canvas.width = W * devicePixelRatio
-    canvas.height = contentH * devicePixelRatio
+    canvas.width = W * pixelRatio
+    canvas.height = contentH * pixelRatio
     canvas.style.width = `${W}px`
     canvas.style.height = `${contentH}px`
-    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0)
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
     buildAllMeshBgs()
     buildParagraphTargets()
     buildSvgTargets()
-    ensureParticleCount(Math.max(paragraphTargetsRef.current.length, svgTargetsRef.current.length, matrixSlotsRef.current.length, 120))
-    if (weatherEnabledRef.current) buildWeatherParticles()
-    if (matrixEnabledRef.current) buildMatrixStructure()
+    ensureParticleCount(Math.max(paragraphTargetsRef.current.length, activeCountRef.current, 120))
+    rebuildAmbientField()
     if (sceneModeRef.current === 'svg') {
       buildSvgTargetAssignment()
-      setDiagnostics((prev) => ({
-        ...prev,
+      patchDiagnostics({
         glyphCount: particlesRef.current.length,
         assignedCount: countAssignedTargets(),
-      }))
+      })
     }
-    if (typeof document !== 'undefined') {
-      document.body.style.overflowY = sceneModeRef.current === 'matrix' || sceneModeRef.current === 'weather' ? 'hidden' : 'auto'
-    }
+    renderOnceRef.current()
   }
 
+
+  // Assembles the per-frame portion of the snapshot (frame timing, viewport,
+  // pointer, live counts) and hands the full snapshot to React. Called at most
+  // once per DIAGNOSTICS_PUSH_INTERVAL_MS and only while the debug UI is
+  // active, so there is no React work per frame in production.
+  const pushDiagnostics = () => {
+    const timing = frameTimingRef.current.summary()
+    const viewport = getViewportSize()
+    const pointer = pointerRef.current
+    const glyphCount = particlesRef.current.length
+    const assignedCount = countAssignedTargets()
+    patchDiagnostics({
+      experience: experienceRef.current,
+      sceneId: sceneIdRef.current,
+      fps: timing.fps,
+      avgFrameMs: timing.avgFrameMs,
+      worstFrameMs: timing.worstFrameMs,
+      framesInWindow: timing.framesInWindow,
+      viewportWidth: viewport.width,
+      viewportHeight: viewport.height,
+      devicePixelRatio: window.devicePixelRatio || 1,
+      reducedMotion: reducedMotionRef.current,
+      pointerType: pointer.kind,
+      pointerActive: pointer.active,
+      pointerX: pointer.x,
+      pointerY: pointer.y,
+      seed: GLYPH_INIT_SEED,
+      simParams: {
+        spring: SPRING,
+        damp: DAMP,
+        mouseR: mouseRRef.current,
+        particleRepel: particleRepelRef.current,
+        weatherRepelMult: weatherRepelRef.current,
+      },
+      glyphCount,
+      assignedCount,
+      unassignedCount: glyphCount - assignedCount,
+      visibleCount: visibleCountRef.current,
+      hiddenCount: hiddenCountRef.current,
+      motionMode: motionConfigRef.current.mode,
+      motionVariant: motionConfigRef.current.variant,
+      motionRequestedDensity: motionConfigRef.current.density,
+      motionEffectiveDensity: motionQualityRef.current.effectiveDensity,
+      motionRequestedUpdateRate: motionConfigRef.current.updateRate,
+      motionEffectiveUpdateRate:
+        motionConfigRef.current.mode === 'off'
+          ? 0
+          : motionQualityRef.current.effectiveUpdateRate,
+      paintedTargetCount: paintedCountRef.current,
+      paintedBackgroundStrokeCount: countBackgroundStrokes(paintHistoryRef.current),
+      ambientMode: ambientConfigRef.current.mode,
+      ambientAgentCount: ambientFieldRef.current ? ambientFieldRef.current.count : 0,
+      ambientCollisionMs: ambientCollisionMsRef.current,
+      qualityTier: qualityBudgetRef.current.tier,
+      qualityTierOverride: qualityControllerRef.current
+        ? qualityControllerRef.current.isOverrideActive()
+        : false,
+      qualityLastTransition: qualityControllerRef.current
+        ? qualityControllerRef.current.getLastTransitionReason()
+        : 'initial',
+      qualityGlyphCap: qualityBudgetRef.current.glyphCap,
+      qualityCreatureCap: qualityBudgetRef.current.creatureCap,
+      qualityCreatureRate: qualityBudgetRef.current.creatureRate,
+      qualityAmbientCap: qualityBudgetRef.current.ambientCap,
+      qualityAmbientTickHz: qualityBudgetRef.current.ambientTickHz,
+    })
+    onDiagnosticsUpdateRef.current?.({ ...diagnosticsRef.current })
+  }
 
   const getPointerForFrame = () => {
     const state = pointerRef.current
@@ -675,9 +1848,9 @@ function SceneCanvasInternal(
   }
 
   const simulateParticle = (p: Particle) => {
-    // Apply mouse repel force if pointer is nearby
+    // Apply mouse repel force if pointer is nearby (suppressed while painting).
     const pointer = getPointerForFrame()
-    if (pointer.active && pointer.influence > 0) {
+    if (!activeStrokeRef.current && pointer.active && pointer.influence > 0) {
       const dx = p.x - pointer.x
       const dy = p.y - pointer.y
       const distSq = dx * dx + dy * dy
@@ -698,39 +1871,122 @@ function SceneCanvasInternal(
     p.y += p.vy
   }
 
-  const resolveGlyphColor = (
-    particleIndex: number,
-    targetIndex: number,
-    targetCount: number,
-  ): Rgb => {
-    const palette = paletteRgbRef.current
-    if (palette.length === 0) return parseHexColor('#ffffff')
-    const mode = colorModeRef.current
-    const assigned = targetIndex >= 0 && targetIndex < targetCount
+  // Reusable per-frame color context: mutated per glyph, never reallocated.
+  const colorContextRef = useRef({
+    mode: 'image-gradient' as GlyphColorMode,
+    palette: [] as Rgb[],
+    particleIndex: 0,
+    targetIndex: -1,
+    targetCount: 0,
+    gradientT: undefined as Float32Array | undefined,
+    rowT: undefined as Float32Array | undefined,
+    wordColorIndices: undefined as number[] | undefined,
+    sourceColors: undefined as Uint32Array | undefined,
+    paintedColors: undefined as Uint32Array | undefined,
+  })
 
-    if (mode === 'image-gradient' && assigned && targetIndex < targetGradientRef.current.length) {
-      return sampleImageGradient(palette, targetGradientRef.current[targetIndex])
+  // Advance procedural motion time (frozen during paint gestures) and
+  // recompute target positions at the effective update rate while rendering
+  // continues at full requestAnimationFrame cadence. Reduced-motion users get
+  // a deterministic static pose, recomputed only when parameters change.
+  const updateMotionTargets = (now: number) => {
+    const mode = motionConfigRef.current.mode
+    if (mode === 'off') return
+    if (reducedMotionRef.current) {
+      if (motionDirtyRef.current) {
+        computeMotionFrame(MOTION_REDUCED_POSE_TIME)
+        motionDirtyRef.current = false
+        lastMotionComputeRef.current = now
+      }
+      return
     }
-
-    if (mode === 'rows' && assigned && targetIndex < targetRowRef.current.length) {
-      const band = sampleRowBand(palette.length, targetRowRef.current[targetIndex])
-      return palette[band]
+    // T3 freezes the animated source sampling: creature/organic target math
+    // stops updating and the last computed targets remain (parameter edits
+    // still recompute one frame via the dirty flag).
+    if (qualityBudgetRef.current.samplingHz === 0) {
+      if (motionDirtyRef.current) {
+        computeMotionFrame(motionTimeRef.current)
+        motionDirtyRef.current = false
+        lastMotionComputeRef.current = now
+      }
+      return
     }
-
-    if (mode === 'word-cycle' && wordColorRef.current.length > 0) {
-      const colorIndex = wordColorRef.current[particleIndex % wordColorRef.current.length]
-      return palette[colorIndex >= 0 ? colorIndex : 0]
+    const last = motionLastNowRef.current
+    motionLastNowRef.current = now
+    const dt = Math.min(0.1, Math.max(0, (now - last) / 1000))
+    if (!activeStrokeRef.current) {
+      motionTimeRef.current += dt
     }
+    const rate = motionQualityRef.current.effectiveUpdateRate || 30
+    if (motionDirtyRef.current || now - lastMotionComputeRef.current >= 1000 / rate) {
+      computeMotionFrame(motionTimeRef.current)
+      lastMotionComputeRef.current = now
+      motionDirtyRef.current = false
+    }
+  }
 
-    return palette[particleIndex % palette.length]
+  const computeMotionFrame = (time: number) => {
+    const config = motionConfigRef.current
+    const { width, height } = getViewportSize()
+    const params: MotionWaveParams = {
+      time,
+      amount: config.amount / 100,
+      speed: config.speed,
+      waveScale: config.waveScale,
+      complexity: config.complexity,
+      width,
+      height,
+      custom: config.custom,
+    }
+    if (config.mode === 'organic-flow') {
+      computeOrganicTargets(
+        motionFieldRef.current,
+        params,
+        motionBuffersXRef.current,
+        motionBuffersYRef.current,
+      )
+    } else if (config.mode === 'parametric-creature' && creatureTopologyRef.current) {
+      computeCreatureTargets(
+        creatureTopologyRef.current,
+        params,
+        motionBuffersXRef.current,
+        motionBuffersYRef.current,
+      )
+    }
+  }
+
+  // Per-frame animated-source sampling, rate-limited by the quality tier's
+  // samplingHz budget. T3 (0 Hz) freezes the last sampled frame; reduced
+  // motion never samples here (its single deterministic pose came from the
+  // rebuild path). The full-field refresh reuses the same tail as a source
+  // rebuild — tier subsample, population, assignment, paint replay.
+  const sampleAnimatedSourceFrame = (now: number) => {
+    const selection = sourceSelectionRef.current
+    if (selection?.kind !== 'animated') return
+    if (reducedMotionRef.current) return
+    const samplingHz = qualityBudgetRef.current.samplingHz
+    if (samplingHz <= 0) return
+    // A paint gesture freezes the field under the brush; sampling resumes
+    // when the stroke ends.
+    if (activeStrokeRef.current) return
+    if (now - animatedLastSampleRef.current < 1000 / samplingHz) return
+    animatedLastSampleRef.current = now
+    const dt = Math.min(0.5, Math.max(0, (now - (animatedLastNowRef.current || now)) / 1000))
+    animatedLastNowRef.current = now
+    animatedTimeRef.current += dt
+    if (sampleAnimatedProviderFrame(animatedTimeRef.current)) {
+      animatedHasValidFieldRef.current = true
+      applyMotionField()
+    }
+    // On failure the last valid sampled field simply stays live.
   }
 
   const drawSvgGlyphScene = (now: number) => {
     const canvas = canvasRef.current
     const ctx = ctxRef.current
     if (!canvas || !ctx) return
-    const W = canvas.width / devicePixelRatio
-    const H = canvas.height / devicePixelRatio
+    const W = canvas.width / pixelRatioRef.current
+    const H = canvas.height / pixelRatioRef.current
 
     const config = playgroundConfigRef.current ?? APPROVED_PLAYGROUND_DEFAULTS
 
@@ -747,10 +2003,41 @@ function SceneCanvasInternal(
     ctx.fillStyle = bgGradient
     ctx.fillRect(0, 0, W, H)
 
-    const targets = svgTargetsRef.current
+    // Weather mood backdrop (legacy mesh gradients at partial alpha).
+    drawAmbientBackdrop(ctx, W, H)
+
+    // Background paint channel: the soft-brush layer sits over the base
+    // gradient and under the glyphs; erase has already cut it back out.
+    const bgPaintLayer = bgPaintCanvasRef.current
+    if (bgPaintLayer) {
+      ctx.drawImage(bgPaintLayer, 0, 0, W, H)
+    }
+
+    // Ambient layer: weather/matrix agents render above the background
+    // channels and below the spring-tethered glyph field.
+    updateAmbient(now)
+    drawAmbient(ctx, W, H)
+
     const particles = particlesRef.current
     const map = svgTargetMapRef.current
-    if (targets.length === 0 || particles.length === 0) return
+    if (particles.length === 0) return
+
+    updateMotionTargets(now)
+
+    const targetsX = activeTargetsXRef.current
+    const targetsY = activeTargetsYRef.current
+    const targetCount = activeCountRef.current
+    if (targetCount === 0) return
+
+    const colorContext = colorContextRef.current
+    colorContext.mode = colorModeRef.current
+    colorContext.palette = paletteRgbRef.current
+    colorContext.targetCount = targetCount
+    colorContext.gradientT = targetGradientRef.current
+    colorContext.rowT = targetRowRef.current
+    colorContext.wordColorIndices = wordColorRef.current
+    colorContext.sourceColors = activeSourceColorsRef.current
+    colorContext.paintedColors = paintedColorsRef.current
 
     const behavior = unassignedBehaviorRef.current
     const reducedMotion = reducedMotionRef.current
@@ -761,7 +2048,7 @@ function SceneCanvasInternal(
     for (let i = 0; i < particles.length; i += 1) {
       const p = particles[i]
       const targetIndex = map[i]
-      const assigned = targetIndex >= 0 && targetIndex < targets.length
+      const assigned = targetIndex >= 0 && targetIndex < targetCount
       if (!assigned) {
         if (behavior === 'hidden') {
           hiddenCount += 1
@@ -771,8 +2058,8 @@ function SceneCanvasInternal(
         p.tx = ambient.tx
         p.ty = ambient.ty
       } else {
-        p.tx = targets[targetIndex].tx
-        p.ty = targets[targetIndex].ty
+        p.tx = targetsX[targetIndex]
+        p.ty = targetsY[targetIndex]
       }
       p.char = sourceCharsRef.current[i % Math.max(1, sourceCharsRef.current.length)] || p.char
       p.row = 0
@@ -786,29 +2073,26 @@ function SceneCanvasInternal(
         simulateParticle(p)
       }
       const homeDist = Math.sqrt((p.x - p.tx) ** 2 + (p.y - p.ty) ** 2)
-      const alpha = Math.max(0.35, 1 - homeDist / 280)
-      const color = resolveGlyphColor(i, targetIndex, targets.length)
+      colorContext.particleIndex = i
+      colorContext.targetIndex = targetIndex
+      const color = resolveGlyphColor(colorContext)
+      const alpha = Math.max(0.35, 1 - homeDist / 280) * resolveGlyphAlphaScale(colorContext)
       ctx.fillStyle = formatRgba(color, alpha)
       ctx.fillText(p.char, p.x, p.y)
       visibleCount += 1
     }
 
-    if (tuningModeRef.current && now % 250 < 20) {
-      setDiagnostics((prev) => ({
-        ...prev,
-        visibleCount,
-        hiddenCount,
-        unassignedCount: particles.length - countAssignedTargets(),
-      }))
-    }
+    // Per-frame counts live in refs; React sees them via the throttled push.
+    visibleCountRef.current = visibleCount
+    hiddenCountRef.current = hiddenCount
   }
 
   const drawParagraph = (now: number, revealedChars: number) => {
     const canvas = canvasRef.current
     if (!canvas || !ctxRef.current) return
     const ctx = ctxRef.current
-    const cW = canvas.width / devicePixelRatio
-    const cH = canvas.height / devicePixelRatio
+    const cW = canvas.width / pixelRatioRef.current
+    const cH = canvas.height / pixelRatioRef.current
     ctx.fillStyle = 'rgba(10, 10, 10, 1)'
     ctx.fillRect(0, 0, cW, cH)
     const visible = Math.min(revealedChars, paragraphTargetsRef.current.length, particlesRef.current.length)
@@ -833,126 +2117,258 @@ function SceneCanvasInternal(
       ctx.fillStyle = 'hsla(0, 0%, 85%, 0.85)'
       ctx.fillRect(last.tx + fontSize * 0.25, last.ty - lineHeight * 0.5 + 2, 2, lineHeight - 4)
     }
+    visibleCountRef.current = visible
+    hiddenCountRef.current = particlesRef.current.length - visible
   }
 
-  const drawMatrix = (now: number, revealedChars: number) => {
-    const canvas = canvasRef.current
-    const ctx = ctxRef.current
-    if (!canvas || !ctx || matrixSlotsRef.current.length === 0) return
-    ctx.fillStyle = 'rgba(5, 12, 8, 0.22)'
-    ctx.fillRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio)
-    const elapsed = now - typewriterStartRef.current
-    const rowsPerColumn = columnsRef.current[0]?.rowsPerColumn || 1
-    const speedFactor = matrixSpeedRef.current / 100
-    columnsRef.current.forEach((col) => {
-      col.headRow = ((elapsed / 16.666) * col.speed * speedFactor + col.phase) % rowsPerColumn
-    })
-    const desired = Math.min(matrixSlotsRef.current.length, Math.floor(Math.max(1, revealedChars) * (matrixVolumeRef.current / 100)))
-    const visible = Math.min(desired, particlesRef.current.length)
-    for (let i = 0; i < visible; i += 1) {
-      const slot = matrixSlotsRef.current[i]
-      const col = columnsRef.current[slot.stream]
-      const p = particlesRef.current[i]
-      const rainOffset = ((elapsed / 16.666) * col.speed * speedFactor * lineHeightRef.current) % ((col.rowsPerColumn + 4) * lineHeightRef.current)
-      const baseY = (slot.row - 4) * lineHeightRef.current
-      p.tx = col.x + Math.sin(elapsed * 0.0015 + slot.row * 0.35) * (fontSize * 0.08) + col.sway * elapsed * 0.01
-      p.ty = ((baseY + rainOffset) % ((col.rowsPerColumn + 4) * lineHeightRef.current)) - lineHeightRef.current * 2
-      p.row = slot.row
-      p.head = Math.abs(slot.row - col.headRow) < 0.9
-      if (Math.random() < 0.02) {
-        p.char = sourceCharsRef.current[(i + Math.floor(elapsed / 70)) % sourceCharsRef.current.length] || p.char
-      }
-      simulateParticle(p)
-      const homeDist = Math.sqrt((p.x - p.tx) ** 2 + (p.y - p.ty) ** 2)
-      const alpha = Math.max(0.18, 0.9 - homeDist / 260)
-      const hue = 115 + (i % 24)
-      const lightness = p.head ? 86 : 54 + Math.sin(now * 0.002 + p.row * 0.4) * 8
-      ctx.shadowBlur = p.head ? fontSize * 0.9 : 0
-      ctx.shadowColor = `hsla(${hue}, 90%, 70%, ${0.55 + (p.head ? HEAD_GLOW_BOOST : 0)})`
-      ctx.fillStyle = `hsla(${hue}, 88%, ${lightness}%, ${alpha})`
-      ctx.fillText(p.char, p.x, p.y)
-    }
-    ctx.shadowBlur = 0
-  }
+  // --- Ambient layer frame integration ---------------------------------------
 
-  const drawWeather = (now: number) => {
-    const canvas = canvasRef.current
-    const ctx = ctxRef.current
-    if (!canvas || !ctx) return
-    const preset = weatherPresetRef.current
-    const W = window.innerWidth
-    const H = window.innerHeight
-    const intMul = weatherIntensityRef.current / 100
-    const windMul = weatherWindRef.current / 50
-    const turbMul = weatherTurbulenceRef.current / 60
+  // Collision pass for one physics tick: copy main-glyph positions into the
+  // reusable buffers, rebuild the hash grid, resolve, and apply the clamped
+  // counter-impulses back to the spring-tethered particles. Main glyphs are
+  // never checked against each other.
+  const resolveAmbientCollisionsTick = (field: AmbientField) => {
     const particles = particlesRef.current
-    if (preset === 'rain') {
-      const mesh = meshBgsRef.current?.rain
-      if (mesh) ctx.drawImage(mesh, 0, 0, W, H)
-      ctx.fillStyle = 'rgba(5, 8, 18, 0.3)'
-      ctx.fillRect(0, 0, W, H)
-      const count = Math.min(particles.length, Math.floor(120 * turbMul * intMul))
+    const mainCount = particles.length
+    const { width, height } = getViewportSize()
+    const start = performance.now()
+    let grid = ambientGridRef.current
+    if (!grid || grid.next.length < field.count + mainCount) {
+      grid = createAmbientCollisionGrid(width, height, field.capacity + mainCount)
+      ambientGridRef.current = grid
+    }
+    if (ambientMainXRef.current.length < mainCount) {
+      ambientMainXRef.current = new Float32Array(mainCount)
+      ambientMainYRef.current = new Float32Array(mainCount)
+      ambientMainImpulseXRef.current = new Float32Array(mainCount)
+      ambientMainImpulseYRef.current = new Float32Array(mainCount)
+    }
+    const mainX = ambientMainXRef.current
+    const mainY = ambientMainYRef.current
+    const impulseX = ambientMainImpulseXRef.current
+    const impulseY = ambientMainImpulseYRef.current
+    for (let i = 0; i < mainCount; i += 1) {
+      mainX[i] = particles[i].x
+      mainY[i] = particles[i].y
+      impulseX[i] = 0
+      impulseY[i] = 0
+    }
+    rebuildAmbientCollisionGrid(grid, field, mainX, mainY, mainCount)
+    resolveAmbientCollisions(field, grid, mainX, mainY, mainCount, impulseX, impulseY)
+    for (let i = 0; i < mainCount; i += 1) {
+      if (impulseX[i] !== 0 || impulseY[i] !== 0) {
+        particles[i].vx += impulseX[i]
+        particles[i].vy += impulseY[i]
+      }
+    }
+    const cost = performance.now() - start
+    ambientCollisionMsRef.current = lerp(
+      ambientCollisionMsRef.current,
+      cost,
+      AMBIENT_COLLISION_COST_SMOOTHING,
+    )
+  }
+
+  // Advance the ambient pool at the tier's physics tick rate. Reduced motion
+  // gets one deterministic static pose per rebuild (fixed ticks from the
+  // seeded initialization) and no animation — mirroring the main field.
+  const updateAmbient = (now: number) => {
+    const field = ambientFieldRef.current
+    if (!field) return
+    const { width, height } = getViewportSize()
+    const config = ambientConfigRef.current
+
+    if (reducedMotionRef.current) {
+      // Param edits re-resolve the live count even while the pose is frozen.
+      field.count = resolveAmbientCount(field, config)
+      if (ambientStaticPoseDirtyRef.current) {
+        ambientStaticPoseDirtyRef.current = false
+        for (let t = 0; t < AMBIENT_REDUCED_POSE_TICKS; t += 1) {
+          stepAmbientField(field, {
+            dt: 1 / 60,
+            time: t / 60,
+            config,
+            pointer: {
+              x: 0,
+              y: 0,
+              active: false,
+              influence: 0,
+              vx: 0,
+              vy: 0,
+            },
+            repelRadius: 0,
+            repelStrength: 0,
+            width,
+            height,
+          })
+        }
+      }
+      return
+    }
+
+    const tickHz = Math.max(1, qualityBudgetRef.current.ambientTickHz)
+    if (ambientLastTickRef.current === 0) ambientLastTickRef.current = now
+    ambientTickAccumRef.current += Math.min(100, Math.max(0, now - ambientLastTickRef.current))
+    ambientLastTickRef.current = now
+    const tickMs = 1000 / tickHz
+    let steps = 0
+    while (ambientTickAccumRef.current >= tickMs && steps < 4) {
+      ambientTickAccumRef.current -= tickMs
+      steps += 1
       const pointer = getPointerForFrame()
-      for (let i = 0; i < count; i += 1) {
-        const p = particles[i]
-        p.y += (p.speed ?? 1) * intMul
-        p.x += (p.drift ?? 0) * windMul
-        if (pointer.active && pointer.influence > 0) {
-          const dxw = p.x - pointer.x
-          const dyw = p.y - pointer.y
-          const distSqW = dxw * dxw + dyw * dyw
-          const radiusW = mouseRRef.current || 0
-          if (distSqW > 0 && distSqW < radiusW * radiusW) {
-            const distW = Math.sqrt(distSqW)
-            const repelStrengthW = (1 - distW / radiusW) * (weatherRepelRef.current || 6) * pointer.influence
-            p.x += (dxw / distW) * repelStrengthW
-            p.y += (dyw / distW) * repelStrengthW
-          }
-        }
-        if (p.y > H + lineHeightRef.current) {
-          p.y = -lineHeightRef.current
-          p.x = Math.random() * W
-        }
-        if (p.x < -40) p.x = W + 20
-        if (p.x > W + 40) p.x = -20
-        const streakLen = (p.speed ?? 1) * intMul * 2.5
-        const streakDriftX = (p.drift ?? 0) * windMul * 1.5
-        ctx.strokeStyle = `hsla(200, 60%, 70%, ${(p.alpha ?? 0.5) * 0.3})`
+      const velocity = pointerVelocityRef.current
+      stepAmbientField(field, {
+        dt: tickMs / 1000,
+        time: now / 1000,
+        config,
+        pointer: {
+          x: pointer.x,
+          y: pointer.y,
+          active: !activeStrokeRef.current && pointer.active,
+          influence: pointer.influence,
+          vx: velocity.vx,
+          vy: velocity.vy,
+        },
+        repelRadius: mouseRRef.current || 0,
+        repelStrength: (weatherRepelRef.current || 6) * AMBIENT_POINTER_REPEL_SCALE,
+        width,
+        height,
+      })
+      resolveAmbientCollisionsTick(field)
+    }
+    // Drop the backlog if the tab was throttled so agents never lurch.
+    if (steps === 4) ambientTickAccumRef.current = 0
+  }
+
+  // Quantized scaled font strings for weather agents (font changes are
+  // expensive; sizes are rounded to halves and cached).
+  const getScaledAmbientFont = (sizeScale: number) => {
+    const key = Math.max(0.5, Math.round(sizeScale * 2) / 2)
+    const cache = matrixFontCacheRef.current
+    const cached = cache.get(key)
+    if (cached) return cached
+    if (cache.size > 16) cache.clear()
+    const base = fontSize * glyphScaleRef.current * key
+    const scaled = fontRef.current.replace(/^(\d+(?:\.\d+)?)px/, `${Math.round(base)}px`)
+    cache.set(key, scaled)
+    return scaled
+  }
+
+  // Render the live ambient agents between the background paint channel and
+  // the main glyphs (render order: background → bg paint → ambient → glyphs).
+  const drawAmbient = (ctx: CanvasRenderingContext2D, W: number, H: number) => {
+    const field = ambientFieldRef.current
+    if (!field || field.count === 0) return
+    const config = ambientConfigRef.current
+    const chars = sourceCharsRef.current
+    const charCount = Math.max(1, chars.length)
+
+    if (field.mode === 'matrix') {
+      // The streams render into an offscreen layer whose previous frame is
+      // faded with destination-out, so the trail glow never dims the scene.
+      const pixelRatio = pixelRatioRef.current
+      let layer = ambientCanvasRef.current
+      if (
+        !layer ||
+        layer.width !== Math.max(1, Math.round(W * pixelRatio)) ||
+        layer.height !== Math.max(1, Math.round(H * pixelRatio))
+      ) {
+        layer = document.createElement('canvas')
+        layer.width = Math.max(1, Math.round(W * pixelRatio))
+        layer.height = Math.max(1, Math.round(H * pixelRatio))
+        ambientCanvasRef.current = layer
+      }
+      const actx = layer.getContext('2d')
+      if (!actx) return
+      actx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
+      actx.globalCompositeOperation = 'destination-out'
+      actx.fillStyle = `rgba(0, 0, 0, ${matrixTrailFade(config.matrix.trailStrength)})`
+      actx.fillRect(0, 0, W, H)
+      actx.globalCompositeOperation = 'source-over'
+      actx.font = fontRef.current
+      actx.textAlign = 'center'
+      actx.textBaseline = 'middle'
+      for (let i = 0; i < field.count; i += 1) {
+        const head = field.head[i] === 1
+        const hue = field.hue[i]
+        const lightness = head ? 86 : 54
+        actx.shadowBlur = head ? fontSize * 0.9 : 0
+        actx.shadowColor = `hsla(${hue}, 90%, 70%, 0.85)`
+        actx.fillStyle = `hsla(${hue}, 88%, ${lightness}%, ${head ? 0.95 : 0.6})`
+        actx.fillText(chars[i % charCount] || ' ', field.x[i], field.y[i])
+      }
+      actx.shadowBlur = 0
+      ctx.drawImage(layer, 0, 0, W, H)
+      return
+    }
+
+    // Weather: preset-driven agents, optionally softened by the blur knob.
+    const preset = config.weather.preset
+    const profile = WEATHER_PROFILES[preset]
+    const blurPx = (config.weather.blur / 100) * 3
+    ctx.save()
+    if (blurPx > 0.05 && preset === 'fog') {
+      try {
+        ctx.filter = `blur(${blurPx.toFixed(2)}px)`
+      } catch {}
+    }
+    const precipitation = profile.recycleBottom
+    for (let i = 0; i < field.count; i += 1) {
+      const x = field.x[i]
+      const y = field.y[i]
+      const hue = field.hue[i]
+      const alpha = field.alpha[i]
+      if (preset === 'fog') {
+        // Large, very low-alpha soft discs; the blur knob finishes the haze.
+        const radius = fontSize * field.size[i] * 2
+        const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius)
+        gradient.addColorStop(0, `hsla(${hue}, 12%, 88%, ${alpha})`)
+        gradient.addColorStop(1, `hsla(${hue}, 12%, 88%, 0)`)
+        ctx.fillStyle = gradient
+        ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2)
+        continue
+      }
+      if (precipitation && (preset === 'rain' || preset === 'storm')) {
+        const streakLen = Math.min(48, field.vy[i] * 0.04)
+        const streakX = -field.vx[i] * 0.04
+        ctx.strokeStyle = `hsla(${hue}, 60%, 70%, ${alpha * 0.35})`
         ctx.lineWidth = 1
         ctx.beginPath()
-        ctx.moveTo(p.x, p.y)
-        ctx.lineTo(p.x - streakDriftX, p.y - streakLen)
+        ctx.moveTo(x, y)
+        ctx.lineTo(x + streakX, y - streakLen)
         ctx.stroke()
-        ctx.fillStyle = `hsla(200, 55%, 72%, ${p.alpha ?? 0.5})`
-        ctx.fillText(p.char, p.x, p.y)
+        ctx.fillStyle = `hsla(${hue}, 55%, 72%, ${alpha})`
+        ctx.fillText(chars[i % charCount] || '|', x, y)
+        continue
       }
-    } else {
-      const mesh = meshBgsRef.current?.clear
-      if (mesh) ctx.drawImage(mesh, 0, 0, W, H)
-      const t = now * 0.0005
-      const count = Math.min(particles.length, Math.floor(120 * intMul))
-      const pointer = getPointerForFrame()
-      for (let i = 0; i < count; i += 1) {
-        const p = particles[i]
-        p.x = (p.homeX ?? 0) + Math.sin(t + (p.phase ?? 0)) * 35
-        p.y = (p.homeY ?? 0) + Math.cos(t * 0.7 + (p.phase ?? 0)) * 25
-        p.y -= Math.sin(now * 0.002 + (p.phase ?? 0) * 3) * 0.3
-        if (pointer.active && pointer.influence > 0) {
-          const dxw = p.x - pointer.x
-          const dyw = p.y - pointer.y
-          const distSqW = dxw * dxw + dyw * dyw
-          const radiusW = mouseRRef.current || 0
-          if (distSqW > 0 && distSqW < radiusW * radiusW) {
-            const distW = Math.sqrt(distSqW)
-            const repelStrengthW = (1 - distW / radiusW) * (weatherRepelRef.current ? (weatherRepelRef.current / 2) : 3) * pointer.influence
-            p.x += (dxw / distW) * repelStrengthW
-            p.y += (dyw / distW) * repelStrengthW
-          }
-        }
-        ctx.fillStyle = `hsla(210, 20%, 92%, ${p.alpha ?? 0.4})`
-        ctx.fillText(p.char, p.x, p.y)
-      }
+      // Snow, blizzard, clear, wind: sized glyph flakes/motes.
+      ctx.font = getScaledAmbientFont(field.size[i])
+      ctx.fillStyle = `hsla(${hue}, 35%, 90%, ${alpha})`
+      ctx.fillText(chars[i % charCount] || '.', x, y)
+      ctx.font = fontRef.current
     }
+    ctx.restore()
+    // Storm lightning: a brief full-scene flash on top of the agents.
+    if (field.lightningFlash > 0) {
+      ctx.fillStyle = `rgba(235, 240, 255, ${(field.lightningFlash * 0.35).toFixed(3)})`
+      ctx.fillRect(0, 0, W, H)
+    }
+  }
+
+  // Weather mood backdrop: the legacy mesh gradients, reused at partial alpha
+  // over the configured background so the playground colors survive.
+  const drawAmbientBackdrop = (ctx: CanvasRenderingContext2D, W: number, H: number) => {
+    const config = ambientConfigRef.current
+    if (config.mode !== 'weather') return
+    const preset = config.weather.preset
+    const meshes = meshBgsRef.current
+    if (!meshes) return
+    const mesh = preset === 'blizzard' ? meshes.snow : meshes[preset]
+    if (!mesh) return
+    ctx.save()
+    ctx.globalAlpha = 0.55
+    ctx.drawImage(mesh, 0, 0, W, H)
+    ctx.restore()
   }
 
   useEffect(() => {
@@ -962,59 +2378,174 @@ function SceneCanvasInternal(
     if (!ctx) return
     ctxRef.current = ctx
 
-    const resizeSceneListener = () => resizeScene()
-    resizeScene()
-    window.addEventListener('resize', resizeSceneListener)
+    // Observe the canvas container instead of the window so the scene tracks
+    // its actual layout box; resize handling is debounced.
+    const container = canvas.parentElement
+    let resizeObserver: ResizeObserver | null = null
+    if (container && typeof ResizeObserver !== 'undefined') {
+      viewportSizeRef.current = {
+        width: Math.round(container.clientWidth),
+        height: Math.round(container.clientHeight),
+      }
+      resizeObserver = new ResizeObserver((entries) => {
+        const rect = entries[0]?.contentRect
+        if (!rect) return
+        const width = Math.round(rect.width)
+        const height = Math.round(rect.height)
+        const prev = viewportSizeRef.current
+        if (prev.width === width && prev.height === height) return
+        viewportSizeRef.current = { width, height }
+        if (resizeTimeoutRef.current !== null) {
+          window.clearTimeout(resizeTimeoutRef.current)
+        }
+        resizeTimeoutRef.current = window.setTimeout(() => {
+          resizeTimeoutRef.current = null
+          resizeScene()
+        }, RESIZE_DEBOUNCE_MS)
+      })
+      resizeObserver.observe(container)
+    }
 
-    setWeatherPreset('rain')
-    setWeatherIntensity(125)
-    setWeatherTurbulence(125)
+    resizeScene()
+
     setFontSize(12)
     activateSceneMode('svg')
 
+    // Adaptive quality: anchor the warm-up clock and the mobile start tier to
+    // the real viewport, then adopt the initial budgets.
+    qualityControllerRef.current = createQualityController({
+      mobile: isMobileViewport(viewportSizeRef.current.width),
+      mountMs: performance.now(),
+    })
+    qualityBudgetRef.current = resolveEffectiveQualityBudget(
+      qualityControllerRef.current.getTier(),
+      viewportSizeRef.current.width,
+    )
+    if (qualityTierOverrideRef.current !== null) {
+      qualityControllerRef.current.setOverride(qualityTierOverrideRef.current, performance.now())
+    }
+    applyQualityTier()
+
     const { addListeners, removeListeners } = createPointerListeners()
     addListeners()
+
+    // Animated sources pause while the tab is hidden (provider contract);
+    // the frame loop's own hidden-guard stops the sampling driver too.
+    const handleProviderVisibility = () => {
+      animatedProviderRef.current?.setPaused(document.hidden)
+    }
+    document.addEventListener('visibilitychange', handleProviderVisibility)
 
     canvas.style.touchAction = 'none'
     addCanvasPointerListeners(canvas)
 
     return () => {
-      window.removeEventListener('resize', resizeSceneListener)
+      if (resizeObserver) resizeObserver.disconnect()
+      if (resizeTimeoutRef.current !== null) {
+        window.clearTimeout(resizeTimeoutRef.current)
+        resizeTimeoutRef.current = null
+      }
+      // Invalidate pending source loads and scheduled rebuilds so nothing
+      // resolves into an unmounted scene.
+      svgLoadRequestRef.current += 1
+      if (rebuildSvgTimeoutRef.current !== null) {
+        window.clearTimeout(rebuildSvgTimeoutRef.current)
+        rebuildSvgTimeoutRef.current = null
+      }
+      document.removeEventListener('visibilitychange', handleProviderVisibility)
+      stopAnimatedProvider()
+      animatedStagingRef.current = null
       removeListeners()
       removeCanvasPointerListeners(canvas)
     }
   }, [])
 
   useEffect(() => {
-    if (weatherEnabled) {
-      buildWeatherParticles()
-    }
-  }, [weatherEnabled, weatherPreset, weatherIntensity, weatherWind, weatherTurbulence])
-
-  useEffect(() => {
-    if (matrixEnabled) {
-      buildMatrixStructure()
-    }
-  }, [matrixEnabled, matrixSpread, matrixSpeed, matrixVolume])
-
-  useEffect(() => {
     const frame = (now: number) => {
       const ctx = ctxRef.current
       if (!ctx) return
+      // Cheap early-return while the tab is hidden: no sim, no draw, no
+      // diagnostics. The sim is per-frame (springs accumulate no time delta)
+      // and ambient targets derive from the frame clock, so resuming never
+      // flings glyphs.
+      if (document.hidden) {
+        animationRef.current = requestAnimationFrame(frame)
+        return
+      }
+      const frameStart = performance.now()
       const revealedChars = Math.min(totalCharsRef.current, Math.floor((now - typewriterStartRef.current) / 1000 * TYPEWRITER_CPS))
       ctx.font = fontRef.current
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
+      // Pointer velocity for the ambient drag force: smoothed per-frame delta
+      // of the repel pointer, decaying toward zero when the pointer rests.
+      const pointerState = pointerRef.current
+      const velocity = pointerVelocityRef.current
+      if (velocity.lastNow > 0) {
+        const dtMs = Math.max(1, now - velocity.lastNow)
+        if (pointerState.active) {
+          const instVx = ((pointerState.x - velocity.lastX) / dtMs) * 1000
+          const instVy = ((pointerState.y - velocity.lastY) / dtMs) * 1000
+          velocity.vx = lerp(velocity.vx, instVx, 0.35)
+          velocity.vy = lerp(velocity.vy, instVy, 0.35)
+        } else {
+          velocity.vx *= 0.8
+          velocity.vy *= 0.8
+        }
+      }
+      velocity.lastX = pointerState.x
+      velocity.lastY = pointerState.y
+      velocity.lastNow = now
+      // Paint stamping is processed at most once per animation frame.
+      processPaintQueue()
+      // Animated sources re-sample at the tier's sampling budget.
+      sampleAnimatedSourceFrame(now)
       const mode = sceneModeRef.current
       if (mode === 'svg') drawSvgGlyphScene(now)
-      else if (mode === 'matrix') drawMatrix(now, revealedChars)
-      else if (mode === 'weather') drawWeather(now)
       else drawParagraph(now, revealedChars)
+      const frameCost = performance.now() - frameStart
+      frameTimingRef.current.record(frameCost, frameStart)
+      // Adaptive quality: feed the frame cost into the hysteresis controller
+      // and apply the new budgets when a transition fires. Windows containing
+      // a resize or a source rebuild are ignored by the controller.
+      const controller = qualityControllerRef.current
+      if (controller) {
+        const transition = controller.recordFrame({
+          timestampMs: frameStart,
+          renderMs: frameCost,
+          resized: qualityResizePendingRef.current,
+          rebuilt: qualityRebuildPendingRef.current,
+        })
+        qualityResizePendingRef.current = false
+        qualityRebuildPendingRef.current = false
+        if (transition) applyQualityTier()
+      }
+      if (
+        tuningModeRef.current &&
+        frameStart - lastDiagnosticsPushRef.current >= DIAGNOSTICS_PUSH_INTERVAL_MS
+      ) {
+        lastDiagnosticsPushRef.current = frameStart
+        pushDiagnostics()
+      }
+      // Reduced motion: one settled frame, then the loop stops. Rebuilds
+      // re-arm a single frame via renderOnceRef; disabling reduced motion
+      // restarts the continuous loop the same way.
+      if (reducedMotionRef.current) {
+        animationRef.current = null
+        return
+      }
       animationRef.current = requestAnimationFrame(frame)
+    }
+
+    renderOnceRef.current = () => {
+      if (animationRef.current === null) {
+        animationRef.current = requestAnimationFrame(frame)
+      }
     }
 
     animationRef.current = requestAnimationFrame(frame)
     return () => {
+      renderOnceRef.current = () => {}
       if (animationRef.current !== null) cancelAnimationFrame(animationRef.current)
     }
   }, [])
@@ -1024,6 +2555,7 @@ function SceneCanvasInternal(
     x: -9999,
     y: -9999,
     active: false,
+    kind: 'none' as PointerKind,
     touchPointerId: -1,
     fadeEndTime: 0,
     fadeStartX: -9999,
@@ -1049,6 +2581,7 @@ function SceneCanvasInternal(
     pointerRef.current.x = point.x
     pointerRef.current.y = point.y + (isTouch ? TOUCH_Y_OFFSET : 0)
     pointerRef.current.active = true
+    pointerRef.current.kind = isTouch ? 'touch' : 'mouse'
   }
 
   const startFade = () => {
@@ -1071,9 +2604,24 @@ function SceneCanvasInternal(
   const onCanvasPointerEnter = (event: PointerEvent) => {
     if (event.pointerType === 'touch') return
     updatePointerFromEvent(event, false)
+    if (paintToolRef.current.enabled) {
+      const point = getCanvasCssPoint(event)
+      updateBrushRing(point.x, point.y, true)
+    }
   }
 
   const onCanvasPointerMove = (event: PointerEvent) => {
+    const stroke = activeStrokeRef.current
+    if (stroke) {
+      // Mid-gesture: queue paint points instead of driving the repel pointer.
+      if (event.pointerId !== stroke.pointerId) return
+      const point = getCanvasCssPoint(event)
+      const y = point.y + (event.pointerType === 'touch' ? TOUCH_Y_OFFSET : 0)
+      pendingPaintPointsRef.current.push(point.x, y)
+      updateBrushRing(point.x, y, true)
+      renderOnceRef.current()
+      return
+    }
     const state = pointerRef.current
     const isTouch = event.pointerType === 'touch'
     if (isTouch) {
@@ -1086,23 +2634,78 @@ function SceneCanvasInternal(
       }
     } else {
       updatePointerFromEvent(event, false)
+      if (paintToolRef.current.enabled) {
+        const point = getCanvasCssPoint(event)
+        updateBrushRing(point.x, point.y, true)
+      }
     }
   }
 
   const onCanvasPointerDown = (event: PointerEvent) => {
-    if (event.pointerType !== 'touch') return
+    const isTouch = event.pointerType === 'touch'
     const state = pointerRef.current
-    if (state.touchPointerId !== -1) return
-    state.touchPointerId = event.pointerId
-    updatePointerFromEvent(event, true)
-    if (canvasRef.current) {
-      try {
-        canvasRef.current.setPointerCapture(event.pointerId)
-      } catch {}
+    // Paint mode: a pointer press starts a stroke (mouse, pen, or the first
+    // touch) and never fires a click impulse.
+    if (paintToolRef.current.enabled) {
+      if (activeStrokeRef.current) return
+      if (isTouch && state.touchPointerId !== -1) return
+      if (isTouch) state.touchPointerId = event.pointerId
+      const point = getCanvasCssPoint(event)
+      beginPaintStroke(event, {
+        x: point.x,
+        y: point.y + (isTouch ? TOUCH_Y_OFFSET : 0),
+      })
+      return
     }
+    if (isTouch) {
+      if (state.touchPointerId !== -1) return
+      state.touchPointerId = event.pointerId
+      updatePointerFromEvent(event, true)
+      if (canvasRef.current) {
+        try {
+          canvasRef.current.setPointerCapture(event.pointerId)
+        } catch {}
+      }
+    } else {
+      updatePointerFromEvent(event, false)
+    }
+    // Click/tap blast: a one-shot radial velocity kick that the spring+damp
+    // integration settles on its own. Fully skipped under reduced motion —
+    // no impulse and no renderOnce re-arm, so the static frame stays settled.
+    if (reducedMotionRef.current) return
+    const affected = applyRadialImpulse(
+      particlesRef.current,
+      state.x,
+      state.y,
+      clickImpulseRadiusRef.current,
+      clickImpulseForceRef.current,
+    )
+    // The ambient pool gets the same radial kick (typed-array mirror of
+    // engine/impulse.ts), scaled by the shared interaction strength.
+    const ambientField = ambientFieldRef.current
+    if (ambientField) {
+      applyAmbientRadialImpulse(
+        ambientField,
+        state.x,
+        state.y,
+        clickImpulseRadiusRef.current,
+        clickImpulseForceRef.current * ambientConfigRef.current.interactionStrength,
+      )
+    }
+    patchDiagnostics({
+      impulseCount: diagnosticsRef.current.impulseCount + 1,
+      lastImpulseAffected: affected,
+    })
   }
 
   const onCanvasPointerUp = (event: PointerEvent) => {
+    const stroke = activeStrokeRef.current
+    if (stroke && event.pointerId === stroke.pointerId) {
+      endPaintStroke()
+      startFade()
+      if (event.pointerType === 'touch') updateBrushRing(0, 0, false)
+      return
+    }
     const state = pointerRef.current
     if (event.pointerType === 'touch' && state.touchPointerId === event.pointerId) {
       startFade()
@@ -1111,19 +2714,36 @@ function SceneCanvasInternal(
 
   const onCanvasPointerLeave = (event: PointerEvent) => {
     if (event.pointerType === 'touch') return
+    if (activeStrokeRef.current) return
     clearPointer()
+    updateBrushRing(0, 0, false)
   }
 
   const onCanvasPointerCancel = (event: PointerEvent) => {
+    const stroke = activeStrokeRef.current
+    if (stroke && event.pointerId === stroke.pointerId) {
+      endPaintStroke()
+      startFade()
+      updateBrushRing(0, 0, false)
+      return
+    }
     const state = pointerRef.current
     if (event.pointerType === 'touch' && state.touchPointerId === event.pointerId) {
       startFade()
     } else if (event.pointerType !== 'touch') {
       clearPointer()
+      updateBrushRing(0, 0, false)
     }
   }
 
   const onLostPointerCapture = (event: PointerEvent) => {
+    const stroke = activeStrokeRef.current
+    if (stroke && event.pointerId === stroke.pointerId) {
+      endPaintStroke()
+      startFade()
+      if (event.pointerType === 'touch') updateBrushRing(0, 0, false)
+      return
+    }
     const state = pointerRef.current
     if (event.pointerType === 'touch' && state.touchPointerId === event.pointerId) {
       startFade()
@@ -1150,24 +2770,20 @@ function SceneCanvasInternal(
     canvas.removeEventListener('lostpointercapture', onLostPointerCapture)
   }
 
-  const toggleMatrix = () => {
-    activateSceneMode(matrixEnabled ? 'paragraph' : 'matrix')
-  }
-
-  const toggleWeather = () => {
-    activateSceneMode(weatherEnabled ? 'paragraph' : 'weather')
-  }
-
-  const onShuffle = () => {
-    typewriterStartRef.current = performance.now()
-    if (matrixEnabledRef.current) buildMatrixStructure()
-  }
-
   const showTuningUi = tuningMode
 
   return (
-    <div className={['scene-root', className].filter(Boolean).join(' ')}>
+    <div
+      className={[
+        'scene-root',
+        paintTool?.enabled && 'scene-root-painting',
+        className,
+      ].filter(Boolean).join(' ')}
+    >
       <canvas ref={canvasRef} />
+      {paintTool?.enabled && (
+        <div ref={brushRingRef} className="paint-brush-ring" aria-hidden="true" />
+      )}
       {showTuningUi && (
         <div className="dev-diagnostics" aria-hidden="true">
           <div>mode: {diagnostics.mode}</div>
@@ -1176,13 +2792,38 @@ function SceneCanvasInternal(
           <div>progress: {(sequenceDiagnostics?.phaseProgress ?? 0).toFixed(2)}</div>
           <div>speed: {(sequenceDiagnostics?.speed ?? 1).toFixed(2)}x</div>
           <div>hidden: {sequenceDiagnostics?.documentHidden ? 'yes' : 'no'}</div>
-          <div>source: {diagnostics.sourceStatus}</div>
+          <div>source: {diagnostics.sourceStatus}{diagnostics.sourceError ? `: ${diagnostics.sourceError}` : ''}</div>
           <div>targets: {diagnostics.targetCount}</div>
           <div>glyphs: {diagnostics.glyphCount}</div>
           <div>visible: {diagnostics.visibleCount}</div>
           <div>assigned: {diagnostics.assignedCount}</div>
           <div>unassigned: {diagnostics.unassignedCount}</div>
           <div>hidden: {diagnostics.hiddenCount}</div>
+          <div>
+            motion: {diagnostics.motionMode}
+            {diagnostics.motionMode === 'parametric-creature' ? `/${diagnostics.motionVariant}` : ''}
+          </div>
+          <div>
+            density: {diagnostics.motionRequestedDensity} → {diagnostics.motionEffectiveDensity}
+          </div>
+          <div>
+            rate: {diagnostics.motionRequestedUpdateRate} → {diagnostics.motionEffectiveUpdateRate} Hz
+          </div>
+          <div>painted: {diagnostics.paintedTargetCount}</div>
+          <div>bg strokes: {diagnostics.paintedBackgroundStrokeCount}</div>
+          <div>
+            ambient: {diagnostics.ambientMode} ({diagnostics.ambientAgentCount} agents)
+          </div>
+          <div>collision: {diagnostics.ambientCollisionMs.toFixed(2)} ms/tick</div>
+          <div>
+            tier: T{diagnostics.qualityTier}
+            {diagnostics.qualityTierOverride ? ' (override)' : ''} — {diagnostics.qualityLastTransition}
+          </div>
+          <div>
+            budgets: glyphs ≤{diagnostics.qualityGlyphCap || '∞'}, creature ≤
+            {diagnostics.qualityCreatureCap}@{diagnostics.qualityCreatureRate}Hz, ambient ≤
+            {diagnostics.qualityAmbientCap}@{diagnostics.qualityAmbientTickHz}Hz
+          </div>
         </div>
       )}
     </div>

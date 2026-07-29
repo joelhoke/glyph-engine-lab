@@ -6,6 +6,7 @@ import {
   formatNumericValue,
   isPotentiallyValidDraft,
   NumericControlDefinition,
+  stepNumericValue,
 } from './tuningConfig'
 
 type NumericControlProps = {
@@ -78,6 +79,16 @@ export default function NumericControl({
       event.preventDefault()
       setIsEditing(false)
       setDraft(formatNumericValue(value, step))
+    } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      // ±1 step interval, ±10 with Shift — committed immediately.
+      event.preventDefault()
+      const direction = event.key === 'ArrowUp' ? 1 : -1
+      const next = stepNumericValue(value, direction, min, max, step, event.shiftKey ? 10 : 1)
+      setDraft(formatNumericValue(next, step))
+      setIsEditing(false)
+      if (next !== value) {
+        onChange(next)
+      }
     }
   }
 
@@ -101,6 +112,7 @@ export default function NumericControl({
             disabled={disabled}
             aria-label={`${label} slider`}
             onChange={handleSliderChange}
+            onKeyDown={handleKeyDown}
             className="numeric-control-slider"
           />
         )}

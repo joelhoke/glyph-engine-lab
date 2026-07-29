@@ -1,0 +1,33 @@
+# Cloudflare Pages header rules for the static export (M9 launch hardening).
+# Pages applies these verbatim; `output: 'export'` copies this file into out/.
+
+# Content-hashed build assets: immutable, year-long cache. These URLs change
+# with every build, so a stale entry can never serve the wrong asset — and a
+# correct `Content-Type` here keeps strict MIME checks from rejecting the
+# stylesheet (the "raw HTML" failure mode).
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Site-owned static assets (logo, OG image, work media): revalidate daily.
+/assets/*
+  Cache-Control: public, max-age=86400
+
+/*.png
+  Cache-Control: public, max-age=86400
+
+# HTML: always revalidate so deploys go live immediately.
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Baseline security headers on every response. The confidential viewer and
+# /api/protected/* set stricter, no-store variants inside their Pages
+# Functions (those override nothing here — Pages Functions responses carry
+# their own headers).
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN
+  Permissions-Policy: camera=(), microphone=(), geolocation=()

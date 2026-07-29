@@ -1,0 +1,22 @@
+# Cloudflare Pages project configuration (M9 launch hardening).
+#
+# The site remains a fully static export (`output: 'export'` in next.config.js
+# → `npm run build` emits out/). Pages serves out/ verbatim; Pages Functions in
+# functions/ handle the confidential API separately and never participate in
+# the public static routes.
+#
+# Deploys run from the Cloudflare dashboard or an authenticated wrangler
+# session (see docs/deployment.md). Nothing here changes the local build.
+
+name = "jh-portfolio"
+pages_build_output_dir = "out"
+
+# R2 binding for the confidential-work Pages Functions (Stage 4b). Bind the
+# private bucket in the Pages dashboard (Settings → Functions → R2 bucket
+# bindings) as PROTECTED_BUCKET — dashboard bindings are the source of truth.
+# Also set ACCESS_TEAM_DOMAIN and ACCESS_AUD as project environment variables.
+# See docs/deployment.md, "Confidential work".
+#
+# [[r2_buckets]]
+# binding = "PROTECTED_BUCKET"
+# bucket_name = "jh-protected-work"

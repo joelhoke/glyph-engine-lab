@@ -2,60 +2,69 @@
 
 import { cloneElement, isValidElement, ReactElement, ReactNode, useEffect, useId, useRef, useState } from 'react'
 import { BorderBeam } from 'border-beam'
-
-type PlaygroundDockState = 'invitation' | 'controls'
+import { VibeSurfaceStatus } from './vibe/VibeExperience'
 
 type PlaygroundControlDockProps = {
-  invitation: ReactNode
+  /** Controlled open state; the parent owns the card ⇄ dock exclusivity. */
+  open: boolean
+  onClose: () => void
   controls: ReactElement<any>
+  /** Quiet one-line nudge shown inside the open dock. */
+  invitation?: ReactNode
+  /** Source-lifecycle status: the active status presentation while open. */
+  status?: VibeSurfaceStatus | null
+  /** id for the controls region (the card CTA's aria-controls target). */
+  paneId?: string
 }
 
 /**
- * Public creative-control dock with two presentation states.
+ * Public creative-control dock, rendered only in its open state.
  *
- * The positioned anchor is a plain div so BorderBeam cannot override its
- * absolute placement. BorderBeam wraps the inner content with the same beam
- * treatment used by the primary actions and stays mounted across state changes.
+ * The parent (PortfolioExperience) owns the open/closed state so the closed
+ * presentation — the invitation card — can live in the mode surface and
+ * unmount entirely while this dock is on screen. The positioned anchor is a
+ * plain div so BorderBeam cannot override its absolute placement; BorderBeam
+ * wraps the inner content with the same beam treatment used by the primary
+ * actions and stays mounted across state changes.
  */
-export default function PlaygroundControlDock({ invitation, controls }: PlaygroundControlDockProps) {
+export default function PlaygroundControlDock({
+  open,
+  onClose,
+  controls,
+  invitation,
+  status,
+  paneId,
+}: PlaygroundControlDockProps) {
   const stableId = useId().replace(/:/g, '-')
   const [mounted, setMounted] = useState(false)
-  const [state, setState] = useState<PlaygroundDockState>('invitation')
-  const startCreatingRef = useRef<HTMLButtonElement>(null)
   const firstControlRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
+  // Opening the dock moves keyboard focus to its first control.
   useEffect(() => {
-    if (state === 'controls') {
+    if (open) {
       firstControlRef.current?.focus()
-    } else {
-      startCreatingRef.current?.focus()
     }
-  }, [state])
+  }, [open])
 
-  const handleOpen = () => setState('controls')
-  const handleClose = () => setState('invitation')
+  if (!open) return null
+
+  const content = (
+    <div className="playground-control-dock-content">
+      <PlaygroundControlsPane onClose={onClose} invitation={invitation} status={status} paneId={paneId}>
+        {isValidElement(controls)
+          ? cloneElement(controls, { ref: firstControlRef } as any)
+          : controls}
+      </PlaygroundControlsPane>
+    </div>
+  )
 
   return (
-    <div
-      className={[
-        'playground-control-dock',
-        state === 'controls' && 'playground-control-dock-workspace',
-      ].filter(Boolean).join(' ')}
-    >
-      {!mounted ? (
-        <div className="playground-control-dock-content">
-          <PlaygroundInvitation
-            startCreatingRef={startCreatingRef}
-            onOpen={handleOpen}
-          >
-            {invitation}
-          </PlaygroundInvitation>
-        </div>
-      ) : (
+    <div className="playground-control-dock playground-control-dock-workspace">
+      {mounted ? (
         <BorderBeam
           size="md"
           colorVariant="colorful"
@@ -66,46 +75,11 @@ export default function PlaygroundControlDock({ invitation, controls }: Playgrou
           className="playground-control-dock-beam"
           id={stableId}
         >
-          <div className="playground-control-dock-content">
-            {state === 'invitation' ? (
-              <PlaygroundInvitation
-                startCreatingRef={startCreatingRef}
-                onOpen={handleOpen}
-              >
-                {invitation}
-              </PlaygroundInvitation>
-            ) : (
-              <PlaygroundControlsPane onClose={handleClose}>
-                {isValidElement(controls)
-                  ? cloneElement(controls, { ref: firstControlRef } as any)
-                  : controls}
-              </PlaygroundControlsPane>
-            )}
-          </div>
+          {content}
         </BorderBeam>
+      ) : (
+        content
       )}
-    </div>
-  )
-}
-
-type PlaygroundInvitationProps = {
-  children: ReactNode
-  startCreatingRef: React.RefObject<HTMLButtonElement>
-  onOpen: () => void
-}
-
-function PlaygroundInvitation({ children, startCreatingRef, onOpen }: PlaygroundInvitationProps) {
-  return (
-    <div className="playground-invitation">
-      <p className="playground-invitation-copy">{children}</p>
-      <button
-        ref={startCreatingRef}
-        type="button"
-        className="playground-start-button"
-        onClick={onOpen}
-      >
-        Start creating →
-      </button>
     </div>
   )
 }
@@ -113,9 +87,12 @@ function PlaygroundInvitation({ children, startCreatingRef, onOpen }: Playground
 type PlaygroundControlsPaneProps = {
   children: ReactNode
   onClose: () => void
+  invitation?: ReactNode
+  status?: VibeSurfaceStatus | null
+  paneId?: string
 }
 
-function PlaygroundControlsPane({ children, onClose }: PlaygroundControlsPaneProps) {
+function PlaygroundControlsPane({ children, onClose, invitation, status, paneId }: PlaygroundControlsPaneProps) {
   const paneRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -139,6 +116,7 @@ function PlaygroundControlsPane({ children, onClose }: PlaygroundControlsPanePro
   return (
     <div
       ref={paneRef}
+      id={paneId}
       className="playground-controls-pane"
       role="region"
       aria-label="Playground controls"
@@ -171,6 +149,19 @@ function PlaygroundControlsPane({ children, onClose }: PlaygroundControlsPanePro
           Hide
         </button>
       </div>
+      {invitation && <p className="playground-dock-nudge">{invitation}</p>}
+      {status && (
+        <p
+          className={[
+            'vibe-status',
+            status.state === 'error' && 'vibe-status-error',
+          ].filter(Boolean).join(' ')}
+          role="status"
+          aria-live="polite"
+        >
+          {status.message}
+        </p>
+      )}
       {children}
     </div>
   )

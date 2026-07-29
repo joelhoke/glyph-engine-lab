@@ -9,12 +9,12 @@ type PrimaryActionsProps = {
   groupRef?: Ref<HTMLDivElement>
 }
 
-export type ExperienceKey = 'work' | 'vibes' | 'make'
+export type ExperienceKey = 'work' | 'vibe' | 'collaborate'
 
 export const primaryActions = [
   { key: 'work' as const, label: 'Work', hue: '20deg' },
-  { key: 'vibes' as const, label: 'Vibes', hue: '200deg' },
-  { key: 'make' as const, label: 'Make Something', hue: '320deg' },
+  { key: 'vibe' as const, label: 'Vibe', hue: '200deg' },
+  { key: 'collaborate' as const, label: 'Collaborate', hue: '320deg' },
 ]
 
 export const PRIMARY_ACTION_COUNT = primaryActions.length

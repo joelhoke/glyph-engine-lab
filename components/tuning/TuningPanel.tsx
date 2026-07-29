@@ -12,6 +12,8 @@ import {
   SOURCE_LAYOUT_CONTROL_DEFINITIONS,
 } from './tuningConfig'
 import { SourceLayoutConfig } from '../../engine/svgTargetSource'
+import { SceneDiagnosticsSnapshot } from '../../engine/diagnostics'
+import { QualityTier } from '../../engine/qualityTiers'
 import NumericControl from './NumericControl'
 
 type TuningPanelProps = {
@@ -27,6 +29,10 @@ type TuningPanelProps = {
   onSourceLayoutChange: (key: SourceLayoutConfigKey, value: number | string) => void
   onResetSourceLayout: () => void
   targetCount: number
+  sceneDiagnostics: SceneDiagnosticsSnapshot
+  /** Debug override for the adaptive quality tier; null = Auto. */
+  qualityTierOverride: QualityTier | null
+  onQualityTierOverrideChange: (tier: QualityTier | null) => void
   onCopyConfiguration: () => void
   onPlay: () => void
   onPause: () => void
@@ -52,6 +58,9 @@ export default function TuningPanel({
   onSourceLayoutChange,
   onResetSourceLayout,
   targetCount,
+  sceneDiagnostics,
+  qualityTierOverride,
+  onQualityTierOverrideChange,
   onCopyConfiguration,
   onPlay,
   onPause,
@@ -191,6 +200,117 @@ export default function TuningPanel({
         <button type="button" className="tuning-reset-button" onClick={onResetSourceLayout}>
           Reset source and layout
         </button>
+      </section>
+
+      <section className="tuning-section" aria-labelledby="tuning-quality-heading">
+        <h3 id="tuning-quality-heading" className="tuning-section-title">Adaptive quality</h3>
+        <div className="tuning-controls-grid">
+          <div className="numeric-control">
+            <label htmlFor="quality-tier-override" className="numeric-control-label">
+              Tier override
+            </label>
+            <select
+              id="quality-tier-override"
+              value={qualityTierOverride === null ? 'auto' : String(qualityTierOverride)}
+              onChange={(e) =>
+                onQualityTierOverrideChange(
+                  e.target.value === 'auto' ? null : (Number(e.target.value) as QualityTier),
+                )
+              }
+              className="tuning-select"
+            >
+              <option value="auto">Auto</option>
+              <option value="0">T0</option>
+              <option value="1">T1</option>
+              <option value="2">T2</option>
+              <option value="3">T3</option>
+            </select>
+          </div>
+        </div>
+        <div className="tuning-status-grid">
+          <div>
+            Tier: T{sceneDiagnostics.qualityTier}
+            {sceneDiagnostics.qualityTierOverride ? ' (override)' : ''}
+          </div>
+          <div>Last transition: {sceneDiagnostics.qualityLastTransition}</div>
+          <div>Glyph cap: {sceneDiagnostics.qualityGlyphCap || 'device budget'}</div>
+          <div>
+            Creature: ≤{sceneDiagnostics.qualityCreatureCap} @{' '}
+            {sceneDiagnostics.qualityCreatureRate} Hz
+          </div>
+          <div>
+            Ambient: {sceneDiagnostics.ambientMode} — {sceneDiagnostics.ambientAgentCount}{' '}
+            live of ≤{sceneDiagnostics.qualityAmbientCap} @{' '}
+            {sceneDiagnostics.qualityAmbientTickHz} Hz
+          </div>
+          <div>Collision cost: {sceneDiagnostics.ambientCollisionMs.toFixed(2)} ms/tick</div>
+        </div>
+      </section>
+
+      <section className="tuning-section" aria-labelledby="tuning-diagnostics-heading">
+        <h3 id="tuning-diagnostics-heading" className="tuning-section-title">Scene diagnostics</h3>
+        <div className="tuning-status-grid">
+          <div>Experience: {sceneDiagnostics.experience}</div>
+          <div>Scene: {sceneDiagnostics.sceneId}</div>
+          <div>Mode: {sceneDiagnostics.mode}</div>
+          <div>
+            Source: {sceneDiagnostics.sourceId} ({sceneDiagnostics.sourceKind},{' '}
+            {sceneDiagnostics.sourceStatus})
+          </div>
+          {sceneDiagnostics.sourceError && <div>Source error: {sceneDiagnostics.sourceError}</div>}
+          <div>
+            Decode/sample:{' '}
+            {sceneDiagnostics.sourceDecodeMs === null
+              ? '—'
+              : `${sceneDiagnostics.sourceDecodeMs.toFixed(1)} ms`}
+          </div>
+          <div>Target rebuilds: {sceneDiagnostics.targetRebuildCount}</div>
+          <div>Targets: {sceneDiagnostics.targetCount}</div>
+          <div>Glyphs: {sceneDiagnostics.glyphCount}</div>
+          <div>Assigned: {sceneDiagnostics.assignedCount}</div>
+          <div>Unassigned: {sceneDiagnostics.unassignedCount}</div>
+          <div>Visible: {sceneDiagnostics.visibleCount}</div>
+          <div>Hidden: {sceneDiagnostics.hiddenCount}</div>
+          <div>FPS: {sceneDiagnostics.fps.toFixed(1)}</div>
+          <div>Avg frame: {sceneDiagnostics.avgFrameMs.toFixed(2)} ms</div>
+          <div>Worst frame: {sceneDiagnostics.worstFrameMs.toFixed(2)} ms</div>
+          <div>Frames in window: {sceneDiagnostics.framesInWindow}</div>
+          <div>
+            Viewport: {sceneDiagnostics.viewportWidth}×{sceneDiagnostics.viewportHeight} @{' '}
+            {sceneDiagnostics.devicePixelRatio}x
+          </div>
+          <div>Reduced motion: {sceneDiagnostics.reducedMotion ? 'yes' : 'no'}</div>
+          <div>
+            Pointer: {sceneDiagnostics.pointerType}
+            {sceneDiagnostics.pointerActive ? ' (active)' : ''} @ {Math.round(sceneDiagnostics.pointerX)},
+            {Math.round(sceneDiagnostics.pointerY)}
+          </div>
+          <div>
+            Impulses: {sceneDiagnostics.impulseCount} (last affected{' '}
+            {sceneDiagnostics.lastImpulseAffected})
+          </div>
+          <div>
+            Motion: {sceneDiagnostics.motionMode}
+            {sceneDiagnostics.motionMode === 'parametric-creature'
+              ? ` (${sceneDiagnostics.motionVariant})`
+              : ''}
+          </div>
+          <div>
+            Motion density: {sceneDiagnostics.motionRequestedDensity} →{' '}
+            {sceneDiagnostics.motionEffectiveDensity} effective
+          </div>
+          <div>
+            Motion update rate: {sceneDiagnostics.motionRequestedUpdateRate} →{' '}
+            {sceneDiagnostics.motionEffectiveUpdateRate} Hz effective
+          </div>
+          <div>Painted targets: {sceneDiagnostics.paintedTargetCount}</div>
+          <div>Seed: {sceneDiagnostics.seed}</div>
+          <div>
+            Sim: spring {sceneDiagnostics.simParams.spring}, damp {sceneDiagnostics.simParams.damp},
+            mouseR {sceneDiagnostics.simParams.mouseR}, repel {sceneDiagnostics.simParams.particleRepel},
+            weatherRepel {sceneDiagnostics.simParams.weatherRepelMult}
+          </div>
+        </div>
       </section>
 
       <section className="tuning-section" aria-labelledby="tuning-status-heading">
