@@ -9,3 +9,4 @@ yarn-error.log*
 *.tsbuildinfo
 out/
 tmp-verify/
+tmp-verify-*/

@@ -1,0 +1,78 @@
+# Work case study — authoring template
+
+Copy this file when drafting a new story for `content/work.ts`. Every field
+maps to the `WorkStory` model; delete optional blocks you don't use. Stories
+render in array order — there is no fixed count.
+
+> **WARNING — confidentiality**
+> Never place confidential material in this repository: no NDA client names,
+> no internal screenshots, no unreleased metrics, no confidential manifests or
+> media. This repo (and the static export built from it) is fully public,
+> including its Git history. Confidential case studies ship as a teaser here
+> (`access: 'protected'` + an opaque `protectedId`) and are published
+> out-of-band with `scripts/publish-protected.mjs` — see
+> `docs/deployment.md`, "Confidential work".
+
+---
+
+## Identity
+
+- **Project ID** (stable slug, unique — e.g. `acme-onboarding`):
+- **Access** (`public` or `protected`):
+- **Protected publishing ID** (only when protected — opaque, `[a-z0-9-]`, no
+  client meaning, e.g. `pw-7f3a9c2d`):
+- **Public teaser note** (protected only: what may be said publicly — keep it
+  deliberately non-sensitive):
+
+## Summary card
+
+- **Title:**
+- **Thesis** (one line — what it is and why it matters):
+- **Role:**
+- **Collaborators / team scope:**
+- **Client or organization** (only if approved to name publicly):
+- **Timeframe:**
+- **Outcome** (one concise statement for the compact card):
+- **Links** (label + https URL, may be empty):
+
+## Narrative (expanded case study — public stories only)
+
+Ordered sections; each becomes a `details` entry. Suggested flow:
+
+1. **Challenge** — the problem space, users, stakes.
+2. **Constraints** — technical, organizational, budgetary limits.
+3. **Responsibilities** — what you personally owned.
+4. **Process** — research, iterations, how decisions were reached.
+5. **Decisions** — the pivotal calls and their trade-offs.
+6. **Outcome** — what shipped, what changed.
+7. **Metrics** — concrete numbers you may share publicly.
+8. **Reflection** — what you'd keep or do differently.
+
+Each section may attach: paragraphs, bullet lists, a callout line,
+attachments (label + URL), and media references (media IDs, see below).
+
+## Canvas treatment
+
+- **Glyph hero SVG** (path under `public/assets/work/`):
+- **Palette** (hex list, optional override):
+- **Background** (two hex colors, optional gradient override):
+- **Color mode** (`image-gradient` default, or `source-colors` to sample the
+  SVG's own colors):
+
+## Media (public stories only — one block per asset)
+
+- **Media ID** (unique within the story):
+- **Type** (`image` | `video` | `embed`):
+- **Source** (path under `public/assets/work/` for images/video; images must
+  be AVIF, WebP, JPEG, or PNG; hosted video MP4 or WebM):
+- **Thumbnail** (optional smaller preview path):
+- **Dimensions** (width × height, required for images and video):
+- **Alt text** (required, meaningful):
+- **Caption** (optional):
+- **Poster** (required for hosted video):
+- **Captions / transcript** (required for hosted video — WebVTT path and/or
+  transcript text):
+- **Embed** (for `embed` type: provider `youtube` | `vimeo`, video ID, title —
+  the iframe loads only after the visitor chooses to play):
+- **Confidentiality** (must be `public-approved` to live in this repo;
+  anything else goes through the protected publishing flow):

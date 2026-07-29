@@ -32,17 +32,6 @@ type ParagraphTarget = {
 
 type SequencePhase = 'logo' | 'hold' | 'release' | 'ambient'
 
-type Column = {
-  x: number
-  speed: number
-  phase: number
-  sway: number
-  headRow: number
-  rowsPerColumn: number
-}
-
-type Slot = { stream: number; row: number }
-
 type MeshBgs = {
   clear: HTMLCanvasElement
   rain: HTMLCanvasElement
@@ -52,23 +41,18 @@ type MeshBgs = {
   snow: HTMLCanvasElement
 }
 
-type ObjBounds = { cx: number; cy: number; hw: number; hh: number }
-
-type TextPreset = 'clear' | 'rain' | 'storm' | 'snow' | 'blizzard' | 'fog' | 'wind'
-
 type UnassignedGlyphBehavior = 'hidden' | 'parked' | 'ambient' | 'dispersed'
 
-type ExperienceMode = 'portfolio' | 'playground'
+type ExperienceSceneKey = 'work' | 'vibe' | 'collaborate'
+
+type ExperienceMode = 'intro' | ExperienceSceneKey
 
 export type {
-  Column,
   ExperienceMode,
+  ExperienceSceneKey,
   MeshBgs,
-  ObjBounds,
   ParagraphTarget,
   Particle,
   SequencePhase,
-  Slot,
-  TextPreset,
   UnassignedGlyphBehavior,
 }

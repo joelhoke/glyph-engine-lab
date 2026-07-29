@@ -1,13 +1,7 @@
 const TYPEWRITER_CPS = 140
 const SPRING = 0.03
 const DAMP = 0.85
-const FALL_SPEED_MIN = 0.35
-const FALL_SPEED_MAX = 1.45
-const HEAD_GLOW_BOOST = 0.45
 const LOGO_TARGET_STEP = 10
-const LOGO_ASSEMBLE_DURATION = 900
-const LOGO_HOLD_DURATION = 2000
-const LOGO_RELEASE_DURATION = 900
 
 const LOGO_PATHS = [
   'M24.54,32.22h28.93l-17.31,96.53c-.87,4.76-2.35,9.06-4.41,12.77-2.05,3.7-4.58,6.9-7.51,9.5-2.93,2.59-6.29,4.64-9.99,6.09-3.71,1.44-7.66,2.3-11.73,2.53l-.64.04-1.87,12.07.92-.02c5.66-.12,11.16-1.16,16.35-3.08,5.19-1.93,9.99-4.68,14.27-8.17,4.29-3.5,7.96-7.9,10.92-13.08,2.95-5.17,5.06-11.2,6.27-17.94l19.33-108.97.16-.9H26.63l-2.09,12.63Z',
@@ -18,24 +12,11 @@ const defaultSceneState = {
   fontSize: 12,
   textAmount: 1,
   mouseR: 225,
-  matrixSpread: 100,
-  matrixSpeed: 100,
-  matrixVolume: 100,
-  weatherWind: 50,
-  weatherIntensity: 125,
-  weatherTurbulence: 125,
-  weatherBlur: 25,
 }
 
 export {
   DAMP,
-  FALL_SPEED_MAX,
-  FALL_SPEED_MIN,
-  HEAD_GLOW_BOOST,
-  LOGO_ASSEMBLE_DURATION,
-  LOGO_HOLD_DURATION,
   LOGO_PATHS,
-  LOGO_RELEASE_DURATION,
   LOGO_TARGET_STEP,
   SPRING,
   TYPEWRITER_CPS,

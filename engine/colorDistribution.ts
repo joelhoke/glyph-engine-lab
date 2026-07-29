@@ -11,6 +11,7 @@ export type GlyphColorMode =
   | 'glyph-cycle'
   | 'word-cycle'
   | 'rows'
+  | 'source-colors'
 
 export type Rgb = { r: number; g: number; b: number }
 
@@ -168,4 +169,150 @@ export function buildTargetSpatialData(targets: { tx: number; ty: number }[]): {
   }
 
   return { gradientT, rowT }
+}
+
+/**
+ * Typed-array variant of buildTargetSpatialData for the hot scene path: the
+ * sampled target field already arrives as Float32Arrays (engine/targetSampling),
+ * so spatial metadata is rebuilt without an intermediate object array.
+ */
+export function buildTargetSpatialDataFromArrays(
+  xs: Float32Array,
+  ys: Float32Array,
+): { gradientT: Float32Array; rowT: Float32Array } {
+  const count = Math.min(xs.length, ys.length)
+  const gradientT = new Float32Array(count)
+  const rowT = new Float32Array(count)
+
+  if (count === 0) {
+    return { gradientT, rowT }
+  }
+
+  let minX = xs[0]
+  let maxX = xs[0]
+  let minY = ys[0]
+  let maxY = ys[0]
+
+  for (let i = 1; i < count; i += 1) {
+    if (xs[i] < minX) minX = xs[i]
+    if (xs[i] > maxX) maxX = xs[i]
+    if (ys[i] < minY) minY = ys[i]
+    if (ys[i] > maxY) maxY = ys[i]
+  }
+
+  const rangeX = maxX - minX || 1
+  const rangeY = maxY - minY || 1
+
+  for (let i = 0; i < count; i += 1) {
+    gradientT[i] = (xs[i] - minX) / rangeX
+    rowT[i] = (ys[i] - minY) / rangeY
+  }
+
+  return { gradientT, rowT }
+}
+
+/**
+ * Everything the per-glyph color decision needs, gathered once per frame by
+ * the renderer. Packed color arrays use the engine/targetSampling RGBA format;
+ * a painted entry of 0 means "no paint override" (painted colors are opaque,
+ * so a zero alpha channel never collides with real paint).
+ */
+export type GlyphColorContext = {
+  mode: GlyphColorMode
+  palette: Rgb[]
+  particleIndex: number
+  /** Assigned target index, or -1 when the glyph has no target. */
+  targetIndex: number
+  targetCount: number
+  gradientT?: Float32Array
+  rowT?: Float32Array
+  wordColorIndices?: number[]
+  /** Packed source RGBA per target (source-colors mode). */
+  sourceColors?: Uint32Array
+  /** Packed paint override per target; 0 = unpainted. */
+  paintedColors?: Uint32Array
+}
+
+const WHITE: Rgb = { r: 255, g: 255, b: 255 }
+
+function unpackPacked(packed: number): Rgb {
+  return {
+    r: packed & 0xff,
+    g: (packed >>> 8) & 0xff,
+    b: (packed >>> 16) & 0xff,
+  }
+}
+
+/**
+ * Resolve one glyph's color. Precedence is fixed:
+ *   1. painted override on the assigned target (non-destructive overlay),
+ *   2. the selected base distribution (palette modes or source colors),
+ *   3. the safe palette-modulo fallback, then pure white.
+ */
+export function resolveGlyphColor(context: GlyphColorContext): Rgb {
+  const { palette, particleIndex, targetIndex, targetCount, mode } = context
+  const assigned = targetIndex >= 0 && targetIndex < targetCount
+
+  if (assigned && context.paintedColors && targetIndex < context.paintedColors.length) {
+    const painted = context.paintedColors[targetIndex]
+    if (painted !== 0) return unpackPacked(painted)
+  }
+
+  if (palette.length === 0) return WHITE
+
+  if (
+    mode === 'source-colors' &&
+    assigned &&
+    context.sourceColors &&
+    targetIndex < context.sourceColors.length
+  ) {
+    return unpackPacked(context.sourceColors[targetIndex])
+  }
+
+  if (
+    mode === 'image-gradient' &&
+    assigned &&
+    context.gradientT &&
+    targetIndex < context.gradientT.length
+  ) {
+    return sampleImageGradient(palette, context.gradientT[targetIndex])
+  }
+
+  if (mode === 'rows' && assigned && context.rowT && targetIndex < context.rowT.length) {
+    const band = sampleRowBand(palette.length, context.rowT[targetIndex])
+    return palette[band]
+  }
+
+  if (
+    mode === 'word-cycle' &&
+    context.wordColorIndices &&
+    context.wordColorIndices.length > 0
+  ) {
+    const colorIndex =
+      context.wordColorIndices[particleIndex % context.wordColorIndices.length]
+    return palette[colorIndex >= 0 ? colorIndex : 0]
+  }
+
+  return palette[particleIndex % palette.length]
+}
+
+/**
+ * Alpha multiplier for the resolved color: source-colors preserves the sampled
+ * pixel's translucency; paint and palette modes are fully opaque.
+ */
+export function resolveGlyphAlphaScale(context: GlyphColorContext): number {
+  const { mode, targetIndex, targetCount } = context
+  const assigned = targetIndex >= 0 && targetIndex < targetCount
+  if (!assigned) return 1
+  if (context.paintedColors && targetIndex < context.paintedColors.length) {
+    if (context.paintedColors[targetIndex] !== 0) return 1
+  }
+  if (
+    mode === 'source-colors' &&
+    context.sourceColors &&
+    targetIndex < context.sourceColors.length
+  ) {
+    return ((context.sourceColors[targetIndex] >>> 24) & 0xff) / 255
+  }
+  return 1
 }

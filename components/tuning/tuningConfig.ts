@@ -72,12 +72,19 @@ export const INTRO_TIMING_CONTROL_DEFINITIONS: Record<
   },
 }
 
-export type SceneConfigKey = 'mouseR' | 'particleRepel' | 'weatherRepelMult'
+export type SceneConfigKey =
+  | 'mouseR'
+  | 'particleRepel'
+  | 'weatherRepelMult'
+  | 'clickImpulseRadius'
+  | 'clickImpulseForce'
 
 export type SceneConfig = {
   mouseR: number
   particleRepel: number
   weatherRepelMult: number
+  clickImpulseRadius: number
+  clickImpulseForce: number
 }
 
 export const INTERACTION_CONTROL_DEFINITIONS: Record<
@@ -106,12 +113,29 @@ export const INTERACTION_CONTROL_DEFINITIONS: Record<
     step: 0.1,
     showSlider: true,
   },
+  clickImpulseRadius: {
+    label: 'Click Radius',
+    min: 50,
+    max: 400,
+    step: 1,
+    unit: 'px',
+    showSlider: true,
+  },
+  clickImpulseForce: {
+    label: 'Click Force',
+    min: 0,
+    max: 30,
+    step: 0.1,
+    showSlider: true,
+  },
 }
 
 export const APPROVED_SCENE_DEFAULTS: SceneConfig = {
   mouseR: defaultSceneState.mouseR,
   particleRepel: 0.48,
   weatherRepelMult: 6,
+  clickImpulseRadius: 200,
+  clickImpulseForce: 10,
 }
 
 export const APPROVED_SOURCE_LAYOUT_DEFAULTS: SourceLayoutConfig = {
@@ -238,4 +262,24 @@ export function commitNumericInput(
   }
   const clamped = clamp(parsed, min, max)
   return roundToStep(clamped, step)
+}
+
+/**
+ * Keyboard stepping for number/slider pairs: ArrowUp/ArrowDown move the value
+ * by `multiplier` step intervals (1 plain, 10 with Shift), clamped to
+ * [min, max] and snapped to the step grid. Pure — the DOM handlers in
+ * NumericControl and the verify script both go through this.
+ */
+export function stepNumericValue(
+  value: number,
+  direction: 1 | -1,
+  min: number,
+  max: number,
+  step: number,
+  multiplier = 1,
+): number {
+  const safeStep = step > 0 ? step : 1
+  const safeMultiplier = multiplier > 0 ? multiplier : 1
+  const next = value + direction * safeStep * safeMultiplier
+  return clamp(roundToStep(next, safeStep), min, max)
 }

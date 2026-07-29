@@ -9,7 +9,7 @@ const path = require('path')
 
 const projectRoot = path.resolve(__dirname, '..')
 const sourceFile = path.join(projectRoot, 'components', 'tuning', 'tuningConfig.ts')
-const tmpDir = path.join(projectRoot, 'tmp-verify')
+const tmpDir = path.join(projectRoot, 'tmp-verify-numeric-control')
 
 try {
   fs.rmSync(tmpDir, { recursive: true, force: true })
@@ -28,6 +28,7 @@ const {
   formatNumericValue,
   isPotentiallyValidDraft,
   roundToStep,
+  stepNumericValue,
 } = require(path.join(tmpDir, 'components', 'tuning', 'tuningConfig.js'))
 
 let failures = 0
@@ -97,6 +98,19 @@ assert(commitNumericInput('abc', 3, 0, 10, 1) === null, 'invalid text reverts')
 assert(commitNumericInput('NaN', 3, 0, 10, 1) === null, 'NaN reverts')
 assert(commitNumericInput('Infinity', 3, 0, 10, 1) === null, 'Infinity reverts')
 assert(commitNumericInput('-Infinity', 3, 0, 10, 1) === null, '-Infinity reverts')
+
+// stepNumericValue: keyboard stepping (ArrowUp/Down ±1 interval, Shift ±10)
+assert(eq(stepNumericValue(5, 1, 0, 10, 1), 6), 'step up one interval')
+assert(eq(stepNumericValue(5, -1, 0, 10, 1), 4), 'step down one interval')
+assert(eq(stepNumericValue(5, 1, 0, 100, 1, 10), 15), 'shift steps ten intervals')
+assert(eq(stepNumericValue(5, -1, 0, 100, 1, 10), 0), 'shift step clamps at min')
+assert(eq(stepNumericValue(9, 1, 0, 10, 1), 10), 'step up clamps at max')
+assert(eq(stepNumericValue(0, -1, 0, 10, 1), 0), 'step down clamps at min')
+assert(eq(stepNumericValue(0.5, 1, 0.5, 2.5, 0.05), 0.55), 'decimal step up')
+assert(eq(stepNumericValue(0.5, 1, 0.5, 2.5, 0.05, 10), 1), 'decimal shift step')
+assert(eq(stepNumericValue(1.02, 1, 0, 10, 0.05), 1.05), 'off-grid value snaps to step grid')
+assert(eq(stepNumericValue(5, 1, 0, 10, 0), 6), 'zero step falls back to unit step')
+assert(eq(stepNumericValue(5, 1, 0, 10, 1, 0), 6), 'zero multiplier falls back to one')
 
 // Cleanup
 fs.rmSync(tmpDir, { recursive: true, force: true })
