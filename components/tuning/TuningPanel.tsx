@@ -1,11 +1,9 @@
 'use client'
 
-import { IntroTiming, portfolioIntroPreset } from '../../engine/introSequence'
 import {
   APPROVED_SCENE_DEFAULTS,
   APPROVED_SOURCE_LAYOUT_DEFAULTS,
   INTERACTION_CONTROL_DEFINITIONS,
-  INTRO_TIMING_CONTROL_DEFINITIONS,
   SceneConfig,
   SceneConfigKey,
   SourceLayoutConfigKey,
@@ -17,9 +15,6 @@ import { QualityTier } from '../../engine/qualityTiers'
 import NumericControl from './NumericControl'
 
 type TuningPanelProps = {
-  introTiming: IntroTiming
-  onIntroTimingChange: (key: keyof IntroTiming, value: number) => void
-  onResetIntroTiming: () => void
   speed: number
   onSpeedChange: (value: number) => void
   sceneConfig: SceneConfig
@@ -46,9 +41,6 @@ type TuningPanelProps = {
 }
 
 export default function TuningPanel({
-  introTiming,
-  onIntroTimingChange,
-  onResetIntroTiming,
   speed,
   onSpeedChange,
   sceneConfig,
@@ -72,9 +64,6 @@ export default function TuningPanel({
   effectiveOptionItemDurationMs,
   timingFallbackActive,
 }: TuningPanelProps) {
-  const timingDirty = (Object.keys(INTRO_TIMING_CONTROL_DEFINITIONS) as (keyof IntroTiming)[]).some(
-    (key) => introTiming[key] !== portfolioIntroPreset.timing[key],
-  )
   const sceneDirty = (Object.keys(APPROVED_SCENE_DEFAULTS) as SceneConfigKey[]).some(
     (key) => sceneConfig[key] !== APPROVED_SCENE_DEFAULTS[key],
   )
@@ -107,29 +96,6 @@ export default function TuningPanel({
           showSlider
           onChange={onSpeedChange}
         />
-      </section>
-
-      <section className="tuning-section" aria-labelledby="tuning-sequence-heading">
-        <h3 id="tuning-sequence-heading" className="tuning-section-title">Sequence timing</h3>
-        <div className="tuning-controls-grid">
-          {(Object.keys(INTRO_TIMING_CONTROL_DEFINITIONS) as (keyof IntroTiming)[]).map((key) => (
-            <NumericControl
-              key={key}
-              id={`timing-${key}`}
-              label={INTRO_TIMING_CONTROL_DEFINITIONS[key].label}
-              value={introTiming[key]}
-              min={INTRO_TIMING_CONTROL_DEFINITIONS[key].min}
-              max={INTRO_TIMING_CONTROL_DEFINITIONS[key].max}
-              step={INTRO_TIMING_CONTROL_DEFINITIONS[key].step}
-              unit={INTRO_TIMING_CONTROL_DEFINITIONS[key].unit}
-              showSlider={INTRO_TIMING_CONTROL_DEFINITIONS[key].showSlider}
-              onChange={(value) => onIntroTimingChange(key, value)}
-            />
-          ))}
-        </div>
-        <button type="button" className="tuning-reset-button" onClick={onResetIntroTiming}>
-          Reset sequence timing
-        </button>
       </section>
 
       <section className="tuning-section" aria-labelledby="tuning-interaction-heading">
@@ -316,7 +282,6 @@ export default function TuningPanel({
       <section className="tuning-section" aria-labelledby="tuning-status-heading">
         <h3 id="tuning-status-heading" className="tuning-section-title">Configuration status</h3>
         <div className="tuning-status-grid">
-          <div>Sequence timing: {timingDirty ? 'edited' : 'preset'}</div>
           <div>Interaction values: {sceneDirty ? 'edited' : 'preset'}</div>
           <div>Source/layout: {sourceLayoutDirty ? 'edited' : 'preset'}</div>
           <div>Target count: {targetCount}</div>
@@ -330,12 +295,11 @@ export default function TuningPanel({
             Copy configuration
           </button>
         </div>
-        {(timingDirty || sceneDirty || sourceLayoutDirty) && (
+        {(sceneDirty || sourceLayoutDirty) && (
           <button
             type="button"
             className="tuning-reset-button"
             onClick={() => {
-              onResetIntroTiming()
               onResetSceneConfig()
               onResetSourceLayout()
             }}

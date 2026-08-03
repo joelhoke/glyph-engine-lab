@@ -1,8 +1,10 @@
 import { AMBIENT_DEFAULTS, AmbientConfig } from './ambientConfig'
 import { GlyphColorMode } from './colorDistribution'
+import { GlyphPointSize } from './glyphSize'
 import { MOTION_DEFAULTS, MotionConfig } from './motionConfig'
 
-export type { GlyphColorMode }
+export type { GlyphColorMode, GlyphPointSize }
+export { clampGlyphPointSize } from './glyphSize'
 
 export type PlaygroundConfig = {
   glyphText: string
@@ -11,7 +13,7 @@ export type PlaygroundConfig = {
   backgroundColor2: string
   glyphFont: string
   glyphColorMode: GlyphColorMode
-  glyphScale: number
+  glyphSizePt: GlyphPointSize
   /** Nested motion configuration; every complete config and preset carries it. */
   motion: MotionConfig
   /** Nested ambient-effect configuration (weather/matrix overlay); every
@@ -34,6 +36,18 @@ export const GLYPH_FONT_OPTIONS = [
   { value: "'Arial', sans-serif", label: 'Arial' },
   { value: "'Times New Roman', serif", label: 'Times New Roman' },
   { value: "'Verdana', sans-serif", label: 'Verdana' },
+]
+
+/** The six discrete glyph point sizes (canvas design points = CSS pixels). */
+export const GLYPH_POINT_SIZE_OPTIONS: { value: GlyphPointSize; label: string }[] = [
+  { value: 4, label: '4 pt' },
+  { value: 6, label: '6 pt' },
+  { value: 8, label: '8 pt' },
+  { value: 12, label: '12 pt' },
+  { value: 16, label: '16 pt' },
+  { value: 24, label: '24 pt' },
+  { value: 32, label: '32 pt' },
+  { value: 48, label: '48 pt' },
 ]
 
 export const MAX_GLYPH_PALETTE_SIZE = 6
@@ -62,7 +76,7 @@ export const VIBE_DEFAULT_PLAYGROUND: PlaygroundConfig = {
   backgroundColor2: '#1a1026',
   glyphFont: "'Cutive Mono', monospace",
   glyphColorMode: 'image-gradient',
-  glyphScale: 1,
+  glyphSizePt: 12,
   motion: { ...MOTION_DEFAULTS },
   ambient: { ...AMBIENT_DEFAULTS },
 }
@@ -75,7 +89,7 @@ export const APPROVED_PLAYGROUND_DEFAULTS: PlaygroundConfig = {
   backgroundColor2: '#12121a',
   glyphFont: "'Cutive Mono', monospace",
   glyphColorMode: 'image-gradient',
-  glyphScale: 1,
+  glyphSizePt: 12,
   motion: { ...MOTION_DEFAULTS },
   ambient: { ...AMBIENT_DEFAULTS },
 }

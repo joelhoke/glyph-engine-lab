@@ -151,3 +151,40 @@ before uploading via the wrangler CLI.
 Access controls distribution — it cannot prevent an authorized visitor from
 saving media or capturing their screen. Share confidential stories only with
 people you trust with that ability.
+
+## Feedback
+
+`POST /api/feedback` stores visitor feedback (message + optional reply email)
+in a **D1** database. Rows expire after **180 days** — timestamps are Unix
+**seconds**, `expires_at = created_at + 180 * 24 * 60 * 60` — and expired rows
+are deleted opportunistically on successful submissions. No IP, user agent,
+analytics IDs, or page content is ever stored. There is no admin UI:
+submissions are reviewed via the D1 dashboard or wrangler tooling.
+
+### One-time setup (Cloudflare dashboard)
+
+1. **D1 database**: create a database (e.g. `jh-feedback`):
+   `wrangler d1 create jh-feedback`.
+2. **Binding**: Pages project → Settings → Functions → D1 database bindings →
+   bind the database as `FEEDBACK_DB` (production and preview). The function
+   fails closed with 503 if the binding is missing.
+3. **Migrations**: apply `migrations/` with wrangler:
+   `wrangler d1 migrations apply jh-feedback` (add `--remote` for the remote
+   database). The schema lives in `migrations/0001_create_feedback.sql`.
+4. **Rate-limit rule**: Cloudflare dashboard → Security → WAF → Rate limiting
+   rules → create rule:
+   - Expression: `http.request.uri.path eq "/api/feedback"` and method `POST`.
+   - Limit: **5 requests per 10 minutes**, counted **per IP**.
+   - Action: **Block** (clients see 429).
+   The function itself does not rate-limit; this rule is the enforcement.
+
+### Operations
+
+- **Review submissions**: D1 dashboard → `jh-feedback` → query
+  `SELECT id, message, email, created_at FROM feedback ORDER BY created_at DESC;`
+  or `wrangler d1 execute jh-feedback --command "..."`.
+- **Manual cleanup** (beyond the opportunistic deletion):
+  `DELETE FROM feedback WHERE expires_at < <unixnow>;`
+  where `<unixnow>` is the current Unix time in seconds.
+- **Rollback**: the function deploys with the Pages deployment; D1 data is
+  unaffected by Pages rollbacks.

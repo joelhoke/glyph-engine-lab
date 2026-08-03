@@ -6,6 +6,7 @@ import {
 } from './playgroundConfig'
 import { SourceLayoutConfig } from './svgTargetSource'
 import { ExperienceSceneKey } from './types'
+import { VisualSourceKind } from './visualSource'
 
 /**
  * Declarative description of everything an experience mode needs to drive the
@@ -23,6 +24,8 @@ export type SceneDescriptor = {
   /** SVG source URL for the target field. Null keeps the current source
    *  (the uploaded SVG in vibe, or the built-in default). */
   sourceUrl: string | null
+  /** Source asset kind for sourceUrl — defaults to 'svg'. */
+  sourceKind?: VisualSourceKind
   /** Baseline playground-style config for the field. In vibe this only seeds
    *  the initial state — the control dock keeps it user-editable. */
   playground: PlaygroundConfig

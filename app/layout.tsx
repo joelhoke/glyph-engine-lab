@@ -1,5 +1,16 @@
 import type { Metadata } from 'next'
+import { Cabin } from 'next/font/google'
 import './globals.css'
+
+// Cabin Bold for primary display headings only (Vibe/Collaborate headings,
+// Work slide titles, protected case-study titles). next/font self-hosts the
+// font at build time — no runtime request to Google. Everything else keeps
+// the Cutive Mono stack.
+const cabin = Cabin({
+  weight: '700',
+  subsets: ['latin'],
+  variable: '--font-display',
+})
 
 // Production origin. Used for metadataBase (resolves relative OG/icon URLs)
 // and the canonical link.
@@ -69,8 +80,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body>
+    <html lang="en" data-theme="dark">
+      <body className={cabin.variable}>
         {/* Inline first so the branded chrome never flashes unstyled when the
             external stylesheet is slow, blocked, or rejected. */}
         <style dangerouslySetInnerHTML={{ __html: CRITICAL_FALLBACK_CSS }} />

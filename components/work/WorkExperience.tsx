@@ -2,22 +2,22 @@
 
 import { KeyboardEvent, RefObject, useEffect, useRef } from 'react'
 import {
-  getWorkStory,
+  getWorkSlide,
+  getWorkSlideTitle,
   nextWorkStoryIndex,
   previousWorkStoryIndex,
-  WORK_INTRO,
-  WorkStory,
+  WorkSlide,
 } from '../../content/work'
 import { AnalyticsEvent } from '../../engine/analytics'
 import WorkStoryView from './WorkStory'
 
 type WorkExperienceProps = {
-  stories: WorkStory[]
+  slides: WorkSlide[]
   activeIndex: number
   onIndexChange: (index: number) => void
   /** Mode-level focus target (owned by PortfolioExperience's focus management). */
   headingRef: RefObject<HTMLHeadingElement | null>
-  /** Base document title; the story title is appended on story changes. */
+  /** Base document title; the slide title is appended on slide changes. */
   titleBase: string
   /** Mode document title from the scene descriptor (e.g. "Work"). */
   modeTitle: string
@@ -26,14 +26,15 @@ type WorkExperienceProps = {
 }
 
 /**
- * Authored narrative Work surface: one case study at a time with prev/next
- * and arrow-key traversal. The active index is controlled by
+ * Authored narrative Work surface: one slide at a time with prev/next and
+ * arrow-key traversal. Slide 1 is the intro (title + the tenure copy); the
+ * remaining slides are the case studies. The active index is controlled by
  * PortfolioExperience so the same state also drives the canvas descriptor
- * (per-story source, palette, behavior) — story changes morph the persistent
+ * (per-slide source, palette, behavior) — slide changes morph the persistent
  * glyph population rather than remounting anything here.
  */
 export default function WorkExperience({
-  stories,
+  slides,
   activeIndex,
   onIndexChange,
   headingRef,
@@ -41,31 +42,32 @@ export default function WorkExperience({
   modeTitle,
   onTrackEvent,
 }: WorkExperienceProps) {
-  const story = getWorkStory(activeIndex)
-  const storyHeadingRef = useRef<HTMLHeadingElement | null>(null)
+  const slide = getWorkSlide(activeIndex)
+  const slideTitle = getWorkSlideTitle(slide)
+  const slideHeadingRef = useRef<HTMLHeadingElement | null>(null)
+  const panelRef = useRef<HTMLElement | null>(null)
   const hasMountedRef = useRef(false)
 
-  // Story change: scroll the story heading into view, move focus to it, and
-  // extend the document title. Expansion/lightbox state lives inside
-  // WorkStoryView, which remounts on story change (key={story.id}) — so both
-  // close automatically. The first render is skipped — entering the mode is
-  // handled by the M3 mode-level focus/title management (which focuses
-  // headingRef).
+  // Slide change: reset the panel's own scroll position (the card is the
+  // scroll container), move focus to the new slide heading without
+  // scrolling, and extend the document title. The document and foreground
+  // shell must not move — never scroll the heading into view here.
+  // Expansion/lightbox state lives inside WorkStoryView, which remounts on
+  // slide change (key={slide id}) — so both close automatically. The first
+  // render is skipped — entering the mode is handled by the M3 mode-level
+  // focus/title management (which focuses headingRef).
   useEffect(() => {
     if (!hasMountedRef.current) {
       hasMountedRef.current = true
       return
     }
-    const heading = storyHeadingRef.current
-    if (heading) {
-      heading.scrollIntoView({ block: 'start' })
-      heading.focus({ preventScroll: true })
-    }
-    document.title = `${titleBase} — ${modeTitle} — ${story.title}`
-  }, [activeIndex, story.title, titleBase, modeTitle])
+    if (panelRef.current) panelRef.current.scrollTop = 0
+    slideHeadingRef.current?.focus({ preventScroll: true })
+    document.title = `${titleBase} — ${modeTitle} — ${slideTitle}`
+  }, [activeIndex, slideTitle, titleBase, modeTitle])
 
-  const goToPrevious = () => onIndexChange(previousWorkStoryIndex(activeIndex, stories.length))
-  const goToNext = () => onIndexChange(nextWorkStoryIndex(activeIndex, stories.length))
+  const goToPrevious = () => onIndexChange(previousWorkStoryIndex(activeIndex, slides.length))
+  const goToNext = () => onIndexChange(nextWorkStoryIndex(activeIndex, slides.length))
 
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     // Never intercept keys aimed at the media lightbox, media elements, or
@@ -92,6 +94,7 @@ export default function WorkExperience({
       className="work-experience"
       aria-label="Work case studies"
       onKeyDown={handleKeyDown}
+      ref={panelRef}
     >
       <h2
         ref={headingRef as RefObject<HTMLHeadingElement>}
@@ -100,26 +103,59 @@ export default function WorkExperience({
       >
         Work
       </h2>
-      <p className="work-mode-intro">{WORK_INTRO}</p>
-      <WorkStoryView key={story.id} story={story} headingRef={storyHeadingRef} onTrackEvent={onTrackEvent} />
-      {stories.length > 1 && (
+      {slide.kind === 'intro' && slide.markUrl && (
+        // Card-level brand mark: anchored to the card (top aligned with the
+        // mode heading, right edge on the controls' content line) — never
+        // part of the slide flow.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={slide.markUrl}
+          alt=""
+          aria-hidden="true"
+          className="work-slide-mark"
+        />
+      )}
+      {slide.kind === 'intro' ? (
+        <article
+          className="work-story work-slide-intro"
+          aria-labelledby={`work-slide-title-${slide.id}`}
+        >
+          <h3
+            id={`work-slide-title-${slide.id}`}
+            ref={slideHeadingRef}
+            tabIndex={-1}
+            className="work-story-title"
+          >
+            {slide.title}
+          </h3>
+          <p className="work-mode-intro">{slide.copy}</p>
+        </article>
+      ) : (
+        <WorkStoryView
+          key={slide.story.id}
+          story={slide.story}
+          headingRef={slideHeadingRef}
+          onTrackEvent={onTrackEvent}
+        />
+      )}
+      {slides.length > 1 && (
         <div className="work-controls">
           <button
             type="button"
             className="work-nav-button"
             onClick={goToPrevious}
-            aria-label="Previous case study"
+            aria-label="Previous slide"
           >
             <span aria-hidden="true">←</span> Prev
           </button>
           <p className="work-progress">
-            {activeIndex + 1} / {stories.length}
+            {activeIndex + 1} / {slides.length}
           </p>
           <button
             type="button"
             className="work-nav-button"
             onClick={goToNext}
-            aria-label="Next case study"
+            aria-label="Next slide"
           >
             Next <span aria-hidden="true">→</span>
           </button>

@@ -51,12 +51,23 @@ export type AmbientConfig = {
   mode: AmbientMode
   /** Pointer influence on ambient agents (repel and drag forces), 0–2. */
   interactionStrength: number
+  /** Opacity of the legacy weather mesh backdrop, 0–1. Optional; omitted
+   *  resolves to BACKDROP_OPACITY_DEFAULT so existing weather scenes are
+   *  unchanged. 0 skips the mesh entirely — weather PARTICLES still render. */
+  backdropOpacity?: number
   weather: WeatherAmbientConfig
   matrix: MatrixAmbientConfig
 }
 
 export const AMBIENT_INTERACTION_MIN = 0
 export const AMBIENT_INTERACTION_MAX = 2
+
+export const BACKDROP_OPACITY_MIN = 0
+export const BACKDROP_OPACITY_MAX = 1
+/** The long-standing weather mesh backdrop alpha (see SceneCanvas
+ *  drawAmbientBackdrop); the default keeps every existing weather scene
+ *  visually unchanged. */
+export const BACKDROP_OPACITY_DEFAULT = 0.55
 
 export const WEATHER_INTENSITY_MIN = 0
 export const WEATHER_INTENSITY_MAX = 200
@@ -95,6 +106,7 @@ export const MATRIX_DEFAULTS: MatrixAmbientConfig = {
 export const AMBIENT_DEFAULTS: AmbientConfig = {
   mode: 'off',
   interactionStrength: 1,
+  backdropOpacity: BACKDROP_OPACITY_DEFAULT,
   weather: { ...WEATHER_DEFAULTS },
   matrix: { ...MATRIX_DEFAULTS },
 }
@@ -161,6 +173,11 @@ export function clampAmbientConfig(config: AmbientConfig): AmbientConfig {
       config.interactionStrength,
       AMBIENT_INTERACTION_MIN,
       AMBIENT_INTERACTION_MAX,
+    ),
+    backdropOpacity: clampNumber(
+      config.backdropOpacity ?? BACKDROP_OPACITY_DEFAULT,
+      BACKDROP_OPACITY_MIN,
+      BACKDROP_OPACITY_MAX,
     ),
     weather: clampWeatherAmbientConfig(config.weather ?? WEATHER_DEFAULTS),
     matrix: clampMatrixAmbientConfig(config.matrix ?? MATRIX_DEFAULTS),

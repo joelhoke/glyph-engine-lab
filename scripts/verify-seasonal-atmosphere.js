@@ -173,6 +173,10 @@ assert(
     const config = resolveSeasonalAtmosphere(input)
     const label = `month=${input.month} hour=${input.hour} ${input.locale}`
     assert(config.mode === 'weather', `${label}: mode is weather`)
+    assert(
+      config.backdropOpacity === 0,
+      `${label}: the legacy weather mesh backdrop is fully suppressed on the landing`,
+    )
     assert(presets.includes(config.weather.preset), `${label}: preset is a known weather preset`)
     assert(
       config.weather.intensity >= WEATHER_INTENSITY_MIN &&

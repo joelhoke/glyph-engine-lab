@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
- * Deterministic verification for the background-luminance glyph gradient
- * (Stage 3): engine/backgroundLuminance.ts.
+ * Deterministic verification for the fixed landing glyph gradient
+ * (pre-release): engine/backgroundLuminance.ts.
  *
- * Checks: the sRGB relative-luminance computation, the dark/light gradient
- * pair selection at and around the threshold boundary, and the vertical
- * gradient recolor of a sampled target field (endpoints, midpoint, and
- * per-target alpha preservation).
+ * Checks: the gradient is exactly #0C5E7D → #3B9EC8, applied horizontally
+ * (left-to-right) over the field's normX coordinates with linear midpoint
+ * interpolation and per-target alpha preservation, and the API is
+ * luminance-independent — the module exposes no background-luminance
+ * selection anymore.
  */
 
 const { execSync } = require('child_process')
@@ -28,14 +29,8 @@ try {
   process.exit(1)
 }
 
-const {
-  applyVerticalGlyphGradient,
-  computeRelativeLuminance,
-  LANDING_GRADIENT_DARK,
-  LANDING_GRADIENT_LIGHT,
-  LANDING_LUMINANCE_THRESHOLD,
-  resolveLandingGlyphGradient,
-} = require(path.join(tmpDir, 'backgroundLuminance.js'))
+const gradientModule = require(path.join(tmpDir, 'backgroundLuminance.js'))
+const { applyHorizontalGlyphGradient, LANDING_GLYPH_GRADIENT } = gradientModule
 const { packSourceRgba, unpackSourceA, unpackSourceB, unpackSourceG, unpackSourceR } = require(
   path.join(tmpDir, 'targetSampling.js'),
 )
@@ -51,95 +46,60 @@ function assert(condition, message) {
   }
 }
 
-// --- luminance computation ----------------------------------------------------
+// --- the gradient is fixed to the exact landing pair ----------------------------
 
-assert(computeRelativeLuminance('#000000') === 0, 'black has zero luminance')
 assert(
-  Math.abs(computeRelativeLuminance('#ffffff') - 1) < 1e-9,
-  'white has unit luminance',
-)
-assert(
-  computeRelativeLuminance('#00ff00') > computeRelativeLuminance('#ff0000') &&
-    computeRelativeLuminance('#ff0000') > computeRelativeLuminance('#0000ff'),
-  'luminance weights green above red above blue (Rec. 709)',
-)
-assert(
-  computeRelativeLuminance('not-a-color') === 0,
-  'malformed input resolves to 0 (treated as dark)',
+  LANDING_GLYPH_GRADIENT.from === '#0C5E7D' && LANDING_GLYPH_GRADIENT.to === '#3B9EC8',
+  'the landing glyph gradient is exactly #0C5E7D → #3B9EC8',
 )
 
-// --- gradient selection ---------------------------------------------------------
+// --- luminance-independence: no conditional selection survives -------------------
 
-{
-  const dark = resolveLandingGlyphGradient('#0a0a0a', '#12121a')
-  assert(
-    dark.from === LANDING_GRADIENT_DARK.from && dark.to === LANDING_GRADIENT_DARK.to,
-    'dark background → the dark pair (#8FE3F5 → #2F9BC4)',
-  )
-  const light = resolveLandingGlyphGradient('#eae2dc', '#f2e6d8')
-  assert(
-    light.from === LANDING_GRADIENT_LIGHT.from && light.to === LANDING_GRADIENT_LIGHT.to,
-    'light background → the light pair (#0C5E7D → #3B9EC8)',
-  )
-}
+assert(
+  typeof gradientModule.resolveLandingGlyphGradient === 'undefined' &&
+    typeof gradientModule.computeRelativeLuminance === 'undefined' &&
+    typeof gradientModule.LANDING_GRADIENT_DARK === 'undefined' &&
+    typeof gradientModule.LANDING_GRADIENT_LIGHT === 'undefined' &&
+    typeof gradientModule.applyVerticalGlyphGradient === 'undefined',
+  'no luminance-conditional or vertical-gradient API remains',
+)
 
-// threshold boundary: sweeping grays across the threshold must flip the pair
-// exactly when the mean luminance crosses it.
-{
-  let sawDark = false
-  let sawLight = false
-  let consistent = true
-  for (let gray = 0; gray <= 255; gray += 1) {
-    const hex = `#${gray.toString(16).padStart(2, '0').repeat(3)}`
-    const luminance = computeRelativeLuminance(hex)
-    const pair = resolveLandingGlyphGradient(hex, hex)
-    const expectLight = luminance >= LANDING_LUMINANCE_THRESHOLD
-    if (expectLight) sawLight = true
-    else sawDark = true
-    const gotLight = pair.from === LANDING_GRADIENT_LIGHT.from
-    if (gotLight !== expectLight) {
-      consistent = false
-      console.error(`  boundary mismatch at ${hex} (luminance ${luminance.toFixed(4)})`)
-    }
-  }
-  assert(consistent, 'selection flips exactly at the luminance threshold across all grays')
-  assert(sawDark && sawLight, 'the gray sweep exercises both sides of the threshold')
-}
-
-// --- vertical gradient recolor ----------------------------------------------------
+// --- horizontal gradient recolor ---------------------------------------------------
 
 {
   const colors = new Uint32Array([
     packSourceRgba(255, 255, 255, 255),
     packSourceRgba(255, 255, 255, 128),
     packSourceRgba(255, 255, 255, 255),
+    packSourceRgba(255, 255, 255, 255),
+    packSourceRgba(255, 255, 255, 255),
   ])
-  const normY = new Float32Array([0, 1, 0.5])
-  applyVerticalGlyphGradient(
+  const normX = new Float32Array([0, 1, 0.5, -0.25, 1.25])
+  applyHorizontalGlyphGradient(
     colors,
-    normY,
-    LANDING_GRADIENT_DARK.from,
-    LANDING_GRADIENT_DARK.to,
+    normX,
+    LANDING_GLYPH_GRADIENT.from,
+    LANDING_GLYPH_GRADIENT.to,
   )
 
   const parse = (hex) => {
     const value = parseInt(hex.replace('#', ''), 16)
     return { r: (value >> 16) & 0xff, g: (value >> 8) & 0xff, b: value & 0xff }
   }
-  const from = parse(LANDING_GRADIENT_DARK.from)
-  const to = parse(LANDING_GRADIENT_DARK.to)
+  const from = parse(LANDING_GLYPH_GRADIENT.from)
+  const to = parse(LANDING_GLYPH_GRADIENT.to)
 
   assert(
     unpackSourceR(colors[0]) === from.r &&
       unpackSourceG(colors[0]) === from.g &&
       unpackSourceB(colors[0]) === from.b,
-    'the top of the field takes the from color',
+    'the left edge of the field takes the from color',
   )
   assert(
     unpackSourceR(colors[1]) === to.r &&
       unpackSourceG(colors[1]) === to.g &&
       unpackSourceB(colors[1]) === to.b,
-    'the bottom of the field takes the to color',
+    'the right edge of the field takes the to color',
   )
   assert(unpackSourceA(colors[1]) === 128, 'per-target alpha is preserved')
   const mid = {
@@ -151,7 +111,34 @@ assert(
     Math.abs(unpackSourceR(colors[2]) - mid.r) <= 1 &&
       Math.abs(unpackSourceG(colors[2]) - mid.g) <= 1 &&
       Math.abs(unpackSourceB(colors[2]) - mid.b) <= 1,
-    'the midpoint interpolates linearly',
+    'the horizontal midpoint interpolates linearly',
+  )
+  assert(
+    unpackSourceR(colors[3]) === from.r && unpackSourceR(colors[4]) === to.r,
+    'out-of-range normX clamps to the endpoints',
+  )
+}
+
+// --- the same pair applies regardless of the background ---------------------------
+
+{
+  // Recolor identical fields "behind" two very different backgrounds: the
+  // function takes no background input at all, so identical inputs must
+  // recolor identically. (Guards against a background parameter sneaking
+  // back into the application path.)
+  const make = () =>
+    new Uint32Array([
+      packSourceRgba(10, 20, 30, 255),
+      packSourceRgba(200, 210, 220, 200),
+    ])
+  const normX = new Float32Array([0.2, 0.8])
+  const a = make()
+  const b = make()
+  applyHorizontalGlyphGradient(a, normX, LANDING_GLYPH_GRADIENT.from, LANDING_GLYPH_GRADIENT.to)
+  applyHorizontalGlyphGradient(b, normX, LANDING_GLYPH_GRADIENT.from, LANDING_GLYPH_GRADIENT.to)
+  assert(
+    a[0] === b[0] && a[1] === b[1],
+    'the recolor depends only on normX and the fixed pair (no background input)',
   )
 }
 
@@ -160,4 +147,4 @@ if (failures > 0) {
   process.exit(1)
 }
 
-console.log('\nAll background-luminance verifications passed.')
+console.log('\nAll fixed landing-gradient verifications passed.')

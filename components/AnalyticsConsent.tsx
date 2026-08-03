@@ -1,31 +1,189 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { FormEvent, KeyboardEvent, useEffect, useId, useRef, useState } from 'react'
 import {
   AnalyticsClient,
   ConsentRecord,
   createAnalyticsClient,
   readConsent,
 } from '../engine/analytics'
+import './AnalyticsConsent.css'
 
 type AnalyticsConsentProps = {
   /** Called with the client once mounted so the experience can track events. */
   onClient: (client: AnalyticsClient) => void
 }
 
+type PanelView = 'privacy' | 'feedback'
+
+const MESSAGE_MIN = 10
+const MESSAGE_MAX = 2000
+const EMAIL_MAX = 254
+const EMAIL_PATTERN = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]+$/
+
 /**
- * Analytics consent (Stage 5). Nothing loads before an explicit decision:
- * the banner offers "Allow analytics" / "No thanks", the decision is stored
- * for 180 days, and a persistent "Privacy settings" control reopens it.
- * The banner never appears on the protected viewer (it doesn't mount there).
+ * Feedback form. Deliberately independent of the analytics client: nothing
+ * here may emit analytics events, regardless of the consent decision.
+ * Submissions go to POST /api/feedback and are stored server-side for
+ * 180 days (see docs/deployment.md).
+ */
+function FeedbackForm() {
+  const [message, setMessage] = useState('')
+  const [email, setEmail] = useState('')
+  const [company, setCompany] = useState('')
+  const [pending, setPending] = useState(false)
+  const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
+
+  const trimmedMessage = message.trim()
+  const trimmedEmail = email.trim()
+  const messageInvalid =
+    trimmedMessage.length < MESSAGE_MIN || trimmedMessage.length > MESSAGE_MAX
+  const emailInvalid =
+    trimmedEmail !== '' &&
+    (trimmedEmail.length > EMAIL_MAX || !EMAIL_PATTERN.test(trimmedEmail))
+  const canSubmit = !pending && !messageInvalid && !emailInvalid
+
+  const messageHint = !messageInvalid
+    ? ''
+    : trimmedMessage.length === 0
+      ? `Please write at least ${MESSAGE_MIN} characters — a sentence or two is plenty.`
+      : trimmedMessage.length < MESSAGE_MIN
+        ? `A little more, please — at least ${MESSAGE_MIN} characters (currently ${trimmedMessage.length}).`
+        : `That's a bit long — please keep it under ${MESSAGE_MAX} characters (currently ${trimmedMessage.length}).`
+
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!canSubmit) return
+    setPending(true)
+    setStatus('idle')
+    try {
+      const response = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: trimmedMessage,
+          email: trimmedEmail === '' ? undefined : trimmedEmail,
+          company,
+        }),
+      })
+      if (!response.ok) throw new Error(`feedback failed: ${response.status}`)
+      setMessage('')
+      setEmail('')
+      setCompany('')
+      setStatus('success')
+    } catch {
+      // Recoverable failure: keep the entered text so nothing is lost.
+      setStatus('error')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <form className="feedback-form" onSubmit={onSubmit} noValidate>
+      <p className="consent-copy">
+        Feedback is optional and independent of analytics. It is stored
+        server-side for 180 days, then deleted. Include a reply email only if
+        you would like an answer.
+      </p>
+      <div className="feedback-field">
+        <label className="feedback-label" htmlFor="feedback-message">
+          Message
+        </label>
+        <textarea
+          id="feedback-message"
+          className="feedback-textarea"
+          value={message}
+          onChange={(event) => {
+            setMessage(event.target.value)
+            if (status !== 'idle') setStatus('idle')
+          }}
+          rows={5}
+          maxLength={MESSAGE_MAX * 2}
+          required
+          aria-describedby="feedback-message-hint"
+        />
+        <p id="feedback-message-hint" className="feedback-hint" aria-live="polite">
+          {messageHint}
+        </p>
+      </div>
+      <div className="feedback-field">
+        <label className="feedback-label" htmlFor="feedback-email">
+          Reply email (optional)
+        </label>
+        <input
+          id="feedback-email"
+          className="feedback-input"
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          maxLength={EMAIL_MAX}
+          autoComplete="email"
+          aria-describedby="feedback-email-hint"
+        />
+        <p id="feedback-email-hint" className="feedback-hint" aria-live="polite">
+          {emailInvalid ? "That email doesn't look quite right." : ''}
+        </p>
+      </div>
+      {/* Honeypot: never filled by humans; bots that fill it are dropped
+          server-side without storing anything. */}
+      <div className="feedback-honeypot visually-hidden" aria-hidden="true">
+        <label htmlFor="feedback-company">Company</label>
+        <input
+          id="feedback-company"
+          name="company"
+          type="text"
+          value={company}
+          onChange={(event) => setCompany(event.target.value)}
+          tabIndex={-1}
+          autoComplete="off"
+        />
+      </div>
+      <div className="consent-actions">
+        <button type="submit" className="consent-allow" disabled={!canSubmit}>
+          {pending ? 'Sending…' : 'Send feedback'}
+        </button>
+      </div>
+      {status === 'success' && (
+        <p className="feedback-status" role="status">
+          Thank you — your feedback was sent.
+        </p>
+      )}
+      {status === 'error' && (
+        <p className="feedback-error" role="alert">
+          Something went wrong while sending. Your message is still here —
+          please try again.
+        </p>
+      )}
+    </form>
+  )
+}
+
+/**
+ * Privacy and feedback (Stage 5 + feedback). Nothing loads before an explicit
+ * decision: the Privacy view offers "Allow analytics" / "No thanks", the
+ * decision is stored for 180 days, and a persistent top-right "Privacy and
+ * feedback" control reopens the panel. The panel never appears on the
+ * protected viewer (it doesn't mount there). The Feedback view is fully
+ * independent of analytics consent.
  */
 export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
   const clientRef = useRef<AnalyticsClient | null>(null)
   const [mounted, setMounted] = useState(false)
   const [record, setRecord] = useState<ConsentRecord | null>(null)
-  const [promptOpen, setPromptOpen] = useState(false)
-  const allowRef = useRef<HTMLButtonElement | null>(null)
-  const settingsRef = useRef<HTMLButtonElement | null>(null)
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [view, setView] = useState<PanelView>('privacy')
+  const fabRef = useRef<HTMLButtonElement | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const privacyTabRef = useRef<HTMLButtonElement | null>(null)
+  const feedbackTabRef = useRef<HTMLButtonElement | null>(null)
+
+  const baseId = useId()
+  const panelId = `${baseId}-panel`
+  const privacyTabId = `${baseId}-tab-privacy`
+  const feedbackTabId = `${baseId}-tab-feedback`
+  const privacyPanelId = `${baseId}-panel-privacy`
+  const feedbackPanelId = `${baseId}-panel-feedback`
 
   useEffect(() => {
     const client = createAnalyticsClient({
@@ -36,69 +194,171 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
     onClient(client)
     const stored = readConsent(window.localStorage, Date.now())
     setRecord(stored)
-    if (!stored) setPromptOpen(true)
+    // First visit: no stored decision — open the panel on the Privacy view.
+    if (!stored) setPanelOpen(true)
     if (stored?.decision === 'granted') client.grant()
     setMounted(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Move focus into the panel when it opens.
   useEffect(() => {
-    if (promptOpen) allowRef.current?.focus()
-  }, [promptOpen])
+    if (!panelOpen) return
+    const tab = view === 'privacy' ? privacyTabRef.current : feedbackTabRef.current
+    tab?.focus()
+  }, [panelOpen, view])
 
   if (!mounted) return null
+
+  const closePanel = (focusFab = true) => {
+    setPanelOpen(false)
+    if (focusFab) fabRef.current?.focus()
+  }
+
+  const togglePanel = () => {
+    if (panelOpen) {
+      closePanel(false)
+    } else {
+      // FAB opens always default to the Privacy view.
+      setView('privacy')
+      setPanelOpen(true)
+    }
+  }
 
   const decide = (decision: 'granted' | 'denied') => {
     const client = clientRef.current
     if (decision === 'granted') client?.grant()
     else client?.deny()
     setRecord({ decision, decidedAt: Date.now() })
-    setPromptOpen(false)
-    settingsRef.current?.focus()
+    closePanel()
+  }
+
+  const onPanelKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.stopPropagation()
+      closePanel()
+      return
+    }
+    // Arrow-key support across the tab list (roving tabindex).
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+      const target = event.target as HTMLElement
+      if (target.getAttribute('role') !== 'tab') return
+      event.preventDefault()
+      const next: PanelView = view === 'privacy' ? 'feedback' : 'privacy'
+      setView(next)
+    }
   }
 
   return (
     <>
       <button
-        ref={settingsRef}
+        ref={fabRef}
         type="button"
         className="privacy-settings-button"
-        onClick={() => setPromptOpen(true)}
+        onClick={togglePanel}
         aria-haspopup="dialog"
+        aria-expanded={panelOpen}
+        aria-controls={panelId}
+        aria-label="Privacy and feedback"
       >
-        Privacy settings
+        ?
       </button>
-      {promptOpen && (
+      {panelOpen && (
         <div
-          className="consent-banner"
+          ref={panelRef}
+          id={panelId}
+          className="privacy-panel"
           role="dialog"
           aria-modal="false"
-          aria-label="Privacy settings"
+          aria-label="Privacy and feedback"
+          onKeyDown={onPanelKeyDown}
         >
-          <p className="consent-copy">
-            Uploads are processed entirely in your browser and never leave your
-            device. The landing atmosphere is a seasonal mood from your local
-            date — no location or weather services. Confidential work is
-            authenticated separately and never tracked. Optional analytics
-            (GA4) count page and feature use only after you allow them.
-          </p>
-          <div className="consent-actions">
+          <div className="privacy-panel-header">
+            <div className="privacy-tabs" role="tablist" aria-label="Privacy and feedback views">
+              <button
+                ref={privacyTabRef}
+                id={privacyTabId}
+                type="button"
+                role="tab"
+                className="privacy-tab"
+                aria-selected={view === 'privacy'}
+                aria-controls={privacyPanelId}
+                tabIndex={view === 'privacy' ? 0 : -1}
+                onClick={() => setView('privacy')}
+              >
+                Privacy
+              </button>
+              <button
+                ref={feedbackTabRef}
+                id={feedbackTabId}
+                type="button"
+                role="tab"
+                className="privacy-tab"
+                aria-selected={view === 'feedback'}
+                aria-controls={feedbackPanelId}
+                tabIndex={view === 'feedback' ? 0 : -1}
+                onClick={() => setView('feedback')}
+              >
+                Feedback
+              </button>
+            </div>
             <button
-              ref={allowRef}
               type="button"
-              className="consent-allow"
-              onClick={() => decide('granted')}
+              className="privacy-panel-close"
+              onClick={() => closePanel()}
+              aria-label="Close privacy and feedback panel"
             >
-              Allow analytics
-            </button>
-            <button type="button" className="consent-decline" onClick={() => decide('denied')}>
-              No thanks
+              ×
             </button>
           </div>
-          {record && (
-            <p className="consent-current" role="status">
-              Analytics are currently {record.decision === 'granted' ? 'on' : 'off'}.
-            </p>
+          {view === 'privacy' && (
+            <div
+              id={privacyPanelId}
+              role="tabpanel"
+              aria-labelledby={privacyTabId}
+              className="privacy-tabpanel"
+            >
+              <p className="consent-copy">
+                Uploads are processed entirely in your browser and never leave
+                your device. The landing atmosphere is a seasonal mood from
+                your local date — no location or weather services. Confidential
+                work is authenticated separately and never tracked. Optional
+                analytics (GA4) count page and feature use only after you allow
+                them. Optional feedback submissions are stored server-side for
+                180 days with an optional reply email — no other personal data.
+              </p>
+              <div className="consent-actions">
+                <button
+                  type="button"
+                  className="consent-allow"
+                  onClick={() => decide('granted')}
+                >
+                  Allow analytics
+                </button>
+                <button
+                  type="button"
+                  className="consent-decline"
+                  onClick={() => decide('denied')}
+                >
+                  No thanks
+                </button>
+              </div>
+              {record && (
+                <p className="consent-current" role="status">
+                  Analytics are currently {record.decision === 'granted' ? 'on' : 'off'}.
+                </p>
+              )}
+            </div>
+          )}
+          {view === 'feedback' && (
+            <div
+              id={feedbackPanelId}
+              role="tabpanel"
+              aria-labelledby={feedbackTabId}
+              className="privacy-tabpanel"
+            >
+              <FeedbackForm />
+            </div>
           )}
         </div>
       )}

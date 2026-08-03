@@ -46,3 +46,15 @@ type PagesEventContext<Env, Params extends string = string> = {
 type PagesFunction<Env = unknown, Params extends string = string> = (
   context: PagesEventContext<Env, Params>,
 ) => Response | Promise<Response>
+
+// --- D1 (feedback storage) ---------------------------------------------------
+// Minimal surface used by functions/api/feedback — extend as needed.
+
+interface D1PreparedStatement {
+  bind(...values: unknown[]): D1PreparedStatement
+  run(): Promise<unknown>
+}
+
+interface D1Database {
+  prepare(query: string): D1PreparedStatement
+}

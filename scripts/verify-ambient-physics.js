@@ -28,12 +28,12 @@ try {
 const {
   AMBIENT_MAX_COLLISION_RESPONSES,
   AMBIENT_COLLISION_IMPULSE_CLAMP,
-  AMBIENT_BOUNDS_DAMPING,
   AMBIENT_COLLISION_RADIUS,
   MATRIX_LINE_HEIGHT,
   WEATHER_PROFILES,
   createAmbientField,
   createAmbientCollisionGrid,
+  normalizeAmbientField,
   rebuildAmbientCollisionGrid,
   resolveAmbientCollisions,
   resolveAmbientCount,
@@ -194,28 +194,40 @@ const PRESETS = ['clear', 'rain', 'storm', 'snow', 'blizzard', 'fog', 'wind']
   )
 }
 
-// (4) bounds bounce: invert + dampen at edges; precipitation recycles
+// (4) horizontal wrap through the gutter; vertical behaviors preserved
 {
   const fog = ambientWith({ mode: 'weather', weather: { preset: 'fog' } })
-  const field = createAmbientField('weather', 10, 20, 20, fog, createSeededRandom(5))
+  const field = createAmbientField('weather', 10, 200, 100, fog, createSeededRandom(5))
   field.count = 1
-  field.x[0] = 10
-  field.y[0] = 10
-  field.vx[0] = 1000
+  field.x[0] = 215
+  field.y[0] = 50
+  field.vx[0] = 500
   field.vy[0] = 0
-  stepAmbientField(field, stepParams(fog, 20, 20, 1 / 30))
-  assert(field.x[0] <= 20 && field.vx[0] < 0, 'agent bounces off the right edge (invert)')
+  stepAmbientField(field, stepParams(fog, 200, 100, 1 / 30))
   assert(
-    Math.abs(field.vx[0]) <= 1000 * AMBIENT_BOUNDS_DAMPING + 1,
-    'bounce dampens the velocity',
+    field.x[0] < 0 && field.x[0] >= -24 - 1,
+    `agent exiting the right edge wraps to the left gutter (got x=${field.x[0].toFixed(2)})`,
   )
+  assert(field.vx[0] > 0, 'wrap preserves horizontal velocity (no inversion)')
 
-  field.x[0] = 10
-  field.y[0] = 15
+  // Reverse direction: exiting left wraps to the right gutter.
+  field.x[0] = -10
+  field.vx[0] = -500
+  field.vy[0] = 0
+  stepAmbientField(field, stepParams(fog, 200, 100, 1 / 30))
+  assert(
+    field.x[0] > 200 && field.x[0] <= 200 + 24 + 1,
+    `agent exiting the left edge wraps to the right gutter (got x=${field.x[0].toFixed(2)})`,
+  )
+  assert(field.vx[0] < 0, 'reverse wrap preserves leftward velocity')
+
+  // Vertical: non-precipitation still bounces off the bottom.
+  field.x[0] = 100
+  field.y[0] = 95
   field.vx[0] = 0
   field.vy[0] = 1000
-  stepAmbientField(field, stepParams(fog, 20, 20, 1 / 30))
-  assert(field.y[0] <= 20 && field.vy[0] < 0, 'non-precipitation presets bounce off the bottom')
+  stepAmbientField(field, stepParams(fog, 200, 100, 1 / 30))
+  assert(field.y[0] <= 100 && field.vy[0] < 0, 'non-precipitation presets bounce off the bottom')
 
   const rain = ambientWith({ mode: 'weather', weather: { preset: 'rain' } })
   const rainField = createAmbientField('weather', 10, 20, 10, rain, createSeededRandom(5))
@@ -227,9 +239,118 @@ const PRESETS = ['clear', 'rain', 'storm', 'snow', 'blizzard', 'fog', 'wind']
   assert(rainField.y[0] === 0, 'precipitation recycles to the top at the bottom edge')
 }
 
-// (5) pointer: movement repels, drags push directionally, interactionStrength scales
+// (4b) signed wind: 50 is calm, below 50 leftward, above 50 rightward
 {
-  const rain = ambientWith({ mode: 'weather', weather: { preset: 'rain' } })
+  const run = (windValue) => {
+    const config = ambientWith({
+      mode: 'weather',
+      weather: { preset: 'wind', wind: windValue, turbulence: 0 },
+    })
+    const field = createAmbientField('weather', 200, 800, 600, config, createSeededRandom(29))
+    for (let s = 0; s < 240; s += 1) {
+      stepAmbientField(field, stepParams(config, 800, 600, 1 / 30))
+    }
+    let sum = 0
+    for (let i = 0; i < field.count; i += 1) sum += field.vx[i]
+    return sum / Math.max(1, field.count)
+  }
+  const calm = run(50)
+  const left = run(0)
+  const right = run(100)
+  assert(Math.abs(calm) < 1, `wind 50 has no directional bias (mean vx ${calm.toFixed(3)})`)
+  assert(left < -20 && right > 20, `wind 0 and 100 move in opposite directions (${left.toFixed(1)} / ${right.toFixed(1)})`)
+  assert(Math.abs(Math.abs(left) - Math.abs(right)) < 1, 'wind extremes are symmetric around 50')
+}
+
+// (4c) long-run distribution: sustained wind leaves no persistent edge row
+{
+  const config = ambientWith({
+    mode: 'weather',
+    weather: { preset: 'rain', wind: 100, turbulence: 60 },
+  })
+  const field = createAmbientField('weather', 200, 800, 600, config, createSeededRandom(31))
+  // ~5 minutes at a 30 Hz tick.
+  for (let s = 0; s < 9000; s += 1) {
+    stepAmbientField(field, stepParams(config, 800, 600, 1 / 30))
+  }
+  const bins = new Array(16).fill(0)
+  for (let i = 0; i < field.count; i += 1) {
+    const x = Math.min(799.99, Math.max(0, field.x[i]))
+    bins[Math.floor((x / 800) * 16)] += 1
+  }
+  const mean = field.count / 16
+  const edgeMax = Math.max(bins[0], bins[15])
+  assert(
+    edgeMax <= mean * 2.5,
+    `no persistent edge accumulation after 5 minutes (edge bin ${edgeMax}, mean ${mean.toFixed(1)})`,
+  )
+  // No clamp artifacts: nothing rests exactly on the edges.
+  let clamped = 0
+  for (let i = 0; i < field.count; i += 1) {
+    if (field.x[i] === 0 || field.x[i] === 800) clamped += 1
+  }
+  assert(clamped === 0, 'no agents clamped at x=0 or x=width after long run')
+}
+
+// (4d) matrix displacement stays bounded to the home column
+{
+  const config = ambientWith({ mode: 'matrix' })
+  const field = createAmbientField('matrix', 5000, 800, 600, config, createSeededRandom(37))
+  // Blast the whole scene with overlapping impulses and pointer forces.
+  for (let s = 0; s < 30; s += 1) {
+    applyAmbientRadialImpulse(field, 400, 300, 800, 500)
+    stepAmbientField(field, stepParams(config, 800, 600, 1 / 30))
+  }
+  let maxOffset = 0
+  for (let i = 0; i < field.count; i += 1) {
+    maxOffset = Math.max(maxOffset, Math.abs(field.x[i] - field.columnX[field.column[i]]))
+  }
+  assert(
+    maxOffset <= 24 + 1.5 + 1e-3,
+    `matrix displacement is bounded to the home column (max offset ${maxOffset.toFixed(2)}px)`,
+  )
+}
+
+// (4e) normalizeAmbientField repairs stale positions without a rebuild
+{
+  const config = ambientWith({ mode: 'weather', weather: { preset: 'wind' } })
+  const field = createAmbientField('weather', 100, 800, 600, config, createSeededRandom(41))
+  field.x[0] = 5000
+  field.x[1] = -3000
+  field.y[0] = -50
+  field.y[1] = 5000
+  normalizeAmbientField(field, 360, 640)
+  for (let i = 0; i < field.count; i += 1) {
+    assert(
+      field.x[i] >= -24 && field.x[i] <= 360 + 24,
+      `normalized x ${field.x[i].toFixed(1)} is inside the gutter range`,
+    )
+    assert(
+      field.y[i] >= 0 && field.y[i] <= 640,
+      `normalized y ${field.y[i].toFixed(1)} is inside the viewport`,
+    )
+  }
+  assert(field.width === 360 && field.height === 640, 'normalize updates the measured region')
+
+  const mconfig = ambientWith({ mode: 'matrix' })
+  const mfield = createAmbientField('matrix', 5000, 800, 600, mconfig, createSeededRandom(43))
+  mfield.vx[0] = 9999
+  mfield.vy[1] = -9999
+  mfield.columnScroll[0] = -12345
+  normalizeAmbientField(mfield, 800, 600)
+  assert(Math.abs(mfield.vx[0]) <= 24, 'normalize clamps matrix horizontal displacement')
+  assert(Math.abs(mfield.vy[1]) <= MATRIX_LINE_HEIGHT * 2, 'normalize clamps matrix vertical displacement')
+  const wrapHeight = (mfield.rowsPerColumn + 4) * MATRIX_LINE_HEIGHT
+  assert(
+    mfield.columnScroll[0] >= 0 && mfield.columnScroll[0] < wrapHeight,
+    'normalize wraps stale column scrolls',
+  )
+}
+
+// (5) pointer: movement repels, drags push directionally, interactionStrength scales
+// (turbulence zeroed so the pointer force is measured in isolation)
+{
+  const rain = ambientWith({ mode: 'weather', weather: { preset: 'rain', turbulence: 0 } })
   const field = createAmbientField('weather', 10, 200, 200, rain, createSeededRandom(11))
   field.count = 1
   field.x[0] = 110
@@ -253,7 +374,7 @@ const PRESETS = ['clear', 'rain', 'storm', 'snow', 'blizzard', 'fog', 'wind']
     'pointer drag adds a directional force (pointer velocity scaled)',
   )
 
-  const noInteraction = ambientWith({ mode: 'weather', interactionStrength: 0, weather: { preset: 'rain' } })
+  const noInteraction = ambientWith({ mode: 'weather', interactionStrength: 0, weather: { preset: 'rain', turbulence: 0 } })
   const zeroField = createAmbientField('weather', 10, 200, 200, noInteraction, createSeededRandom(11))
   zeroField.count = 1
   zeroField.x[0] = 110

@@ -104,6 +104,48 @@ export function clearPaintHistory(history: PaintHistory): void {
   history.totalPoints = 0
 }
 
+/** Deep copy of a stroke (the points buffer must not be shared). */
+export function clonePaintStroke(stroke: PaintStroke): PaintStroke {
+  return {
+    tool: stroke.tool,
+    glyphColor: stroke.glyphColor,
+    backgroundColor: stroke.backgroundColor,
+    radiusNorm: stroke.radiusNorm,
+    points: Float32Array.from(stroke.points),
+  }
+}
+
+/**
+ * A restorable snapshot of the whole paint overlay: the applied stroke
+ * history plus the paint-only redo stack. Captured/restored by the canvas
+ * (components/SceneCanvas) for the unified Vibe undo history — snapshots are
+ * viewport-independent because strokes are normalized and replayed.
+ */
+export type PaintSnapshot = {
+  strokes: PaintStroke[]
+  redoStrokes: PaintStroke[]
+}
+
+export function clonePaintSnapshot(snapshot: PaintSnapshot): PaintSnapshot {
+  return {
+    strokes: snapshot.strokes.map(clonePaintStroke),
+    redoStrokes: snapshot.redoStrokes.map(clonePaintStroke),
+  }
+}
+
+export function createEmptyPaintSnapshot(): PaintSnapshot {
+  return { strokes: [], redoStrokes: [] }
+}
+
+/** Rebuild a history value from snapshot strokes (points re-totalled). */
+export function paintHistoryFromStrokes(strokes: PaintStroke[]): PaintHistory {
+  let totalPoints = 0
+  for (let i = 0; i < strokes.length; i += 1) {
+    totalPoints += strokes[i].points.length / 2
+  }
+  return { strokes, totalPoints }
+}
+
 /**
  * Uniform-grid spatial index over the current target positions. Rebuilt
  * whenever the target field is (re)sampled; strokes are replayed against it.
