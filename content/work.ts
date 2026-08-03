@@ -128,7 +128,7 @@ export type WorkStory = {
 export const WORK_STORIES: WorkStory[] = [
   {
     id: 'microsoft-global-operations',
-    title: 'Building Orchestrator & Live Campus',
+    title: 'Global Operations',
     thesis:
       'Optimizing global campus operations through agentic building onboarding and mapping, paired with user-insight dashboards and agents.',
     role: 'Lead designer',
@@ -186,7 +186,7 @@ export const WORK_STORIES: WorkStory[] = [
   },
   {
     id: 'microsoft-employee-experience',
-    title: 'Global & Puget Sound Employee Experience',
+    title: 'Microsoft Employee Experience',
     role: 'Junior to Senior Designer',
     context: 'Microsoft · cross-functional team across design, product management, research, and engineering · 2019–2026',
     thesis: 'Supporting efficiency across Microsoft by reducing fragmentation across internal tools, enabling employees to complete tasks more easily and return their focus to the work at hand.',
