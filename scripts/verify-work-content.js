@@ -177,6 +177,46 @@ for (const story of WORK_STORIES) {
   )
 }
 
+// light-theme hero variants: every lightSourceUrl resolves to an existing
+// asset, and white-only/wordmark sources ship a #101826 light twin
+for (const slide of WORK_SLIDES) {
+  const lightUrl = slide.kind === 'intro' ? slide.lightSourceUrl : slide.story.lightSourceUrl
+  if (lightUrl) {
+    const lightPath = path.join(projectRoot, 'public', lightUrl)
+    assert(fs.existsSync(lightPath), `light hero variant exists: ${lightUrl}`)
+    if (lightUrl.endsWith('.svg')) {
+      const lightSvg = fs.readFileSync(lightPath, 'utf8')
+      assert(
+        /#101826/i.test(lightSvg),
+        `${lightUrl}: light variant uses the #101826 mark color`,
+      )
+    }
+  }
+}
+// The two white-on-dark sources must have light twins.
+assert(
+  introSlide.lightSourceUrl === '/assets/work/story-03-light.svg',
+  'intro slide (white wordmark) ships its light variant',
+)
+const operationsStory = WORK_STORIES.find((story) => story.id === 'microsoft-global-operations')
+assert(
+  !!operationsStory && operationsStory.lightSourceUrl === '/assets/work/building-multiple-light.svg',
+  'operations story (white-only mark) ships its light variant',
+)
+// story-03-light.svg preserves the Microsoft brand squares
+{
+  const lightSvg = fs.readFileSync(
+    path.join(projectRoot, 'public', 'assets', 'work', 'story-03-light.svg'),
+    'utf8',
+  )
+  for (const brandColor of ['#f25022', '#7fba00', '#00a4ef', '#ffb900']) {
+    assert(
+      lightSvg.toLowerCase().includes(brandColor),
+      `story-03-light.svg preserves Microsoft brand color ${brandColor}`,
+    )
+  }
+}
+
 // unique story ids
 const ids = WORK_STORIES.map((story) => story.id)
 assert(new Set(ids).size === ids.length, 'story ids are unique')
@@ -270,6 +310,31 @@ assert(
 
 // per-story scene resolution
 const base = EXPERIENCE_SCENES.work
+
+// per-slide glyph-text overrides resolve into the scene playground
+{
+  const operations = WORK_STORIES.find((story) => story.id === 'microsoft-global-operations')
+  const employee = WORK_STORIES.find((story) => story.id === 'microsoft-employee-experience')
+  assert(
+    operations?.glyphText === 'Do more with less ',
+    'operations story carries its glyph text',
+  )
+  assert(
+    employee?.glyphText === 'Defragmenting the Employee Experience ',
+    'employee-experience story carries its glyph text',
+  )
+  const operationsScene = resolveWorkScene(base, operations)
+  assert(
+    operationsScene.playground.glyphText === 'Do more with less ',
+    'operations scene uses the story glyph text',
+  )
+  const employeeScene = resolveWorkScene(base, employee)
+  assert(
+    employeeScene.playground.glyphText === 'Defragmenting the Employee Experience ',
+    'employee-experience scene uses the story glyph text',
+  )
+}
+
 for (const story of WORK_STORIES) {
   const resolved = resolveWorkScene(base, story)
   assert(resolved.sourceUrl === story.sourceUrl, `${story.id}: resolved scene uses story sourceUrl`)
@@ -299,7 +364,8 @@ for (const story of WORK_STORIES) {
     }
   }
   assert(
-    resolved.copy.heading === base.copy.heading && resolved.playground.glyphText === base.playground.glyphText,
+    resolved.copy.heading === base.copy.heading &&
+      resolved.playground.glyphText === (story.glyphText ?? base.playground.glyphText),
     `${story.id}: unresolved fields fall back to the work baseline`,
   )
 }

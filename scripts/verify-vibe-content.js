@@ -47,6 +47,7 @@ const {
   getVibePreset,
 } = require(path.join(tmpDir, 'content', 'vibe.js'))
 const { EXPERIENCE_SCENES } = require(path.join(tmpDir, 'engine', 'sceneConfig.js'))
+const { resolvePlaygroundConfig } = require(path.join(tmpDir, 'engine', 'playgroundTheme.js'))
 const {
   VIBE_DEFAULT_PLAYGROUND,
   GLYPH_FONT_OPTIONS,
@@ -340,9 +341,19 @@ for (const preset of VIBE_PRESETS) {
       preset.label.trim().length > 0,
     `${preset.id}: id and label are non-empty strings`,
   )
+  // Presets carry themed color tables (feature/light-dark); each theme's
+  // resolution must be a complete valid config.
   assert(
-    isCompleteValidConfig(preset.config),
-    `${preset.id}: config is complete and valid (all fields, hex colors, non-empty text, known font/mode, known point size, complete valid motion and ambient configs)`,
+    !!preset.config.dark && !!preset.config.light,
+    `${preset.id}: config carries dark and light color tables`,
+  )
+  assert(
+    isCompleteValidConfig(resolvePlaygroundConfig(preset.config, 'dark')),
+    `${preset.id}: dark resolution is complete and valid (all fields, hex colors, non-empty text, known font/mode, known point size, complete valid motion and ambient configs)`,
+  )
+  assert(
+    isCompleteValidConfig(resolvePlaygroundConfig(preset.config, 'light')),
+    `${preset.id}: light resolution is complete and valid (all fields, hex colors, non-empty text, known font/mode, known point size, complete valid motion and ambient configs)`,
   )
   if (preset.sourceUrl !== undefined) {
     assert(
@@ -352,12 +363,25 @@ for (const preset of VIBE_PRESETS) {
   }
 }
 
-// presets are complete compositions: applying one changes the whole field
+// presets are complete compositions: every theme-neutral field plus both
+// color tables is supplied, so applying one changes the whole field
+const THEME_NEUTRAL_KEYS = [
+  'glyphText',
+  'glyphFont',
+  'glyphColorMode',
+  'glyphSizePt',
+  'motion',
+  'ambient',
+]
+const THEME_COLOR_KEYS = ['backgroundColor1', 'backgroundColor2', 'glyphPalette']
 assert(
-  VIBE_PRESETS.every((preset) =>
-    CONFIG_KEYS.every((key) => preset.config[key] !== undefined),
+  VIBE_PRESETS.every(
+    (preset) =>
+      THEME_NEUTRAL_KEYS.every((key) => preset.config[key] !== undefined) &&
+      THEME_COLOR_KEYS.every((key) => preset.config.dark[key] !== undefined) &&
+      THEME_COLOR_KEYS.every((key) => preset.config.light[key] !== undefined),
   ),
-  'every preset supplies every config field (complete composition)',
+  'every preset supplies every config field in both themes (complete composition)',
 )
 
 // --- curated default composition ---------------------------------------------
@@ -374,8 +398,10 @@ assert(
 )
 
 assert(
-  VIBE_PRESETS.some((preset) => configsEqual(preset.config, vibeScene.playground)),
-  'vibe scene descriptor matches a preset-or-default config',
+  VIBE_PRESETS.some((preset) =>
+    configsEqual(resolvePlaygroundConfig(preset.config, 'dark'), vibeScene.playground),
+  ),
+  'vibe scene descriptor matches a preset-or-default config (dark resolution)',
 )
 
 // the scene descriptor must not share the palette array with the exported

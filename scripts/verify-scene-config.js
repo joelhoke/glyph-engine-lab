@@ -30,7 +30,8 @@ const {
   formatExperienceHash,
   parseExperienceHash,
 } = require(path.join(tmpDir, 'experienceHash.js'))
-const { EXPERIENCE_SCENES, getSceneDescriptor } = require(path.join(tmpDir, 'sceneConfig.js'))
+const { EXPERIENCE_SCENES, getSceneDescriptor, resolveScenePlayground } = require(path.join(tmpDir, 'sceneConfig.js'))
+const { resolvePlaygroundConfig } = require(path.join(tmpDir, 'playgroundTheme.js'))
 const {
   GLYPH_MOTION_MODE_OPTIONS,
   PARAMETRIC_VARIANT_OPTIONS,
@@ -219,6 +220,34 @@ for (const key of EXPERIENCE_SCENE_KEYS) {
   assert(
     !!ambient && ambient.mode === 'off',
     `${key} playground ambient defaults to off`,
+  )
+  // themed signature (feature/light-dark): every scene carries dark+light
+  // color tables, the baseline playground is the dark resolution, and the
+  // light resolution picks the light table up.
+  const themed = scene.themedPlayground
+  assert(
+    !!themed && !!themed.dark && !!themed.light &&
+      Array.isArray(themed.dark.glyphPalette) && themed.dark.glyphPalette.length > 0 &&
+      Array.isArray(themed.light.glyphPalette) && themed.light.glyphPalette.length > 0 &&
+      typeof themed.dark.backgroundColor1 === 'string' &&
+      typeof themed.dark.backgroundColor2 === 'string' &&
+      typeof themed.light.backgroundColor1 === 'string' &&
+      typeof themed.light.backgroundColor2 === 'string',
+    `${key} carries themed dark+light color tables`,
+  )
+  const darkResolved = resolvePlaygroundConfig(themed, 'dark')
+  assert(
+    darkResolved.glyphPalette.join(',') === scene.playground.glyphPalette.join(',') &&
+      darkResolved.backgroundColor1 === scene.playground.backgroundColor1 &&
+      darkResolved.backgroundColor2 === scene.playground.backgroundColor2,
+    `${key} baseline playground is the dark resolution of its themed config`,
+  )
+  const lightResolved = resolveScenePlayground(scene, 'light')
+  assert(
+    lightResolved.backgroundColor1 === themed.light.backgroundColor1 &&
+      lightResolved.backgroundColor2 === themed.light.backgroundColor2 &&
+      lightResolved.glyphPalette.join(',') === themed.light.glyphPalette.join(','),
+    `${key} resolves the light color table for the light theme`,
   )
 }
 

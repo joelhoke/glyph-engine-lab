@@ -49,27 +49,43 @@ where people, business, and technology meet."*
 
 ### 3.2 Color
 
-**Theme tokens** (pre-release): page, canvas, surface, text, text-muted,
-border, and accent are semantic tokens defined twice — CSS custom
-properties in `app/globals.css` (`--color-*` under
-`html[data-theme='dark']`, with an authored-but-unused
-`html[data-theme='light']` mapping) and a typed canvas palette in
-`engine/theme.ts` (`CANVAS_THEMES`). Dark is fixed for this release:
-`<html>` carries `data-theme="dark"` statically; there is no
-`prefers-color-scheme`, persistence, or toggle yet — the light tokens exist
-only so a future controller can switch. The tables below are the dark
-values.
+**Theme tokens**: page, canvas, surface, text, text-muted, border, and
+accent are semantic tokens defined twice — CSS custom properties in
+`app/globals.css` (`--color-*` on `:root`, the dark default, overridden
+inside `@media (prefers-color-scheme: light)`) and a typed canvas palette
+in `engine/theme.ts` (`CANVAS_THEMES`). The shipped theme follows the
+visitor's system preference (`useSystemTheme` in
+`engine/useSystemTheme.ts` mirrors the same media query for the canvas);
+there is no `data-theme` attribute, toggle, or persistence. Scene and
+preset canvas colors carry dark+light tables resolved per theme
+(`engine/playgroundTheme.ts`); the exact light palettes live in
+`engine/sceneConfig.ts` and `content/vibe.ts`. The tables below are the
+dark values.
 
-**Core surfaces** (dark-first brand; light tokens authored, not shipped)
+**Core surfaces** (both themes ship; the browser follows the OS preference)
 
-| Token | Hex | Use |
-|---|---|---|
-| Page background | `#090c12` | body, canvas base |
-| Panel background | `#06090e` @ 62–92% over blur | cards, dock, banner |
-| Elevated surface | `#0e1620` | skip link, overlays |
-| Warm void (fallback) | `#141026` | radial glow behind the logo |
+| Token | Dark | Light | Use |
+|---|---|---|---|
+| Page/canvas | `#090c12` | `#F4F6F9` | body, canvas base |
+| Panel surface | `#06090e` @ 62–92% over blur | `#FFFFFF` | cards, dock, banner |
+| Elevated surface | `#0e1620` | `#FFFFFF` | skip link, overlays |
+| Text | `#f7fbff` | `#101826` | primary text |
+| Muted text | `#c5d4ea` | `#44536A` | secondary copy |
+| Border | `rgba(255,255,255,.14)` | `rgba(16,24,38,.14)` | card/control borders |
+| Accent | `#8abaff` | `#0C5E7D` | links, labels, focus |
+| Accent hover | `#dbe9ff` | `#083F56` | hover/focus |
+| Error | `#ff8a8a` | `#A12A2A` | errors |
+| Success | — | `#1C6B49` | confirmations |
+| Warm accent | `#f2b28a` | `#8A3F1A` | collaborate warmth |
 
-**Text**
+**Theme transition**: live OS theme changes cross-fade the UI and canvas at
+exactly `500ms ease-in-out` (`--theme-transition-duration`; the canvas fades
+a snapshot of the last frame over the re-rendered scene). First paint never
+animates (transitions arm only after hydration via `html.theme-ready`), and
+`prefers-reduced-motion: reduce` applies the new theme immediately with no
+fade anywhere.
+
+**Text** (dark values; light uses the token table above)
 
 | Token | Hex | Use |
 |---|---|---|
@@ -91,13 +107,24 @@ values.
 
 **Brand gradients**
 
-- Landing canvas background (fixed radial): `#090C12` center → `#101826`
-  edge (`LANDING_CANVAS_GRADIENT` in `engine/theme.ts`)
-- Landing JH glyph gradient (fixed, left to right): `#0C5E7D → #3B9EC8` —
-  always this pair, independent of background luminance
-  (`engine/backgroundLuminance.ts`)
-- Vibe default ROYGBV glyph palette: `#ff0000` `#ff8800` `#ffff00`
-  `#00ff00` `#0088ff` `#8800ff` (`ROYGBV_GLYPH_PALETTE`)
+- Landing canvas background: dark `#090C12 → #101826`, light
+  `#F4F6F9 → #DCE7F3` (`LANDING_CANVAS_GRADIENT` in `engine/theme.ts`)
+- Landing JH glyph gradient (fixed, left to right, BOTH themes):
+  `#0C5E7D → #3B9EC8` — one shared pair, independent of theme or background
+  luminance (`engine/backgroundLuminance.ts`)
+- Vibe glyph palettes: dark ROYGBV `#ff0000 #ff8800 #ffff00 #00ff00 #0088ff
+  #8800ff`; light midpoint ROYGBV `#E0110C #D07200 #BCB200 #0ABF1E #0673BE
+  #7B21D4` (same hues, deepened halfway for light backgrounds)
+
+**Work brand-mark slot**: every Work slide may carry a `WorkBrandMark`
+(default + optional light asset + optional alt) rendered once beside the
+WORK heading — 28px high, up to 96px wide (72px on mobile), right-aligned
+with `object-fit: contain`, stable across slide changes. All current
+Microsoft slides share `MICROSOFT_BRAND_MARK` (white squares on dark,
+`#101826` on light, decorative because Microsoft is named in copy); future
+case studies supply their own mark or omit it. Hero sources with white
+wordmarks ship `#101826` light twins via `lightSourceUrl` (e.g.
+`story-03-light.svg`, `building-multiple-light.svg`).
 
 **Weather mesh backdrops** (`SceneCanvas.buildAllMeshBgs`): clear
 `#DDEBEE/#F2E6D8`, rain `#012840/#364F59`, storm `#070926/#281259`, wind

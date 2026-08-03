@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Cabin } from 'next/font/google'
+import ThemeReady from '../components/ThemeReady'
 import './globals.css'
 
 // Cabin Bold for primary display headings only (Vibe/Collaborate headings,
@@ -27,7 +28,9 @@ const SITE_DESCRIPTION =
  * the skip link, and the visually hidden semantic digests presentable. This
  * deliberately covers ONLY the chrome that must never appear as raw
  * unstyled content; the full design lives in globals.css and is not
- * duplicated here.
+ * duplicated here. The dark values are the default; the same
+ * `prefers-color-scheme` media query as globals.css carries the light set,
+ * so light-mode visitors never see a dark flash even when CSS/JS fail.
  */
 const CRITICAL_FALLBACK_CSS = `
 body{margin:0;background:#090c12;color:#ccc;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
@@ -39,6 +42,15 @@ body{margin:0;background:#090c12;color:#ccc;font-family:ui-monospace,SFMono-Regu
 .canvas-fallback-title{font-size:1.25rem;letter-spacing:.08em;color:#f5f7fb;margin:0}
 .canvas-fallback-copy{font-size:.85rem;line-height:1.7;color:#c5d4ea;margin:0}
 .noscript-note{position:fixed;left:50%;bottom:1.25rem;transform:translateX(-50%);max-width:32rem;margin:0;padding:.75rem 1.1rem;border:1px solid rgba(143,227,245,.35);border-radius:10px;background:rgba(14,22,32,.92);color:#d8edf2;font-size:.8rem;line-height:1.6;text-align:center;z-index:60}
+@media (prefers-color-scheme: light){
+body{background:#f4f6f9;color:#44536a}
+.skip-link{background:#ffffff;color:#101826}
+.skip-link:focus-visible{outline-color:#0c5e7d}
+.canvas-fallback{background:radial-gradient(circle at 50% 45%,#ffffff 0%,#f4f6f9 75%)}
+.canvas-fallback-title{color:#101826}
+.canvas-fallback-copy{color:#44536a}
+.noscript-note{border-color:rgba(12,94,125,.4);background:rgba(255,255,255,.94);color:#24465a}
+}
 `
 
 export const metadata: Metadata = {
@@ -80,11 +92,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="dark">
+    <html lang="en">
       <body className={cabin.variable}>
         {/* Inline first so the branded chrome never flashes unstyled when the
             external stylesheet is slow, blocked, or rejected. */}
         <style dangerouslySetInnerHTML={{ __html: CRITICAL_FALLBACK_CSS }} />
+        {/* Gates the globals.css theme transitions until after hydration, so
+            the first paint never animates — only live system changes fade. */}
+        <ThemeReady />
         <a href="#main-content" className="skip-link">
           Skip to content
         </a>

@@ -1,12 +1,11 @@
 /**
- * Semantic theme tokens (pre-release): the single source of truth for the
+ * Semantic theme tokens: the single source of truth for the
  * page/canvas/surface/text/border/accent colors, in both a dark and a light
- * mapping. The dark theme is the only shipped theme — `<html>` carries
- * `data-theme="dark"` statically and the CSS custom properties in
- * `app/globals.css` (`--color-*`) mirror the dark values below. The light
- * mapping is authored but unused until a future controller can switch the
- * attribute; there is deliberately no `prefers-color-scheme`, persistence,
- * or toggle yet.
+ * mapping. The shipped theme follows the visitor's system preference —
+ * `app/globals.css` declares the dark values on `:root` and overrides them
+ * inside `@media (prefers-color-scheme: light)`, and engine/useSystemTheme.ts
+ * mirrors the same media query for the canvas. There is deliberately no
+ * toggle, persistence, or `data-theme` attribute.
  *
  * Pure data only — no runtime behavior.
  */
@@ -52,11 +51,32 @@ export const CANVAS_THEMES: Record<ThemeName, CanvasTheme> = {
 }
 
 /**
- * The fixed landing canvas background: a radial gradient from the dark
- * canvas token out to a deeper blue-black. The intro playground forces both
- * stops (components/PortfolioExperience), replacing the old forced black.
+ * The landing canvas background per theme: a radial gradient from the theme's
+ * canvas token out to a deeper (dark) or cooler (light) edge. The intro
+ * playground forces both stops (components/PortfolioExperience), replacing
+ * the old forced black.
  */
-export const LANDING_CANVAS_GRADIENT = {
-  color1: CANVAS_THEMES.dark.canvas,
-  color2: '#101826',
+export const LANDING_CANVAS_GRADIENT: Record<ThemeName, { color1: string; color2: string }> = {
+  dark: {
+    color1: CANVAS_THEMES.dark.canvas,
+    color2: '#101826',
+  },
+  light: {
+    color1: CANVAS_THEMES.light.canvas,
+    color2: '#DCE7F3',
+  },
+}
+
+/**
+ * Theme-aware source resolution for scene/slide/preset source assets that
+ * carry a light-variant twin (e.g. a white wordmark that would vanish on a
+ * light field). A missing light variant always falls back to the base URL —
+ * wiring the optional `lightSourceUrl` field is opt-in per slide/story.
+ */
+export function resolveThemedSourceUrl(
+  sourceUrl: string,
+  lightSourceUrl: string | null | undefined,
+  theme: ThemeName,
+): string {
+  return theme === 'light' && lightSourceUrl ? lightSourceUrl : sourceUrl
 }

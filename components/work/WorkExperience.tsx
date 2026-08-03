@@ -3,6 +3,7 @@
 import { KeyboardEvent, RefObject, useEffect, useRef } from 'react'
 import {
   getWorkSlide,
+  getWorkSlideMark,
   getWorkSlideTitle,
   nextWorkStoryIndex,
   previousWorkStoryIndex,
@@ -43,6 +44,7 @@ export default function WorkExperience({
   onTrackEvent,
 }: WorkExperienceProps) {
   const slide = getWorkSlide(activeIndex)
+  const mark = getWorkSlideMark(slide)
   const slideTitle = getWorkSlideTitle(slide)
   const slideHeadingRef = useRef<HTMLHeadingElement | null>(null)
   const panelRef = useRef<HTMLElement | null>(null)
@@ -96,25 +98,29 @@ export default function WorkExperience({
       onKeyDown={handleKeyDown}
       ref={panelRef}
     >
-      <h2
-        ref={headingRef as RefObject<HTMLHeadingElement>}
-        tabIndex={-1}
-        className="work-mode-heading"
-      >
-        Work
-      </h2>
-      {slide.kind === 'intro' && slide.markUrl && (
-        // Card-level brand mark: anchored to the card (top aligned with the
-        // mode heading, right edge on the controls' content line) — never
-        // part of the slide flow.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={slide.markUrl}
-          alt=""
-          aria-hidden="true"
-          className="work-slide-mark"
-        />
-      )}
+      <div className="work-card-header">
+        <h2
+          ref={headingRef as RefObject<HTMLHeadingElement>}
+          tabIndex={-1}
+          className="work-mode-heading"
+        >
+          Work
+        </h2>
+        {/* Reusable brand-mark slot: rendered for any slide that carries one
+            (all current slides are Microsoft case studies), stable in the
+            card header across slide changes and expanded case studies. */}
+        <span className="work-slide-mark" aria-hidden={mark?.alt ? undefined : true}>
+          {mark && (
+            <picture>
+              {mark.lightSrc && (
+                <source srcSet={mark.lightSrc} media="(prefers-color-scheme: light)" />
+              )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={mark.src} alt={mark.alt ?? ''} />
+            </picture>
+          )}
+        </span>
+      </div>
       {slide.kind === 'intro' ? (
         <article
           className="work-story work-slide-intro"

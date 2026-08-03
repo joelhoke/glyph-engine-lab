@@ -29,8 +29,9 @@ import {
 } from '../engine/animatedSource'
 import {
   applyHorizontalGlyphGradient,
-  LANDING_GLYPH_GRADIENT,
+  LANDING_GLYPH_GRADIENT_THEMES,
 } from '../engine/backgroundLuminance'
+import { ThemeName } from '../engine/theme'
 import { LANDING_SOURCE_URL } from '../engine/sceneConfig'
 import { createSeededRandom, RandomSource } from '../engine/random'
 import {
@@ -215,6 +216,19 @@ const DISABLED_PAINT_TOOL: PaintToolConfig = {
  *  glyph population snaps to the logo center so the animation grows from it. */
 const LANDING_SCALE_RESTART_EPSILON = 0.001
 
+/** Theme cross-fade (feature/light-dark): on a live system-theme change the
+ *  last completed frame is retained as a snapshot and faded out over the
+ *  re-themed scene — 1 → 0 over exactly this long, ease-in-out. */
+const THEME_FADE_DURATION_MS = 500
+
+/** Built-in monogram fill per theme: white on dark; on light the mark is
+ *  rasterized in the light theme's ink color so `source-colors` paints it
+ *  visibly (the landing recolors the field with its own gradient anyway). */
+const MONOGRAM_FILL: Record<ThemeName, string> = {
+  dark: '#fff',
+  light: '#101826',
+}
+
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
@@ -262,6 +276,10 @@ type SceneCanvasProps = {
    *  layer and pointer physics span the whole canvas. */
   targetRegion?: SceneTargetRegion | null
   playgroundConfig?: PlaygroundConfig
+  /** Active system theme (feature/light-dark): drives the landing glyph
+   *  gradient, the built-in monogram fill, and the cross-fade on change.
+   *  Defaults to 'dark'. */
+  theme?: ThemeName
   /** Vibe-only paint tool state; undefined disables painting entirely. */
   paintTool?: PaintToolConfig
   onPaintStatusChange?: (status: PaintStatus) => void
@@ -318,6 +336,7 @@ function SceneCanvasInternal(
     source,
     targetRegion = null,
     playgroundConfig,
+    theme = 'dark',
     paintTool,
     onPaintStatusChange,
     onPaintStrokeEnd,
@@ -388,6 +407,12 @@ function SceneCanvasInternal(
   const svgTargetMapRef = useRef<Int32Array>(new Int32Array(0))
   const sceneStartRef = useRef<number>(0)
   const reducedMotionRef = useRef(false)
+  // Theme (feature/light-dark): the active theme mirror read by the target
+  // builders, plus the cross-fade state — a single reusable snapshot canvas
+  // holding the last completed frame while the re-themed scene fades in.
+  const themeRef = useRef<ThemeName>(theme)
+  const themeFadeCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const themeFadeStartRef = useRef(0)
   const unassignedBehaviorRef = useRef<UnassignedGlyphBehavior>('hidden')
   const tuningModeRef = useRef<boolean>(false)
   // Stable prop mirrors: every source rebuild reads the latest selection and
@@ -580,6 +605,42 @@ function SceneCanvasInternal(
     reducedMotionQuery.addEventListener('change', updateReducedMotion)
     return () => reducedMotionQuery.removeEventListener('change', updateReducedMotion)
   }, [])
+
+  // Capture the current canvas into the reusable cross-fade snapshot. The
+  // allocation happens once per fade window (never per frame) and the canvas
+  // is released — the ref nulled — when the fade completes in the frame loop.
+  const beginThemeFade = () => {
+    const canvas = canvasRef.current
+    if (!canvas || canvas.width === 0 || canvas.height === 0) return
+    let snapshot = themeFadeCanvasRef.current
+    if (!snapshot) {
+      snapshot = document.createElement('canvas')
+      themeFadeCanvasRef.current = snapshot
+    }
+    snapshot.width = canvas.width
+    snapshot.height = canvas.height
+    const snapshotCtx = snapshot.getContext('2d')
+    if (!snapshotCtx) {
+      themeFadeCanvasRef.current = null
+      return
+    }
+    snapshotCtx.drawImage(canvas, 0, 0)
+    themeFadeStartRef.current = performance.now()
+  }
+
+  // Live theme change (feature/light-dark): retain the last completed frame
+  // as a snapshot, rebuild the source field so theme-dependent colors (the
+  // landing gradient, the built-in monogram fill) resolve against the new
+  // theme, and fade the snapshot out over THEME_FADE_DURATION_MS in the frame
+  // loop. Reduced motion skips the fade entirely — the re-themed static
+  // canvas simply repaints via the rebuild's renderOnce re-arm.
+  useEffect(() => {
+    if (themeRef.current === theme) return
+    themeRef.current = theme
+    if (!reducedMotionRef.current) beginThemeFade()
+    scheduleSvgTargetRebuild()
+    renderOnceRef.current()
+  }, [theme])
 
   // Point size is structural: when the effective size changes, the source
   // field re-samples through the standard rebuild path (targets rebuilt,
@@ -977,7 +1038,7 @@ function SceneCanvasInternal(
     const scale = Math.min(W, H) / 320
     ctx.translate(W * 0.5, H * 0.42)
     ctx.scale(scale, scale)
-    ctx.fillStyle = '#fff'
+    ctx.fillStyle = MONOGRAM_FILL[themeRef.current]
     const path = new Path2D(LOGO_PATHS.join(' '))
     ctx.fill(path)
     ctx.restore()
@@ -2114,19 +2175,20 @@ function SceneCanvasInternal(
         }
       }
       // Landing completed-intro: recolor the hero mark (built-in monogram or
-      // the JH logotype) with the fixed left-to-right landing gradient
-      // (engine/backgroundLuminance) — independent of the background behind
-      // it, so the mark reads the same on every visitor's landing.
+      // the JH logotype) with the fixed left-to-right landing gradient for the
+      // active theme (engine/backgroundLuminance) — independent of the
+      // background behind it, so the mark reads the same on every landing.
       const isLandingField =
         experienceRef.current === 'intro' &&
         (selection.kind === 'builtin' ||
           (selection.kind === 'static' && selection.url === LANDING_SOURCE_URL))
       if (isLandingField) {
+        const landingGradient = LANDING_GLYPH_GRADIENT_THEMES[themeRef.current]
         applyHorizontalGlyphGradient(
           result.colors,
           result.normX,
-          LANDING_GLYPH_GRADIENT.from,
-          LANDING_GLYPH_GRADIENT.to,
+          landingGradient.from,
+          landingGradient.to,
         )
       }
       setBaseField(result.x, result.y, result.colors, result.normX, result.normY)
@@ -3026,6 +3088,37 @@ function SceneCanvasInternal(
       const mode = sceneModeRef.current
       if (mode === 'svg') drawSvgGlyphScene(now)
       else drawParagraph(now, revealedChars)
+      // Theme cross-fade (feature/light-dark): the pre-change frame fades out
+      // over the freshly drawn re-themed scene, then the snapshot is released
+      // (ref nulled, canvas dropped). Skipped entirely under reduced motion —
+      // beginThemeFade never captured one.
+      const fadeSnapshot = themeFadeCanvasRef.current
+      if (fadeSnapshot) {
+        const fadeT = (now - themeFadeStartRef.current) / THEME_FADE_DURATION_MS
+        if (fadeT >= 1) {
+          themeFadeCanvasRef.current = null
+        } else {
+          const clampedT = Math.min(1, Math.max(0, fadeT))
+          // ease-in-out (quadratic): slow at both ends of the 500ms fade.
+          const eased =
+            clampedT < 0.5
+              ? 2 * clampedT * clampedT
+              : 1 - Math.pow(-2 * clampedT + 2, 2) / 2
+          const fadeCanvas = canvasRef.current
+          if (fadeCanvas) {
+            ctx.save()
+            ctx.globalAlpha = 1 - eased
+            ctx.drawImage(
+              fadeSnapshot,
+              0,
+              0,
+              fadeCanvas.width / pixelRatioRef.current,
+              fadeCanvas.height / pixelRatioRef.current,
+            )
+            ctx.restore()
+          }
+        }
+      }
       const frameCost = performance.now() - frameStart
       frameTimingRef.current.record(frameCost, frameStart)
       // Adaptive quality: feed the frame cost into the hysteresis controller
