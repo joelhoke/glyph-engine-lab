@@ -127,6 +127,10 @@ export function resolveSeasonalAtmosphere(input: SeasonalAtmosphereInput): Ambie
   return clampAmbientConfig({
     mode: 'weather',
     interactionStrength: LANDING_INTERACTION_STRENGTH,
+    // The landing paints its own fixed background gradient; the legacy
+    // weather mesh would lighten/replace it, so the backdrop is fully
+    // suppressed. Weather particles are unaffected (they render above).
+    backdropOpacity: 0,
     weather: {
       preset: weather.preset,
       intensity: night ? weather.intensity - 10 : weather.intensity,

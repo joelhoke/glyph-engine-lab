@@ -1,4 +1,3 @@
-import { IntroTiming } from '../../engine/introSequence'
 import { defaultSceneState } from '../../engine/constants'
 import { SourceLayoutConfig } from '../../engine/svgTargetSource'
 
@@ -16,60 +15,6 @@ export type SourceLayoutConfigKey = keyof SourceLayoutConfig
 export type SourceLayoutControlDefinition = NumericControlDefinition & {
   kind: 'number' | 'select'
   options?: { label: string; value: string }[]
-}
-
-export const INTRO_TIMING_CONTROL_DEFINITIONS: Record<
-  keyof IntroTiming,
-  NumericControlDefinition
-> = {
-  logoFormDuration: {
-    label: 'Logo formation',
-    min: 0,
-    max: 10000,
-    step: 50,
-    unit: 'ms',
-    showSlider: true,
-  },
-  logoHoldDuration: {
-    label: 'Logo hold',
-    min: 0,
-    max: 10000,
-    step: 50,
-    unit: 'ms',
-    showSlider: true,
-  },
-  taglineTransitionDuration: {
-    label: 'Tagline transition',
-    min: 0,
-    max: 10000,
-    step: 50,
-    unit: 'ms',
-    showSlider: true,
-  },
-  taglineHoldDuration: {
-    label: 'Tagline hold',
-    min: 0,
-    max: 10000,
-    step: 50,
-    unit: 'ms',
-    showSlider: true,
-  },
-  optionsTransitionDuration: {
-    label: 'Options transition',
-    min: 0,
-    max: 10000,
-    step: 50,
-    unit: 'ms',
-    showSlider: true,
-  },
-  optionStagger: {
-    label: 'Option stagger',
-    min: 0,
-    max: 2000,
-    step: 10,
-    unit: 'ms',
-    showSlider: true,
-  },
 }
 
 export type SceneConfigKey =

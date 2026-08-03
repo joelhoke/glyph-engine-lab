@@ -47,6 +47,21 @@ export const MATRIX_LINE_HEIGHT = 17
 /** Base glyph width used for matrix column spacing, in px. */
 export const MATRIX_GLYPH_WIDTH = 8
 
+/**
+ * Offscreen gutter (px) weather agents wrap through horizontally. Agents
+ * crossing one edge re-enter just past the other, so sustained wind never
+ * accumulates a persistent row at the viewport edge.
+ */
+export const AMBIENT_WRAP_GUTTER = 24
+
+/**
+ * Matrix displacement bounds: pointer/collision offsets may push a stream
+ * glyph at most this far from its home position, so streams always remain
+ * associated with their original columns.
+ */
+export const MATRIX_MAX_DISPLACEMENT_X = MATRIX_GLYPH_WIDTH * 3
+export const MATRIX_MAX_DISPLACEMENT_Y = MATRIX_LINE_HEIGHT * 2
+
 /** Rows of head-glow falloff: an agent within this distance of the stream
  *  head renders with the glow flag set. */
 export const MATRIX_HEAD_GLOW_RANGE = 0.9
@@ -394,19 +409,21 @@ function applyPointerForces(
 }
 
 /**
- * Edge handling: horizontal edges always bounce (invert + dampen velocity);
- * the bottom edge recycles precipitation profiles back to the top and bounces
- * for everything else; the top edge bounces. Matrix streams are viewport-bound
- * by construction (positions derive from wrapped column scrolls), so only
- * their pointer-displacement offsets are decayed.
+ * Edge handling: horizontal movement WRAPS through a small offscreen gutter
+ * (AMBIENT_WRAP_GUTTER) — agents exiting one side re-enter just past the
+ * other, so sustained wind distributes instead of piling up at an edge.
+ * Vertical behavior is unchanged: the bottom edge recycles precipitation
+ * profiles back to the top and bounces for everything else; the top edge
+ * bounces. Matrix streams are viewport-bound by construction (positions
+ * derive from wrapped column scrolls), so only their pointer-displacement
+ * offsets are decayed (and clamped, below).
  */
 function applyBounds(field: AmbientField, i: number, width: number, height: number, recycleBottom: boolean) {
-  if (field.x[i] < 0) {
-    field.x[i] = 0
-    field.vx[i] = -field.vx[i] * AMBIENT_BOUNDS_DAMPING
-  } else if (field.x[i] > width) {
-    field.x[i] = width
-    field.vx[i] = -field.vx[i] * AMBIENT_BOUNDS_DAMPING
+  const wrapWidth = width + AMBIENT_WRAP_GUTTER * 2
+  if (field.x[i] < -AMBIENT_WRAP_GUTTER) {
+    field.x[i] += wrapWidth
+  } else if (field.x[i] > width + AMBIENT_WRAP_GUTTER) {
+    field.x[i] -= wrapWidth
   }
   if (field.y[i] < 0) {
     field.y[i] = 0
@@ -435,7 +452,9 @@ export function stepAmbientField(field: AmbientField, params: AmbientStepParams)
     const weather = config.weather
     const profile = WEATHER_PROFILES[weather.preset]
     const intensityMul = weather.intensity / 100
-    const wind = (weather.wind / 50) * profile.windScale
+    // Signed wind: the 0–100 knob centers on 50 (calm); below 50 blows
+    // leftward, above 50 rightward. The interface is unchanged.
+    const wind = ((weather.wind - 50) / 50) * profile.windScale
     const turbAmp = (weather.turbulence / 60) * profile.turbulenceScale * 40
     const velBlend = Math.min(1, dt * 2.5)
     if (profile.lightning) {
@@ -496,6 +515,13 @@ export function stepAmbientField(field: AmbientField, params: AmbientStepParams)
     )
     field.vx[i] *= decay
     field.vy[i] *= decay
+    // Bound pointer/collision displacement so the stream glyph always stays
+    // within reach of its home column (never pushed into a neighbor's lane
+    // or off the scene).
+    if (field.vx[i] > MATRIX_MAX_DISPLACEMENT_X) field.vx[i] = MATRIX_MAX_DISPLACEMENT_X
+    else if (field.vx[i] < -MATRIX_MAX_DISPLACEMENT_X) field.vx[i] = -MATRIX_MAX_DISPLACEMENT_X
+    if (field.vy[i] > MATRIX_MAX_DISPLACEMENT_Y) field.vy[i] = MATRIX_MAX_DISPLACEMENT_Y
+    else if (field.vy[i] < -MATRIX_MAX_DISPLACEMENT_Y) field.vy[i] = -MATRIX_MAX_DISPLACEMENT_Y
     const baseY =
       ((field.row[i] * MATRIX_LINE_HEIGHT + scroll) % wrapHeight) - MATRIX_LINE_HEIGHT * 2
     field.x[i] =
@@ -504,6 +530,56 @@ export function stepAmbientField(field: AmbientField, params: AmbientStepParams)
       field.vx[i]
     field.y[i] = baseY + field.vy[i]
   }
+}
+
+/**
+ * Normalize transient positions after the measured region changed (resize,
+ * orientation change, dynamic browser chrome, ambient-field rebuild,
+ * visibility resume) without discarding the pool's accumulated state.
+ * Weather agents wrap into the gutter-extended horizontal range and clamp
+ * into the vertical range; matrix streams clamp their displacement offsets
+ * and wrap column scrolls. Structural viewport changes still rebuild the
+ * matrix column layout (resizeScene), so this never re-derives columns.
+ * Allocation-free.
+ */
+export function normalizeAmbientField(
+  field: AmbientField,
+  width: number,
+  height: number,
+): void {
+  const wrapWidth = width + AMBIENT_WRAP_GUTTER * 2
+  if (field.mode === 'weather') {
+    for (let i = 0; i < field.capacity; i += 1) {
+      let x = field.x[i]
+      // Modulo-wrap into [-GUTTER, width + GUTTER] regardless of how stale
+      // the position is (e.g. a much narrower viewport after rotation).
+      x = ((x + AMBIENT_WRAP_GUTTER) % wrapWidth + wrapWidth) % wrapWidth - AMBIENT_WRAP_GUTTER
+      field.x[i] = x
+      if (field.y[i] < 0) field.y[i] = 0
+      else if (field.y[i] > height) field.y[i] = height
+    }
+  } else {
+    const wrapHeight = (field.rowsPerColumn + 4) * MATRIX_LINE_HEIGHT
+    for (let c = 0; c < field.columnCount; c += 1) {
+      let scroll = field.columnScroll[c]
+      scroll = ((scroll % wrapHeight) + wrapHeight) % wrapHeight
+      field.columnScroll[c] = scroll
+    }
+    for (let i = 0; i < field.capacity; i += 1) {
+      if (field.vx[i] > MATRIX_MAX_DISPLACEMENT_X) field.vx[i] = MATRIX_MAX_DISPLACEMENT_X
+      else if (field.vx[i] < -MATRIX_MAX_DISPLACEMENT_X) field.vx[i] = -MATRIX_MAX_DISPLACEMENT_X
+      if (field.vy[i] > MATRIX_MAX_DISPLACEMENT_Y) field.vy[i] = MATRIX_MAX_DISPLACEMENT_Y
+      else if (field.vy[i] < -MATRIX_MAX_DISPLACEMENT_Y) field.vy[i] = -MATRIX_MAX_DISPLACEMENT_Y
+      const c = field.column[i]
+      const baseY =
+        ((field.row[i] * MATRIX_LINE_HEIGHT + field.columnScroll[c]) % wrapHeight) -
+        MATRIX_LINE_HEIGHT * 2
+      field.x[i] = field.columnX[c] + field.vx[i]
+      field.y[i] = baseY + field.vy[i]
+    }
+  }
+  field.width = width
+  field.height = height
 }
 
 /**

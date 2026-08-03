@@ -1,6 +1,6 @@
 'use client'
 
-import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { prepareWithSegments, layoutNextLine } from '@chenglou/pretext'
 import { createPointerListeners } from '../engine/Pointer'
 import {
@@ -28,8 +28,8 @@ import {
   SceneSourceSelection,
 } from '../engine/animatedSource'
 import {
-  applyVerticalGlyphGradient,
-  resolveLandingGlyphGradient,
+  applyHorizontalGlyphGradient,
+  LANDING_GLYPH_GRADIENT,
 } from '../engine/backgroundLuminance'
 import { LANDING_SOURCE_URL } from '../engine/sceneConfig'
 import { createSeededRandom, RandomSource } from '../engine/random'
@@ -40,6 +40,12 @@ import {
   resolveSamplingStep,
 } from '../engine/displayBudget'
 import { assignGlyphsToTargets } from '../engine/glyphAssignment'
+import {
+  clampGlyphPointSize,
+  resolveEffectiveGlyphSize,
+  resolveGlyphLineHeight,
+  resolveGlyphSamplingScale,
+} from '../engine/glyphSize'
 import { applyRadialImpulse } from '../engine/impulse'
 import {
   APPROVED_PLAYGROUND_DEFAULTS,
@@ -48,6 +54,7 @@ import {
 import {
   AMBIENT_DEFAULTS,
   AmbientConfig,
+  BACKDROP_OPACITY_DEFAULT,
   clampAmbientConfig,
 } from '../engine/ambientConfig'
 import {
@@ -56,6 +63,9 @@ import {
   applyAmbientRadialImpulse,
   createAmbientCollisionGrid,
   createAmbientField,
+  MATRIX_GLYPH_WIDTH,
+  MATRIX_LINE_HEIGHT,
+  normalizeAmbientField,
   rebuildAmbientCollisionGrid,
   resolveAmbientCollisions,
   resolveAmbientCount,
@@ -90,6 +100,7 @@ import {
   appendInterpolatedPoints,
   buildTargetSpatialIndex,
   clearPaintHistory,
+  clonePaintSnapshot,
   countBackgroundStrokes,
   createPaintHistory,
   PAINT_BRUSH_DIAMETER_DEFAULT,
@@ -97,15 +108,37 @@ import {
   PAINT_BRUSH_DIAMETER_MIN,
   PAINT_MAX_POINTS,
   PaintHistory,
+  PaintSnapshot,
   PaintStatus,
   PaintStroke,
   PaintToolConfig,
+  paintHistoryFromStrokes,
   popStroke,
   pushStroke,
   replayPaintHistory,
   stampPoint,
   TargetSpatialIndex,
 } from '../engine/paint'
+import {
+  createEvolutionRing,
+  createEvolvingRecord,
+  createEvolutionParams,
+  clearEvolutionRing,
+  dropOldestEvolving,
+  evolutionParamsAt,
+  evolvingRecordAt,
+  EVOLUTION_SETTLE_MS,
+  EvolutionParams,
+  EvolutionRing,
+  EvolvingStrokeRecord,
+  grainAlphaFactor,
+  grainDarkVariant,
+  grainRadiusFactor,
+  isEvolutionSettled,
+  isStrokeEvolving,
+  peekOldestEvolving,
+  pushEvolvingStroke,
+} from '../engine/paintEvolution'
 import {
   buildTargetSpatialDataFromArrays,
   buildWordColorIndices,
@@ -136,6 +169,15 @@ type SequenceDiagnostics = {
 type SceneDiagnostics = SceneDiagnosticsSnapshot
 
 type SceneMode = 'svg' | 'paragraph'
+
+/** Viewport-relative rect (CSS px) that bounds the source target field — the
+ *  mobile Work glyph stage. Null = the field fits the full viewport. */
+export type SceneTargetRegion = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 
 const QUOTE = "Voilà! In view, a humble vaudevillian veteran cast vicariously as both victim and villain by the vicissitudes of Fate... you may call me 'V'."
 const FULL_TEXT = Array(25).fill(QUOTE).join(' ')
@@ -168,6 +210,10 @@ const DISABLED_PAINT_TOOL: PaintToolConfig = {
   backgroundColor: 'none',
   brushDiameter: PAINT_BRUSH_DIAMETER_DEFAULT,
 }
+
+/** Landing logo scale at or below this counts as a scale-in (re)start: the
+ *  glyph population snaps to the logo center so the animation grows from it. */
+const LANDING_SCALE_RESTART_EPSILON = 0.001
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
@@ -210,10 +256,18 @@ type SceneCanvasProps = {
   /** What the field samples its targets from (built-in mark, static image,
    *  or an animated provider). Defaults to the built-in mark. */
   source?: SceneSourceSelection
+  /** Optional rect (CSS px, viewport-relative) the source target field is
+   *  fitted into — the mobile Work glyph stage. Null/undefined fits the full
+   *  viewport. Only the source target field is region-bound; the ambient
+   *  layer and pointer physics span the whole canvas. */
+  targetRegion?: SceneTargetRegion | null
   playgroundConfig?: PlaygroundConfig
   /** Vibe-only paint tool state; undefined disables painting entirely. */
   paintTool?: PaintToolConfig
   onPaintStatusChange?: (status: PaintStatus) => void
+  /** Fired when a completed stroke is committed to the paint history, so the
+   *  parent can record a unified-history transaction around it. */
+  onPaintStrokeEnd?: () => void
   experience?: ExperienceMode
   sceneId?: string
   onDiagnosticsUpdate?: (snapshot: SceneDiagnostics) => void
@@ -237,6 +291,17 @@ export type SceneCanvasHandle = {
   redoPaint: () => void
   clearPaint: () => void
   getPaintStatus: () => PaintStatus
+  /** Deep-copied snapshot of the whole paint overlay (stroke history + paint
+   *  redo stack) for the unified Vibe undo history. */
+  capturePaintState: () => PaintSnapshot
+  /** Restore a snapshot taken by capturePaintState: replaces the stroke
+   *  history and redo stack, replays the overlay, and re-renders. */
+  restorePaintState: (snapshot: PaintSnapshot) => void
+  /** Landing scale-in driver: writes the current logo scale (0–1) into a ref
+   *  the frame loop reads. Allocation-free, no React state — safe to call at
+   *  full requestAnimationFrame cadence. A (re)start at ~0 snaps every glyph
+   *  to the logo center so the scale-in originates there. */
+  setLandingLogoScale: (scale: number) => void
 }
 
 function SceneCanvasInternal(
@@ -251,9 +316,11 @@ function SceneCanvasInternal(
     clickImpulseForce = 10,
     sourceLayout,
     source,
+    targetRegion = null,
     playgroundConfig,
     paintTool,
     onPaintStatusChange,
+    onPaintStrokeEnd,
     experience = 'intro',
     sceneId = 'intro',
     onDiagnosticsUpdate,
@@ -271,6 +338,9 @@ function SceneCanvasInternal(
     redoPaint,
     clearPaint,
     getPaintStatus,
+    capturePaintState,
+    restorePaintState,
+    setLandingLogoScale,
   }))
   const meshBgsRef = useRef<MeshBgs | null>(null)
   const particlesRef = useRef<Particle[]>([])
@@ -325,6 +395,10 @@ function SceneCanvasInternal(
   // in-flight async load) can never retain a stale initial-props closure.
   const sourceLayoutRef = useRef<SourceLayoutConfig | undefined>(sourceLayout)
   const sourceSelectionRef = useRef<SceneSourceSelection | undefined>(source)
+  // Stable mirror of the glyph-stage region: buildSvgTargets reads it at
+  // rebuild time, so region recalcs re-fit the ACTIVE source (never a stale
+  // closure, never the fallback on a mere recalc).
+  const targetRegionRef = useRef<SceneTargetRegion | null>(targetRegion)
   const rebuildSvgTimeoutRef = useRef<number | null>(null)
   const resizeTimeoutRef = useRef<number | null>(null)
   const svgLoadRequestRef = useRef(0)
@@ -408,6 +482,7 @@ function SceneCanvasInternal(
   const spatialIndexRef = useRef<TargetSpatialIndex | null>(null)
   const paintToolRef = useRef<PaintToolConfig>(paintTool ?? DISABLED_PAINT_TOOL)
   const onPaintStatusChangeRef = useRef(onPaintStatusChange)
+  const onPaintStrokeEndRef = useRef(onPaintStrokeEnd)
   const activeStrokeRef = useRef<{
     pointerId: number
     tool: 'paint' | 'erase'
@@ -427,6 +502,16 @@ function SceneCanvasInternal(
   const bgPaintCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const bgPaintCtxRef = useRef<CanvasRenderingContext2D | null>(null)
   const bgBrushCacheRef = useRef<Map<string, HTMLCanvasElement>>(new Map())
+  // Background paint evolution: completed background-channel strokes animate
+  // compact/grainy → elongated → settled over 7s (engine/paintEvolution),
+  // rendered per frame on a sibling low-res layer composited above the
+  // settled layer, then baked into the settled layer and dropped. The ring
+  // is fixed-size (max 8); scratch params/transform keep frames alloc-free.
+  const evolveRingRef = useRef<EvolutionRing>(createEvolutionRing())
+  const bgEvolveCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const bgEvolveCtxRef = useRef<CanvasRenderingContext2D | null>(null)
+  const bgEvolveHasContentRef = useRef(false)
+  const evolveParamsScratchRef = useRef(createEvolutionParams())
   // Photoshop-style brush ring: a DOM overlay (not drawn to canvas, so PNG
   // exports stay clean) positioned imperatively from the pointer handlers.
   const brushRingRef = useRef<HTMLDivElement | null>(null)
@@ -443,6 +528,12 @@ function SceneCanvasInternal(
   const experienceRef = useRef<ExperienceMode>(experience)
   const sceneIdRef = useRef(sceneId)
   const onDiagnosticsUpdateRef = useRef(onDiagnosticsUpdate)
+  // Landing scale-in (intro): the current logo scale written imperatively via
+  // setLandingLogoScale, and the centroid of the active target field the
+  // scale transform pulls every glyph target toward. Both read per frame;
+  // the centroid object is mutated in place (allocation-free).
+  const landingLogoScaleRef = useRef(1)
+  const landingCentroidRef = useRef({ x: 0, y: 0 })
 
   // Event-driven diagnostic updates (source loads, mode switches, rebuilds)
   // are rare, so they patch both the mirror and React state directly.
@@ -459,17 +550,20 @@ function SceneCanvasInternal(
   const [fontSize, setFontSize] = useState(defaultSceneState.fontSize)
   const [textAmount, setTextAmount] = useState(defaultSceneState.textAmount)
 
-  const glyphScale = playgroundConfig?.glyphScale ?? APPROVED_PLAYGROUND_DEFAULTS.glyphScale
-
-  const lineHeight = useMemo(() => Math.round(fontSize * 1.42 * glyphScale), [fontSize, glyphScale])
-  const font = useMemo(
-    () => `400 ${fontSize * glyphScale}px ${playgroundConfig?.glyphFont ?? APPROVED_PLAYGROUND_DEFAULTS.glyphFont}`,
-    [fontSize, glyphScale, playgroundConfig?.glyphFont],
+  const glyphSizePt = clampGlyphPointSize(
+    playgroundConfig?.glyphSizePt ?? APPROVED_PLAYGROUND_DEFAULTS.glyphSizePt,
   )
+  const glyphFont = playgroundConfig?.glyphFont ?? APPROVED_PLAYGROUND_DEFAULTS.glyphFont
 
-  const fontRef = useRef(font)
-  const lineHeightRef = useRef(lineHeight)
-  const glyphScaleRef = useRef(glyphScale)
+  // The effective size honors the mobile 8pt cap for non-Vibe scenes; it is
+  // resolved from the live viewport at read time (applyEffectiveGlyphSize,
+  // called by resizeScene and the config effect), so breakpoint crossings
+  // stay correct. fontSize above remains the fixed 12pt base for ambient
+  // typography and the paragraph fallback.
+  const fontRef = useRef(`400 ${glyphSizePt}px ${glyphFont}`)
+  const lineHeightRef = useRef(resolveGlyphLineHeight(glyphSizePt))
+  const glyphSizeRef = useRef(glyphSizePt)
+  const effectiveGlyphSizeRef = useRef(glyphSizePt)
 
   useEffect(() => {
     const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -487,9 +581,19 @@ function SceneCanvasInternal(
     return () => reducedMotionQuery.removeEventListener('change', updateReducedMotion)
   }, [])
 
-  useEffect(() => { fontRef.current = font }, [font])
-  useEffect(() => { lineHeightRef.current = lineHeight }, [lineHeight])
-  useEffect(() => { glyphScaleRef.current = glyphScale }, [glyphScale])
+  // Point size is structural: when the effective size changes, the source
+  // field re-samples through the standard rebuild path (targets rebuilt,
+  // normalized paint replayed inside applyMotionField). The font/line-height
+  // refs update immediately, so the frame loop's ctx.font follows next frame.
+  useEffect(() => {
+    glyphSizeRef.current = glyphSizePt
+    const prevSize = effectiveGlyphSizeRef.current
+    applyEffectiveGlyphSize()
+    // playgroundConfigRef syncs in the config-watch effect after this one, so
+    // apply the render-time family directly to never lag a font change.
+    fontRef.current = `400 ${effectiveGlyphSizeRef.current}px ${glyphFont}`
+    if (effectiveGlyphSizeRef.current !== prevSize) scheduleSvgTargetRebuild()
+  }, [glyphSizePt, glyphFont, experience])
   useEffect(() => { qualityTierOverrideRef.current = qualityTierOverride }, [qualityTierOverride])
   useEffect(() => { onQualityTierChangeRef.current = onQualityTierChange }, [onQualityTierChange])
   // Debug tier override (dev tuning UI): force a tier or return to Auto.
@@ -510,6 +614,7 @@ function SceneCanvasInternal(
   useEffect(() => { sceneIdRef.current = sceneId }, [sceneId])
   useEffect(() => { onDiagnosticsUpdateRef.current = onDiagnosticsUpdate }, [onDiagnosticsUpdate])
   useEffect(() => { onPaintStatusChangeRef.current = onPaintStatusChange }, [onPaintStatusChange])
+  useEffect(() => { onPaintStrokeEndRef.current = onPaintStrokeEnd }, [onPaintStrokeEnd])
   useEffect(() => {
     paintToolRef.current = paintTool ?? DISABLED_PAINT_TOOL
     // Toggling paint mode off mid-gesture settles the stroke gracefully.
@@ -631,6 +736,24 @@ function SceneCanvasInternal(
     scheduleSvgTargetRebuild()
   }, [source])
 
+  // Glyph-stage region: re-fit the active source into the measured rect (or
+  // back to the full viewport when the region clears). Routed through
+  // resizeScene so the rebuild takes the same path as a viewport resize —
+  // never per frame; the parent rounds region values to whole CSS px.
+  useEffect(() => {
+    const prev = targetRegionRef.current
+    targetRegionRef.current = targetRegion
+    const changed =
+      (prev === null) !== (targetRegion === null) ||
+      (prev !== null &&
+        targetRegion !== null &&
+        (prev.x !== targetRegion.x ||
+          prev.y !== targetRegion.y ||
+          prev.width !== targetRegion.width ||
+          prev.height !== targetRegion.height))
+    if (changed) resizeScene()
+  }, [targetRegion])
+
   const scheduleSvgTargetRebuild = () => {
     if (rebuildSvgTimeoutRef.current !== null) {
       window.clearTimeout(rebuildSvgTimeoutRef.current)
@@ -666,6 +789,30 @@ function SceneCanvasInternal(
     if (observed.width > 0 && observed.height > 0) return observed
     return { width: window.innerWidth, height: window.innerHeight }
   }
+
+  // Resolve the effective point size (mobile 8pt cap for non-Vibe scenes)
+  // into the refs the frame loop and target builders read. Called on config
+  // changes and inside resizeScene, so viewport reads stay resize-safe.
+  const applyEffectiveGlyphSize = () => {
+    const size = resolveEffectiveGlyphSize(
+      glyphSizeRef.current,
+      experienceRef.current,
+      getViewportSize().width,
+    )
+    effectiveGlyphSizeRef.current = size
+    lineHeightRef.current = resolveGlyphLineHeight(size)
+    fontRef.current = `400 ${size}px ${playgroundConfigRef.current.glyphFont}`
+  }
+
+  // Larger glyphs get proportionate spacing: the resolved sampling step
+  // scales with the effective size relative to the 12pt baseline (this is not
+  // just visual scaling — the source field re-samples at the wider step).
+  const resolveSceneSamplingStep = (baseStep: number, width: number) =>
+    Math.max(
+      1,
+      resolveSamplingStep(baseStep, width) *
+        resolveGlyphSamplingScale(effectiveGlyphSizeRef.current),
+    )
 
   const ensureParticleCount = (count: number) => {
     const particles = particlesRef.current
@@ -836,7 +983,7 @@ function SceneCanvasInternal(
     ctx.restore()
 
     const imageData = ctx.getImageData(0, 0, W, H)
-    const field = sampleTargetField(imageData, resolveSamplingStep(LOGO_TARGET_STEP, W), 64)
+    const field = sampleTargetField(imageData, resolveSceneSamplingStep(LOGO_TARGET_STEP, W), 64)
     if (field.x.length === 0) {
       return {
         x: new Float32Array([W * 0.5]),
@@ -914,6 +1061,31 @@ function SceneCanvasInternal(
     baseTargetsYRef.current = y
     baseColorsRef.current = colors
     baseCountRef.current = x.length
+    // Landing scale-in pivot: the centroid of the active target field. The
+    // ref object is mutated in place so the frame loop stays allocation-free.
+    const centroid = landingCentroidRef.current
+    if (x.length > 0) {
+      let sumX = 0
+      let sumY = 0
+      for (let i = 0; i < x.length; i += 1) {
+        sumX += x[i]
+        sumY += y[i]
+      }
+      centroid.x = sumX / x.length
+      centroid.y = sumY / x.length
+    } else {
+      const center = viewportCenter()
+      centroid.x = center.x
+      centroid.y = center.y
+    }
+    // A fresh field landing mid scale-in (first source load, replay before
+    // the load finished) re-seeds the population from the real center.
+    if (
+      experienceRef.current === 'intro' &&
+      landingLogoScaleRef.current <= LANDING_SCALE_RESTART_EPSILON
+    ) {
+      snapParticlesToLandingCenter()
+    }
     motionFieldRef.current = buildMotionBaseField(x, y, normX, normY)
     const { gradientT, rowT } = buildTargetSpatialDataFromArrays(x, y)
     targetGradientRef.current = gradientT
@@ -979,6 +1151,33 @@ function SceneCanvasInternal(
   const viewportCenter = () => {
     const { width, height } = getViewportSize()
     return { x: width * 0.5, y: height * 0.5 }
+  }
+
+  // Snap the whole glyph population onto the landing centroid: the origin
+  // pose of the logo scale-in. Allocation-free; positions and velocities only.
+  const snapParticlesToLandingCenter = () => {
+    const center = landingCentroidRef.current
+    const particles = particlesRef.current
+    for (let i = 0; i < particles.length; i += 1) {
+      particles[i].x = center.x
+      particles[i].y = center.y
+      particles[i].vx = 0
+      particles[i].vy = 0
+    }
+  }
+
+  // Imperative landing scale driver (PortfolioExperience's RAF loop pushes
+  // the sequence's logoScale every tick). A transition back to ~0 means a
+  // scale-in is (re)starting, so the population re-seeds from the center.
+  const setLandingLogoScale = (scale: number) => {
+    const clamped = clamp(scale, 0, 1)
+    if (
+      clamped <= LANDING_SCALE_RESTART_EPSILON &&
+      landingLogoScaleRef.current > LANDING_SCALE_RESTART_EPSILON
+    ) {
+      snapParticlesToLandingCenter()
+    }
+    landingLogoScaleRef.current = clamped
   }
 
   // Point the draw loop at the right target arrays for the active motion
@@ -1201,6 +1400,14 @@ function SceneCanvasInternal(
       canvas.height = Math.max(1, Math.round(height * pixelRatio))
       bgPaintCanvasRef.current = canvas
       bgPaintCtxRef.current = canvas.getContext('2d')
+      // The evolving-stroke layer shares the settled layer's size and ratio;
+      // it is cleared and redrawn per frame while any stroke is evolving.
+      const evolveCanvas = document.createElement('canvas')
+      evolveCanvas.width = canvas.width
+      evolveCanvas.height = canvas.height
+      bgEvolveCanvasRef.current = evolveCanvas
+      bgEvolveCtxRef.current = evolveCanvas.getContext('2d')
+      bgEvolveHasContentRef.current = false
       return true
     }
     return false
@@ -1225,6 +1432,64 @@ function SceneCanvasInternal(
     const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
     gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.9)`)
     gradient.addColorStop(0.65, `rgba(${r}, ${g}, ${b}, 0.5)`)
+    gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`)
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, size, size)
+    cache.set(key, canvas)
+    return canvas
+  }
+
+  // Watercolor dye sprites for the evolution (background blooms only — the
+  // live brush above is unchanged). Two passes per point: a soft core drawn
+  // additively ('lighter') so overlapping blooms seep into each other on the
+  // dark background, and a darker wet-edge rim drawn on top (source-over).
+  // The `dark` variant is the blotch channel (engine/paintEvolution).
+  const getDyeCoreBrush = (color: number, radiusPx: number, dark: boolean) => {
+    const key = `core:${color}:${Math.round(radiusPx)}:${dark ? 1 : 0}`
+    const cache = bgBrushCacheRef.current
+    const cached = cache.get(key)
+    if (cached) return cached
+    if (cache.size > 32) cache.clear()
+    const size = Math.max(2, Math.ceil(radiusPx * 2))
+    const canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    const ctx = canvas.getContext('2d')!
+    const dim = dark ? 0.8 : 1
+    const r = Math.round((color & 0xff) * dim)
+    const g = Math.round(((color >>> 8) & 0xff) * dim)
+    const b = Math.round(((color >>> 16) & 0xff) * dim)
+    const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+    gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${dark ? 0.62 : 0.55})`)
+    gradient.addColorStop(0.6, `rgba(${r}, ${g}, ${b}, 0.35)`)
+    gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`)
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, size, size)
+    cache.set(key, canvas)
+    return canvas
+  }
+
+  // Wet-edge rim: a darker band at 0.8–0.95 radius, fading both ways, so the
+  // bloom reads as dye settling into the surface.
+  const getDyeRimBrush = (color: number, radiusPx: number) => {
+    const key = `rim:${color}:${Math.round(radiusPx)}`
+    const cache = bgBrushCacheRef.current
+    const cached = cache.get(key)
+    if (cached) return cached
+    if (cache.size > 32) cache.clear()
+    const size = Math.max(2, Math.ceil(radiusPx * 2))
+    const canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    const ctx = canvas.getContext('2d')!
+    const r = Math.round((color & 0xff) * 0.72)
+    const g = Math.round(((color >>> 8) & 0xff) * 0.72)
+    const b = Math.round(((color >>> 16) & 0xff) * 0.72)
+    const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+    gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0)`)
+    gradient.addColorStop(0.8, `rgba(${r}, ${g}, ${b}, 0)`)
+    gradient.addColorStop(0.88, `rgba(${r}, ${g}, ${b}, 0.5)`)
+    gradient.addColorStop(0.95, `rgba(${r}, ${g}, ${b}, 0.35)`)
     gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`)
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, size, size)
@@ -1270,19 +1535,168 @@ function SceneCanvasInternal(
     }
   }
 
-  // Rebuild the background layer from stroke history (replay/resize/undo).
-  const rebuildBackgroundPaintLayer = () => {
+  // Draw one stroke's bloom at the given evolution params onto a background
+  // layer context. Points are drawn at their original positions (the stroke
+  // centroid never moves); grain jitters per-point radius/alpha only — there
+  // is no anisotropic phase (two-state seep, see engine/paintEvolution).
+  const drawEvolvedBackgroundStroke = (
+    targetCtx: CanvasRenderingContext2D,
+    record: EvolvingStrokeRecord,
+    params: EvolutionParams,
+  ) => {
+    const { width, height } = getViewportSize()
+    const pixelRatio = Math.min(
+      pixelRatioRef.current,
+      qualityBudgetRef.current.backgroundPaintPixelRatio,
+    )
+    const stroke = record.stroke
+    const color = stroke.backgroundColor ?? 0
+    const radiusPx = stroke.radiusNorm * Math.min(width, height) * params.radiusScale
+    const points = stroke.points
+    targetCtx.save()
+    targetCtx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
+
+    // Pass 1: dye cores, additive — overlapping blooms seep into each other.
+    targetCtx.globalCompositeOperation = 'lighter'
+    let pointIndex = 0
+    for (let p = 0; p + 1 < points.length; p += 2, pointIndex += 1) {
+      const rCss = Math.max(1, radiusPx * grainRadiusFactor(record.seed, pointIndex, params.grain))
+      // Sprite radius quantized (layer px) so the brush cache survives frames.
+      const rLayer = Math.max(2, Math.round((rCss * pixelRatio) / 4) * 4)
+      const brush = getDyeCoreBrush(color, rLayer, grainDarkVariant(record.seed, pointIndex, params.grain))
+      targetCtx.globalAlpha = Math.min(
+        1,
+        Math.max(0, params.alpha * grainAlphaFactor(record.seed, pointIndex, params.grain)),
+      )
+      const size = rCss * 2
+      targetCtx.drawImage(brush, points[p] * width - rCss, points[p + 1] * height - rCss, size, size)
+    }
+
+    // Pass 2: wet-edge rims, source-over at half strength.
+    targetCtx.globalCompositeOperation = 'source-over'
+    pointIndex = 0
+    for (let p = 0; p + 1 < points.length; p += 2, pointIndex += 1) {
+      const rCss = Math.max(1, radiusPx * grainRadiusFactor(record.seed, pointIndex, params.grain))
+      const rLayer = Math.max(2, Math.round((rCss * pixelRatio) / 4) * 4)
+      const rim = getDyeRimBrush(color, rLayer)
+      targetCtx.globalAlpha = Math.min(
+        1,
+        Math.max(0, params.alpha * grainAlphaFactor(record.seed, pointIndex, params.grain) * 0.5),
+      )
+      const size = rCss * 2
+      targetCtx.drawImage(rim, points[p] * width - rCss, points[p + 1] * height - rCss, size, size)
+    }
+    targetCtx.restore()
+  }
+
+  // Rebuild the settled background layer from stroke history, skipping
+  // strokes that are currently evolving (they render on the evolve layer).
+  // Settled strokes draw in their settled (baked) form; erases keep the
+  // original soft-brush destination-out shape.
+  const rebuildSettledPaintLayer = () => {
     ensureBackgroundPaintLayer()
     const layer = bgPaintCanvasRef.current
     const ctx = bgPaintCtxRef.current
     if (!layer || !ctx) return
     ctx.save()
     ctx.globalCompositeOperation = 'source-over'
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, layer.width, layer.height)
     ctx.restore()
+    const ring = evolveRingRef.current
     const strokes = paintHistoryRef.current.strokes
+    const params = evolveParamsScratchRef.current
+    evolutionParamsAt(EVOLUTION_SETTLE_MS, params)
     for (let i = 0; i < strokes.length; i += 1) {
-      stampBackgroundStroke(strokes[i])
+      const stroke = strokes[i]
+      if (ring.count > 0 && isStrokeEvolving(ring, stroke)) continue
+      if (stroke.tool === 'erase') {
+        stampBackgroundStroke(stroke)
+      } else if (stroke.backgroundColor !== null) {
+        drawEvolvedBackgroundStroke(ctx, createEvolvingRecord(stroke, 0), params)
+      }
+    }
+  }
+
+  // Bake one evolving record: render its settled form into the settled
+  // layer. The settled state has grain 0, so the bake is seed-independent
+  // and identical to the form replays draw.
+  const bakeEvolvingStroke = (record: EvolvingStrokeRecord) => {
+    ensureBackgroundPaintLayer()
+    const ctx = bgPaintCtxRef.current
+    if (!ctx) return
+    const params = evolveParamsScratchRef.current
+    evolutionParamsAt(EVOLUTION_SETTLE_MS, params)
+    drawEvolvedBackgroundStroke(ctx, record, params)
+  }
+
+  // Per-frame evolution step (RAF only): bake strokes past 7s oldest-first,
+  // then redraw the survivors onto the evolve layer. Returns early with zero
+  // work once every stroke has settled — only the settled layer remains.
+  const updatePaintEvolution = (now: number) => {
+    const ring = evolveRingRef.current
+    if (ring.count === 0) {
+      if (bgEvolveHasContentRef.current) {
+        const layer = bgEvolveCanvasRef.current
+        const ctx = bgEvolveCtxRef.current
+        if (layer && ctx) {
+          ctx.save()
+          ctx.setTransform(1, 0, 0, 1, 0, 0)
+          ctx.clearRect(0, 0, layer.width, layer.height)
+          ctx.restore()
+        }
+        bgEvolveHasContentRef.current = false
+      }
+      return
+    }
+    // Settle bakes consume from the head: records are in release-time order.
+    // Reduced motion never animates: anything still in the ring (the
+    // preference was toggled mid-evolution) bakes settled immediately.
+    const settleAll = reducedMotionRef.current
+    let oldest = peekOldestEvolving(ring)
+    while (oldest && (settleAll || isEvolutionSettled(now - oldest.startMs))) {
+      bakeEvolvingStroke(oldest)
+      dropOldestEvolving(ring)
+      oldest = peekOldestEvolving(ring)
+    }
+    ensureBackgroundPaintLayer()
+    const layer = bgEvolveCanvasRef.current
+    const ctx = bgEvolveCtxRef.current
+    if (!layer || !ctx) return
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, layer.width, layer.height)
+    ctx.restore()
+    if (ring.count === 0) {
+      bgEvolveHasContentRef.current = false
+      return
+    }
+    const params = evolveParamsScratchRef.current
+    for (let i = 0; i < ring.count; i += 1) {
+      const record = evolvingRecordAt(ring, i)
+      if (!record) continue
+      evolutionParamsAt(now - record.startMs, params)
+      drawEvolvedBackgroundStroke(ctx, record, params)
+    }
+    bgEvolveHasContentRef.current = true
+  }
+
+  // Full background-channel replay (resize/undo/redo/restore/clear/tier
+  // change): evolution restarts from history — every stroke bakes straight
+  // into the settled layer in settled form (replays skip evolution), the
+  // ring empties, and the evolve layer clears. Deterministic: normalized
+  // strokes replay with the same seeds and the same settled art.
+  const rebuildBackgroundPaintLayer = () => {
+    clearEvolutionRing(evolveRingRef.current)
+    rebuildSettledPaintLayer()
+    bgEvolveHasContentRef.current = false
+    const evolveLayer = bgEvolveCanvasRef.current
+    const evolveCtx = bgEvolveCtxRef.current
+    if (evolveLayer && evolveCtx) {
+      evolveCtx.save()
+      evolveCtx.setTransform(1, 0, 0, 1, 0, 0)
+      evolveCtx.clearRect(0, 0, evolveLayer.width, evolveLayer.height)
+      evolveCtx.restore()
     }
   }
 
@@ -1312,6 +1726,26 @@ function SceneCanvasInternal(
     rebuildBackgroundPaintLayer()
     patchPaintDiagnostics()
     pushPaintStatus()
+    renderOnceRef.current()
+  }
+
+  // Unified-history snapshot capture/restore (Vibe undo/redo): deep copies in
+  // both directions so live buffers are never shared with stored snapshots.
+  const capturePaintState = (): PaintSnapshot =>
+    clonePaintSnapshot({
+      strokes: paintHistoryRef.current.strokes,
+      redoStrokes: redoStrokesRef.current,
+    })
+
+  const restorePaintState = (snapshot: PaintSnapshot) => {
+    const restored = clonePaintSnapshot(snapshot)
+    activeStrokeRef.current = null
+    pendingPaintPointsRef.current.length = 0
+    paintHistoryRef.current = paintHistoryFromStrokes(restored.strokes)
+    redoStrokesRef.current = restored.redoStrokes
+    // Rebuild the spatial index against the live field and replay so the
+    // visible overlay (glyph channel + background layer) matches exactly.
+    rebuildPaintIndexAndReplay()
     renderOnceRef.current()
   }
 
@@ -1437,20 +1871,43 @@ function SceneCanvasInternal(
       canvasRef.current?.releasePointerCapture(stroke.pointerId)
     } catch {}
     if (stroke.points.length >= 2) {
-      const evicted = pushStroke(paintHistoryRef.current, {
+      const committed: PaintStroke = {
         tool: stroke.tool,
         glyphColor: stroke.glyphColor,
         backgroundColor: stroke.backgroundColor,
         radiusNorm: stroke.radiusNorm,
         points: Float32Array.from(stroke.points),
-      })
+      }
+      const evicted = pushStroke(paintHistoryRef.current, committed)
       // A new gesture invalidates the redo stack.
       redoStrokesRef.current = []
+      // The stroke is committed: let the parent record a unified-history
+      // transaction (it captures the after snapshot from the handle).
+      onPaintStrokeEndRef.current?.()
       if (evicted) {
         // History bounds dropped the oldest gesture(s); the visible overlay
         // must be rebuilt from the remaining history.
         replayPaint()
         return
+      }
+      if (committed.tool === 'erase') {
+        // An erase must also cut in-flight blooms: settle them (bake-all
+        // replay) so the history-ordered erase composites over their baked
+        // forms. The glyph channel is untouched by the background rebuild.
+        if (evolveRingRef.current.count > 0) rebuildBackgroundPaintLayer()
+      } else if (committed.backgroundColor !== null) {
+        // Background-channel paint: animate the bloom through its evolution
+        // (reduced motion settles it immediately at State 3). The gesture's
+        // live stamps are replaced by the settled-layer rebuild below, which
+        // skips evolving strokes; pushing into a full ring force-bakes the
+        // oldest, and the same rebuild draws its settled form right away.
+        if (!reducedMotionRef.current) {
+          pushEvolvingStroke(
+            evolveRingRef.current,
+            createEvolvingRecord(committed, performance.now()),
+          )
+        }
+        rebuildSettledPaintLayer()
       }
     }
     patchPaintDiagnostics()
@@ -1535,7 +1992,7 @@ function SceneCanvasInternal(
     const layout = sourceLayoutRef.current
     const field = sampleTargetField(
       imageData,
-      resolveSamplingStep(layout?.samplingStep ?? LOGO_TARGET_STEP, staging.width),
+      resolveSceneSamplingStep(layout?.samplingStep ?? LOGO_TARGET_STEP, staging.width),
       layout?.alphaThreshold ?? 64,
     )
     if (field.x.length === 0) return false
@@ -1623,11 +2080,16 @@ function SceneCanvasInternal(
       sourceKind: selection.kind === 'static' ? selection.sourceKind : 'builtin',
     })
     const decodeStart = performance.now()
+    // Glyph-stage region (mobile Work): fit the source inside the measured
+    // stage rect instead of the full viewport. The rasterization stays
+    // region-sized; the region's scene-space offset is applied to the
+    // sampled coordinates below.
+    const region = targetRegionRef.current
     const result = await loadSvgTargets({
       url: activeUrl,
       kind: activeKind,
-      bounds: { width: W, height: H },
-      samplingStep: resolveSamplingStep(layout?.samplingStep ?? LOGO_TARGET_STEP, W),
+      bounds: region ? { width: region.width, height: region.height } : { width: W, height: H },
+      samplingStep: resolveSceneSamplingStep(layout?.samplingStep ?? LOGO_TARGET_STEP, W),
       alphaThreshold: layout?.alphaThreshold,
       margin: layout?.margin,
       fit: layout?.fit,
@@ -1642,21 +2104,30 @@ function SceneCanvasInternal(
     }
     const decision = resolveSourceFieldDecision({ ok: result.ok, targetCount: result.x.length, error: result.error })
     if (decision.use === 'source') {
+      // Region-bound: shift the region-local sample coordinates by the
+      // stage's viewport-relative offset so the targets land on the stage on
+      // the full-viewport canvas.
+      if (region) {
+        for (let i = 0; i < result.x.length; i += 1) {
+          result.x[i] += region.x
+          result.y[i] += region.y
+        }
+      }
       // Landing completed-intro: recolor the hero mark (built-in monogram or
-      // the JH logotype) with the luminance-chosen glyph gradient
-      // (engine/backgroundLuminance) — the logotype ships in the light
-      // gradient, which is too dark on the dark landing.
+      // the JH logotype) with the fixed left-to-right landing gradient
+      // (engine/backgroundLuminance) — independent of the background behind
+      // it, so the mark reads the same on every visitor's landing.
       const isLandingField =
         experienceRef.current === 'intro' &&
         (selection.kind === 'builtin' ||
           (selection.kind === 'static' && selection.url === LANDING_SOURCE_URL))
       if (isLandingField) {
-        const config = playgroundConfigRef.current
-        const gradient = resolveLandingGlyphGradient(
-          config.backgroundColor1,
-          config.backgroundColor2,
+        applyHorizontalGlyphGradient(
+          result.colors,
+          result.normX,
+          LANDING_GLYPH_GRADIENT.from,
+          LANDING_GLYPH_GRADIENT.to,
         )
-        applyVerticalGlyphGradient(result.colors, result.normY, gradient.from, gradient.to)
       }
       setBaseField(result.x, result.y, result.colors, result.normX, result.normY)
       patchDiagnostics({
@@ -1731,6 +2202,9 @@ function SceneCanvasInternal(
     // The adaptive quality controller ignores the window this resize lands in.
     qualityResizePendingRef.current = true
     const { width: W, height: H } = getViewportSize()
+    // Breakpoint crossings change the effective size (mobile cap); refresh
+    // the font/line-height/sampling refs before the field rebuilds below.
+    applyEffectiveGlyphSize()
     const pixelRatio = Math.min(
       resolveRenderPixelRatio(window.devicePixelRatio || 1),
       qualityBudgetRef.current.renderPixelRatioCap,
@@ -2003,7 +2477,8 @@ function SceneCanvasInternal(
     ctx.fillStyle = bgGradient
     ctx.fillRect(0, 0, W, H)
 
-    // Weather mood backdrop (legacy mesh gradients at partial alpha).
+    // Weather mood backdrop (legacy mesh gradients at the ambient
+    // backdropOpacity; skipped entirely at 0).
     drawAmbientBackdrop(ctx, W, H)
 
     // Background paint channel: the soft-brush layer sits over the base
@@ -2011,6 +2486,13 @@ function SceneCanvasInternal(
     const bgPaintLayer = bgPaintCanvasRef.current
     if (bgPaintLayer) {
       ctx.drawImage(bgPaintLayer, 0, 0, W, H)
+    }
+    // Evolving blooms composite above the settled layer (same low-res ratio)
+    // while their 7s animation runs; the flag skips the draw entirely once
+    // every stroke has baked.
+    const bgEvolveLayer = bgEvolveCanvasRef.current
+    if (bgEvolveLayer && bgEvolveHasContentRef.current) {
+      ctx.drawImage(bgEvolveLayer, 0, 0, W, H)
     }
 
     // Ambient layer: weather/matrix agents render above the background
@@ -2060,6 +2542,17 @@ function SceneCanvasInternal(
       } else {
         p.tx = targetsX[targetIndex]
         p.ty = targetsY[targetIndex]
+      }
+      // Landing scale-in (intro only): pull every glyph target toward the
+      // field centroid by the sequence's logo scale — t' = c + (t − c)·s —
+      // so the completed mark reads as scaling out from its own center.
+      // Only the glyph field transforms; the canvas, background, and
+      // atmosphere are untouched. Scalar math, allocation-free.
+      const landingScale = landingLogoScaleRef.current
+      if (landingScale < 1 && experienceRef.current === 'intro') {
+        const center = landingCentroidRef.current
+        p.tx = center.x + (p.tx - center.x) * landingScale
+        p.ty = center.y + (p.ty - center.y) * landingScale
       }
       p.char = sourceCharsRef.current[i % Math.max(1, sourceCharsRef.current.length)] || p.char
       p.row = 0
@@ -2115,7 +2608,7 @@ function SceneCanvasInternal(
     if (Math.floor((now - typewriterStartRef.current) / 500) % 2 === 0 && revealedChars < paragraphTargetsRef.current.length) {
       const last = paragraphTargetsRef.current[revealedChars - 1]
       ctx.fillStyle = 'hsla(0, 0%, 85%, 0.85)'
-      ctx.fillRect(last.tx + fontSize * 0.25, last.ty - lineHeight * 0.5 + 2, 2, lineHeight - 4)
+      ctx.fillRect(last.tx + fontSize * 0.25, last.ty - lineHeightRef.current * 0.5 + 2, 2, lineHeightRef.current - 4)
     }
     visibleCountRef.current = visible
     hiddenCountRef.current = particlesRef.current.length - visible
@@ -2177,6 +2670,13 @@ function SceneCanvasInternal(
     if (!field) return
     const { width, height } = getViewportSize()
     const config = ambientConfigRef.current
+
+    // Normalize transient positions whenever the measured region no longer
+    // matches the pool's (resize, orientation change, dynamic browser chrome,
+    // visibility resume) — preserves accumulated state, allocation-free.
+    if (field.width !== width || field.height !== height) {
+      normalizeAmbientField(field, width, height)
+    }
 
     if (reducedMotionRef.current) {
       // Param edits re-resolve the live count even while the pose is frozen.
@@ -2241,14 +2741,16 @@ function SceneCanvasInternal(
   }
 
   // Quantized scaled font strings for weather agents (font changes are
-  // expensive; sizes are rounded to halves and cached).
+  // expensive; sizes are rounded to halves and cached). Ambient typography
+  // anchors to the fixed 12pt base font size — it is independently
+  // controlled, never scaled by the scene glyph size.
   const getScaledAmbientFont = (sizeScale: number) => {
     const key = Math.max(0.5, Math.round(sizeScale * 2) / 2)
     const cache = matrixFontCacheRef.current
     const cached = cache.get(key)
     if (cached) return cached
     if (cache.size > 16) cache.clear()
-    const base = fontSize * glyphScaleRef.current * key
+    const base = fontSize * key
     const scaled = fontRef.current.replace(/^(\d+(?:\.\d+)?)px/, `${Math.round(base)}px`)
     cache.set(key, scaled)
     return scaled
@@ -2289,6 +2791,21 @@ function SceneCanvasInternal(
       actx.textAlign = 'center'
       actx.textBaseline = 'middle'
       for (let i = 0; i < field.count; i += 1) {
+        // Skip glyphs that are genuinely offscreen (columns extend a few rows
+        // past the viewport for the wrap cycle); the canvas would clip them
+        // anyway, and skipping avoids both the wasted draw and any clipped
+        // edge seam. A margin of 3 line heights covers the bounded
+        // displacement plus sway, so partially visible glyphs render fully.
+        const ax = field.x[i]
+        const ay = field.y[i]
+        if (
+          ay < -MATRIX_LINE_HEIGHT * 3 ||
+          ay > H + MATRIX_LINE_HEIGHT * 3 ||
+          ax < -MATRIX_GLYPH_WIDTH * 3 ||
+          ax > W + MATRIX_GLYPH_WIDTH * 3
+        ) {
+          continue
+        }
         const head = field.head[i] === 1
         const hue = field.hue[i]
         const lightness = head ? 86 : 54
@@ -2355,18 +2872,21 @@ function SceneCanvasInternal(
     }
   }
 
-  // Weather mood backdrop: the legacy mesh gradients, reused at partial alpha
-  // over the configured background so the playground colors survive.
+  // Weather mood backdrop: the legacy mesh gradients, reused at the ambient
+  // config's backdropOpacity over the configured background. 0 skips the
+  // mesh entirely (the landing) while weather particles still render.
   const drawAmbientBackdrop = (ctx: CanvasRenderingContext2D, W: number, H: number) => {
     const config = ambientConfigRef.current
     if (config.mode !== 'weather') return
+    const opacity = config.backdropOpacity ?? BACKDROP_OPACITY_DEFAULT
+    if (opacity <= 0) return
     const preset = config.weather.preset
     const meshes = meshBgsRef.current
     if (!meshes) return
     const mesh = preset === 'blizzard' ? meshes.snow : meshes[preset]
     if (!mesh) return
     ctx.save()
-    ctx.globalAlpha = 0.55
+    ctx.globalAlpha = opacity
     ctx.drawImage(mesh, 0, 0, W, H)
     ctx.restore()
   }
@@ -2498,6 +3018,9 @@ function SceneCanvasInternal(
       velocity.lastNow = now
       // Paint stamping is processed at most once per animation frame.
       processPaintQueue()
+      // Background paint evolution: bake settled strokes, redraw in-flight
+      // blooms on the evolve layer. Zero work once all strokes settle.
+      updatePaintEvolution(now)
       // Animated sources re-sample at the tier's sampling budget.
       sampleAnimatedSourceFrame(now)
       const mode = sceneModeRef.current

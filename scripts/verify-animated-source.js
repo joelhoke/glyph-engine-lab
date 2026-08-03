@@ -261,6 +261,30 @@ function createStubFactory(ctx) {
   )
 }
 
+// --- launch: the provider is retained but never selectable in production UI -------
+
+{
+  const controls = fs.readFileSync(path.join(projectRoot, 'components', 'vibe', 'VibeToolbar.tsx'), 'utf8')
+  assert(
+    !/black-hole|blackHole|BlackHole/.test(controls),
+    'the Vibe toolbar exposes no black-hole option',
+  )
+  const parent = fs.readFileSync(path.join(projectRoot, 'components', 'PortfolioExperience.tsx'), 'utf8')
+  assert(
+    !/black-hole|blackHole|BlackHole|vibeBlackHole/.test(parent.replace(/retained in engine\/animatedSource\.ts|animated\s*\n?\s*\/{0,2}\s*Black-hole provider is retained/g, '')),
+    'PortfolioExperience has no black-hole selection state or animated-source branch',
+  )
+  assert(
+    !/kind:\s*'animated'/.test(parent),
+    'no production code path constructs an animated source selection',
+  )
+  const analytics = fs.readFileSync(path.join(projectRoot, 'engine', 'analytics.ts'), 'utf8')
+  assert(
+    !/black-hole/.test(analytics),
+    'analytics no longer references black-hole as a source option',
+  )
+}
+
 if (failures > 0) {
   console.error(`\n${failures} verification(s) failed.`)
   process.exit(1)

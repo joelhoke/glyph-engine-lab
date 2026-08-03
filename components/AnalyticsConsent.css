@@ -1,0 +1,192 @@
+/**
+ * Privacy and feedback FAB + panel.
+ *
+ * The base FAB look (size, colors, hover) still comes from
+ * `.privacy-settings-button` in app/globals.css; the rules below only
+ * relocate it top-right with safe-area offsets and style the new panel,
+ * tabs, and feedback form. `button.`/`div.` prefixes keep specificity at or
+ * above the globals.css rules they override (including its mobile media
+ * query, which media queries alone cannot outrank).
+ */
+
+/* FAB: top-right with safe-area offsets (was bottom-right). */
+button.privacy-settings-button {
+  top: calc(env(safe-area-inset-top, 0px) + 1rem);
+  right: calc(env(safe-area-inset-right, 0px) + 1rem);
+  bottom: auto;
+  left: auto;
+}
+
+/* Panel: anchored beneath the FAB, scrolls internally, stays in 100dvh. */
+.privacy-panel {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 4rem);
+  right: calc(env(safe-area-inset-right, 0px) + 1rem);
+  z-index: 71;
+  width: min(24rem, calc(100vw - 2rem - env(safe-area-inset-right, 0px)));
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 5rem);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.1rem 1.4rem 1.25rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(6, 9, 14, 0.92);
+  backdrop-filter: blur(10px);
+  color: #d8e2f2;
+}
+
+.privacy-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.privacy-tabs {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.privacy-tab {
+  font: inherit;
+  font-size: 0.82rem;
+  min-height: 36px;
+  padding: 0.4rem 0.95rem;
+  border-radius: 999px;
+  cursor: pointer;
+  color: #c5d4ea;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+.privacy-tab:hover,
+.privacy-tab:focus-visible {
+  color: #f7fbff;
+  border-color: #8abaff;
+}
+
+.privacy-tab[aria-selected='true'] {
+  color: #06090e;
+  background: #8fe3f5;
+  border-color: #8fe3f5;
+}
+
+.privacy-panel-close {
+  font: inherit;
+  font-size: 1.05rem;
+  line-height: 1;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8aa4c5;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: color 180ms ease, border-color 180ms ease;
+}
+
+.privacy-panel-close:hover,
+.privacy-panel-close:focus-visible {
+  color: #dbe9ff;
+  border-color: #8abaff;
+}
+
+.privacy-tabpanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+/* --- Feedback form --- */
+
+.feedback-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.feedback-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.feedback-label {
+  font-size: 0.78rem;
+  color: #c5d4ea;
+}
+
+.feedback-input,
+.feedback-textarea {
+  font: inherit;
+  font-size: 0.82rem;
+  color: #f5f7fb;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.feedback-textarea {
+  resize: vertical;
+  min-height: 6rem;
+}
+
+.feedback-input:focus-visible,
+.feedback-textarea:focus-visible {
+  outline: none;
+  border-color: #8abaff;
+}
+
+.feedback-hint {
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: #8aa4c5;
+  min-height: 1.1em;
+  margin: 0;
+}
+
+.feedback-status {
+  font-size: 0.78rem;
+  color: #9fe8c0;
+  margin: 0;
+}
+
+.feedback-error {
+  font-size: 0.78rem;
+  color: #f5a8a8;
+  margin: 0;
+}
+
+.feedback-form .consent-allow:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.feedback-form .consent-allow:disabled:hover {
+  background: #8fe3f5;
+}
+
+@media (max-width: 640px) {
+  button.privacy-settings-button {
+    top: calc(env(safe-area-inset-top, 0px) + 0.75rem);
+    right: calc(env(safe-area-inset-right, 0px) + 0.75rem);
+    bottom: auto;
+  }
+
+  .privacy-panel {
+    top: calc(env(safe-area-inset-top, 0px) + 3.6rem);
+    right: calc(env(safe-area-inset-right, 0px) + 0.75rem);
+    width: calc(100vw - 1.5rem - env(safe-area-inset-right, 0px));
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 4.35rem);
+  }
+}

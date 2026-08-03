@@ -26,7 +26,7 @@ try {
   fs.rmSync(tmpDir, { recursive: true, force: true })
   fs.mkdirSync(tmpDir, { recursive: true })
   execSync(
-    `npx tsc "${path.join(projectRoot, 'content', 'vibe.ts')}" "${path.join(projectRoot, 'engine', 'sceneConfig.ts')}" "${path.join(projectRoot, 'engine', 'playgroundConfig.ts')}" "${path.join(projectRoot, 'engine', 'motionConfig.ts')}" "${path.join(projectRoot, 'engine', 'ambientConfig.ts')}" --outDir "${tmpDir}" --module commonjs --target es2020 --strict false --esModuleInterop true`,
+    `npx tsc "${path.join(projectRoot, 'content', 'vibe.ts')}" "${path.join(projectRoot, 'engine', 'sceneConfig.ts')}" "${path.join(projectRoot, 'engine', 'playgroundConfig.ts')}" "${path.join(projectRoot, 'engine', 'glyphSize.ts')}" "${path.join(projectRoot, 'engine', 'motionConfig.ts')}" "${path.join(projectRoot, 'engine', 'ambientConfig.ts')}" --outDir "${tmpDir}" --module commonjs --target es2020 --strict false --esModuleInterop true`,
     { stdio: 'inherit', cwd: projectRoot },
   )
 } catch (error) {
@@ -53,6 +53,7 @@ const {
   GLYPH_COLOR_MODE_OPTIONS,
   MAX_GLYPH_PALETTE_SIZE,
 } = require(path.join(tmpDir, 'engine', 'playgroundConfig.js'))
+const { GLYPH_POINT_SIZES } = require(path.join(tmpDir, 'engine', 'glyphSize.js'))
 const {
   MOTION_DEFAULTS,
   GLYPH_MOTION_MODE_OPTIONS,
@@ -104,7 +105,7 @@ const CONFIG_KEYS = [
   'backgroundColor2',
   'glyphFont',
   'glyphColorMode',
-  'glyphScale',
+  'glyphSizePt',
   'motion',
   'ambient',
 ]
@@ -161,8 +162,8 @@ function isCompleteValidConfig(config) {
   if (!HEX_COLOR_RE.test(config.backgroundColor2)) return false
   if (!GLYPH_FONT_OPTIONS.some((option) => option.value === config.glyphFont)) return false
   if (!GLYPH_COLOR_MODE_OPTIONS.some((option) => option.value === config.glyphColorMode)) return false
-  // Must stay inside the scale slider's range (PlaygroundControls: 0.6–1.6).
-  if (typeof config.glyphScale !== 'number' || config.glyphScale < 0.6 || config.glyphScale > 1.6) {
+  // Must be one of the six discrete point sizes (Glyph size select: 8–48 pt).
+  if (!GLYPH_POINT_SIZES.includes(config.glyphSizePt)) {
     return false
   }
   if (!isCompleteValidMotionConfig(config.motion)) return false
@@ -240,7 +241,7 @@ function configsEqual(a, b) {
     a.glyphText === b.glyphText &&
     a.glyphFont === b.glyphFont &&
     a.glyphColorMode === b.glyphColorMode &&
-    a.glyphScale === b.glyphScale &&
+    a.glyphSizePt === b.glyphSizePt &&
     a.backgroundColor1 === b.backgroundColor1 &&
     a.backgroundColor2 === b.backgroundColor2 &&
     a.glyphPalette.length === b.glyphPalette.length &&
@@ -341,7 +342,7 @@ for (const preset of VIBE_PRESETS) {
   )
   assert(
     isCompleteValidConfig(preset.config),
-    `${preset.id}: config is complete and valid (all fields, hex colors, non-empty text, known font/mode, in-range scale, complete valid motion and ambient configs)`,
+    `${preset.id}: config is complete and valid (all fields, hex colors, non-empty text, known font/mode, known point size, complete valid motion and ambient configs)`,
   )
   if (preset.sourceUrl !== undefined) {
     assert(

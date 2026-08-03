@@ -1,16 +1,12 @@
 export type IntroPhase =
-  | 'logo-forming'
+  | 'logo-scale'
   | 'logo-hold'
-  | 'tagline-entering'
-  | 'tagline-hold'
   | 'options-entering'
   | 'complete'
 
 export type IntroTiming = {
-  logoFormDuration: number
+  logoScaleDuration: number
   logoHoldDuration: number
-  taglineTransitionDuration: number
-  taglineHoldDuration: number
   optionsTransitionDuration: number
   optionStagger: number
 }
@@ -24,9 +20,10 @@ export type IntroSequenceSnapshot = {
   elapsedMs: number
   phaseElapsedMs: number
   phaseProgress: number
-  logoVisible: boolean
-  taglineVisible: boolean
-  taglineProgress: number
+  /** Landing logo scale-in factor in [0, 1]. Linear in time: the glyph field
+   *  already moves through the spring simulation, which supplies the organic
+   *  easing, so the scale ramp itself stays linear. 1 from logo-hold on. */
+  logoScale: number
   optionsVisible: boolean
   optionsProgress: number
   optionsReady: boolean
@@ -130,31 +127,25 @@ export function evaluateIntroSequence(
   timing: IntroTiming,
 ): IntroSequenceSnapshot {
   const {
-    logoFormDuration,
+    logoScaleDuration,
     logoHoldDuration,
-    taglineTransitionDuration,
-    taglineHoldDuration,
     optionsTransitionDuration,
   } = timing
 
   const t = Math.max(0, elapsedMs)
 
-  const logoEnd = logoFormDuration
+  const logoEnd = logoScaleDuration
   const logoHoldEnd = logoEnd + logoHoldDuration
-  const taglineEnd = logoHoldEnd + taglineTransitionDuration
-  const taglineHoldEnd = taglineEnd + taglineHoldDuration
-  const optionsEnd = taglineHoldEnd + optionsTransitionDuration
+  const optionsEnd = logoHoldEnd + optionsTransitionDuration
 
   if (t < logoEnd) {
     const progress = logoEnd > 0 ? t / logoEnd : 1
     return {
-      phase: 'logo-forming',
+      phase: 'logo-scale',
       elapsedMs: t,
       phaseElapsedMs: t,
       phaseProgress: clamp(progress, 0, 1),
-      logoVisible: true,
-      taglineVisible: false,
-      taglineProgress: 0,
+      logoScale: clamp(progress, 0, 1),
       optionsVisible: false,
       optionsProgress: 0,
       optionsReady: false,
@@ -167,44 +158,7 @@ export function evaluateIntroSequence(
       elapsedMs: t,
       phaseElapsedMs: t - logoEnd,
       phaseProgress: 0,
-      logoVisible: true,
-      taglineVisible: false,
-      taglineProgress: 0,
-      optionsVisible: false,
-      optionsProgress: 0,
-      optionsReady: false,
-    }
-  }
-
-  if (t < taglineEnd) {
-    const phaseElapsed = t - logoHoldEnd
-    const progress =
-      taglineTransitionDuration > 0
-        ? phaseElapsed / taglineTransitionDuration
-        : 1
-    return {
-      phase: 'tagline-entering',
-      elapsedMs: t,
-      phaseElapsedMs: phaseElapsed,
-      phaseProgress: clamp(progress, 0, 1),
-      logoVisible: true,
-      taglineVisible: true,
-      taglineProgress: clamp(progress, 0, 1),
-      optionsVisible: false,
-      optionsProgress: 0,
-      optionsReady: false,
-    }
-  }
-
-  if (t < taglineHoldEnd) {
-    return {
-      phase: 'tagline-hold',
-      elapsedMs: t,
-      phaseElapsedMs: t - taglineEnd,
-      phaseProgress: 0,
-      logoVisible: true,
-      taglineVisible: true,
-      taglineProgress: 1,
+      logoScale: 1,
       optionsVisible: false,
       optionsProgress: 0,
       optionsReady: false,
@@ -212,7 +166,7 @@ export function evaluateIntroSequence(
   }
 
   if (t < optionsEnd) {
-    const phaseElapsed = t - taglineHoldEnd
+    const phaseElapsed = t - logoHoldEnd
     const progress =
       optionsTransitionDuration > 0
         ? phaseElapsed / optionsTransitionDuration
@@ -222,9 +176,7 @@ export function evaluateIntroSequence(
       elapsedMs: t,
       phaseElapsedMs: phaseElapsed,
       phaseProgress: clamp(progress, 0, 1),
-      logoVisible: true,
-      taglineVisible: true,
-      taglineProgress: 1,
+      logoScale: 1,
       optionsVisible: true,
       optionsProgress: clamp(progress, 0, 1),
       optionsReady: progress >= 1,
@@ -236,9 +188,7 @@ export function evaluateIntroSequence(
     elapsedMs: t,
     phaseElapsedMs: t - optionsEnd,
     phaseProgress: 0,
-    logoVisible: true,
-    taglineVisible: true,
-    taglineProgress: 1,
+    logoScale: 1,
     optionsVisible: true,
     optionsProgress: 1,
     optionsReady: true,
@@ -247,30 +197,24 @@ export function evaluateIntroSequence(
 
 export const portfolioIntroPreset: IntroSequenceConfig = {
   timing: {
-    logoFormDuration: 900,
+    logoScaleDuration: 900,
     logoHoldDuration: 2000,
-    taglineTransitionDuration: 900,
-    taglineHoldDuration: 1500,
     optionsTransitionDuration: 900,
     optionStagger: 120,
   },
 }
 
 const phaseOrder: IntroPhase[] = [
-  'logo-forming',
+  'logo-scale',
   'logo-hold',
-  'tagline-entering',
-  'tagline-hold',
   'options-entering',
   'complete',
 ]
 
 export function getTotalDuration(timing: IntroTiming): number {
   return (
-    timing.logoFormDuration +
+    timing.logoScaleDuration +
     timing.logoHoldDuration +
-    timing.taglineTransitionDuration +
-    timing.taglineHoldDuration +
     timing.optionsTransitionDuration
   )
 }
@@ -280,39 +224,22 @@ export function getPhaseStartTime(
   timing: IntroTiming,
 ): number {
   const {
-    logoFormDuration,
+    logoScaleDuration,
     logoHoldDuration,
-    taglineTransitionDuration,
-    taglineHoldDuration,
     optionsTransitionDuration,
   } = timing
 
   switch (phase) {
-    case 'logo-forming':
+    case 'logo-scale':
       return 0
     case 'logo-hold':
-      return logoFormDuration
-    case 'tagline-entering':
-      return logoFormDuration + logoHoldDuration
-    case 'tagline-hold':
-      return (
-        logoFormDuration +
-        logoHoldDuration +
-        taglineTransitionDuration
-      )
+      return logoScaleDuration
     case 'options-entering':
-      return (
-        logoFormDuration +
-        logoHoldDuration +
-        taglineTransitionDuration +
-        taglineHoldDuration
-      )
+      return logoScaleDuration + logoHoldDuration
     case 'complete':
       return (
-        logoFormDuration +
+        logoScaleDuration +
         logoHoldDuration +
-        taglineTransitionDuration +
-        taglineHoldDuration +
         optionsTransitionDuration
       )
     default:
@@ -334,6 +261,6 @@ export function previousPhase(
   timing: IntroTiming,
 ): IntroPhase {
   const index = phaseOrder.indexOf(current)
-  if (index <= 0) return 'logo-forming'
+  if (index <= 0) return 'logo-scale'
   return phaseOrder[index - 1]
 }

@@ -21,6 +21,12 @@
  * 3. The animated path (Stage 3): an animated provider error preserves the
  *    last valid sampled field; the JH fallback only appears when no valid
  *    frame exists at all, and static selections stop the provider.
+ *
+ * 4. The glyph-stage region path (mobile Work): buildSvgTargets reads the
+ *    measured stage rect from its stable ref (targetRegionRef) so region
+ *    recalcs re-fit the ACTIVE source — never a stale closure, never the JH
+ *    fallback on a mere recalc — and region updates route through
+ *    resizeScene, the same rebuild path as a viewport resize.
  */
 
 const { execSync } = require('child_process')
@@ -125,6 +131,21 @@ assert(
 assert(
   sceneCanvasSource.includes("from '../engine/sourceOutcome'"),
   'SceneCanvas imports the shared fallback rule',
+)
+
+// --- Structural guard: the glyph-stage region path (mobile Work) ---
+
+assert(
+  sceneCanvasSource.includes('targetRegion?:'),
+  'SceneCanvas accepts an optional targetRegion prop',
+)
+assert(
+  buildBody.includes('targetRegionRef.current'),
+  'buildSvgTargets reads the glyph-stage region from its stable ref (active slide source survives region recalcs)',
+)
+assert(
+  /targetRegionRef\.current = targetRegion[\s\S]{0,400}resizeScene\(\)/.test(sceneCanvasSource),
+  'region updates route through resizeScene (the same rebuild path as a viewport resize)',
 )
 
 // --- Structural guard: the animated path preserves the last valid field ---

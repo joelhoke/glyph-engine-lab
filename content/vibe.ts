@@ -97,7 +97,7 @@ export type VibePreset = {
   id: string
   /** The preset's name, shown on its button in the control dock. */
   label: string
-  /** Complete composition: text, palette, background, font, color mode, scale. */
+  /** Complete composition: text, palette, background, font, color mode, size. */
   config: PlaygroundConfig
   /** Optional built-in SVG source for the composition. When omitted, applying
    *  the preset clears any uploaded SVG and returns to the default source. */
@@ -129,7 +129,7 @@ export const VIBE_PRESETS: VibePreset[] = [
       backgroundColor2: '#101826',
       glyphFont: "'Courier New', monospace",
       glyphColorMode: 'rows',
-      glyphScale: 1,
+      glyphSizePt: 12,
       motion: { ...MOTION_DEFAULTS },
       ambient: { ...AMBIENT_DEFAULTS },
     },
@@ -145,7 +145,7 @@ export const VIBE_PRESETS: VibePreset[] = [
       backgroundColor2: '#201410',
       glyphFont: "'Georgia', serif",
       glyphColorMode: 'word-cycle',
-      glyphScale: 1.1,
+      glyphSizePt: 16,
       motion: { ...MOTION_DEFAULTS },
       ambient: { ...AMBIENT_DEFAULTS },
     },
@@ -161,7 +161,7 @@ export const VIBE_PRESETS: VibePreset[] = [
       backgroundColor2: '#141414',
       glyphFont: "'Times New Roman', serif",
       glyphColorMode: 'glyph-cycle',
-      glyphScale: 1.2,
+      glyphSizePt: 24,
       motion: { ...MOTION_DEFAULTS },
       ambient: { ...AMBIENT_DEFAULTS },
     },

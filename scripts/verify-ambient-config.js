@@ -30,6 +30,9 @@ const {
   WEATHER_PRESET_OPTIONS,
   AMBIENT_INTERACTION_MIN,
   AMBIENT_INTERACTION_MAX,
+  BACKDROP_OPACITY_MIN,
+  BACKDROP_OPACITY_MAX,
+  BACKDROP_OPACITY_DEFAULT,
   WEATHER_INTENSITY_MIN,
   WEATHER_INTENSITY_MAX,
   WEATHER_WIND_MIN,
@@ -84,6 +87,10 @@ assert(AMBIENT_DEFAULTS.matrix.spread === 100, 'defaults matrix spread is 100')
 assert(AMBIENT_DEFAULTS.matrix.speed === 100, 'defaults matrix speed is 100')
 assert(AMBIENT_DEFAULTS.matrix.volume === 100, 'defaults matrix volume is 100')
 assert(AMBIENT_DEFAULTS.matrix.trailStrength === 60, 'defaults matrix trailStrength is 60')
+assert(
+  BACKDROP_OPACITY_DEFAULT === 0.55 && AMBIENT_DEFAULTS.backdropOpacity === 0.55,
+  'defaults backdropOpacity is the long-standing 0.55 mesh alpha',
+)
 
 // (2) option lists contain exactly the documented values
 assert(
@@ -101,11 +108,13 @@ assert(
 const low = clampAmbientConfig(
   withOverrides({
     interactionStrength: -5,
+    backdropOpacity: -1,
     weather: { intensity: -1, wind: -1, turbulence: -1, blur: -1 },
     matrix: { spread: 0, speed: 0, volume: -1, trailStrength: -1 },
   }),
 )
 assert(low.interactionStrength === AMBIENT_INTERACTION_MIN, 'interactionStrength clamps to min')
+assert(low.backdropOpacity === BACKDROP_OPACITY_MIN, 'backdropOpacity clamps to min')
 assert(low.weather.intensity === WEATHER_INTENSITY_MIN, 'weather intensity clamps to min')
 assert(low.weather.wind === WEATHER_WIND_MIN, 'weather wind clamps to min')
 assert(low.weather.turbulence === WEATHER_TURBULENCE_MIN, 'weather turbulence clamps to min')
@@ -118,11 +127,13 @@ assert(low.matrix.trailStrength === MATRIX_TRAIL_MIN, 'matrix trailStrength clam
 const high = clampAmbientConfig(
   withOverrides({
     interactionStrength: 99,
+    backdropOpacity: 99,
     weather: { intensity: 999, wind: 999, turbulence: 999, blur: 999 },
     matrix: { spread: 999, speed: 9999, volume: 999, trailStrength: 999 },
   }),
 )
 assert(high.interactionStrength === AMBIENT_INTERACTION_MAX, 'interactionStrength clamps to max')
+assert(high.backdropOpacity === BACKDROP_OPACITY_MAX, 'backdropOpacity clamps to max')
 assert(high.weather.intensity === WEATHER_INTENSITY_MAX, 'weather intensity clamps to max')
 assert(high.weather.wind === WEATHER_WIND_MAX, 'weather wind clamps to max')
 assert(high.weather.turbulence === WEATHER_TURBULENCE_MAX, 'weather turbulence clamps to max')
@@ -139,10 +150,11 @@ assert(nonFinite.interactionStrength === AMBIENT_INTERACTION_MIN, 'NaN interacti
 assert(nonFinite.weather.intensity === WEATHER_INTENSITY_MIN, 'non-finite intensity clamps to min')
 
 const preserved = clampAmbientConfig(
-  withOverrides({ mode: 'weather', weather: { preset: 'blizzard' } }),
+  withOverrides({ mode: 'weather', backdropOpacity: 0, weather: { preset: 'blizzard' } }),
 )
 assert(preserved.mode === 'weather', 'clamp preserves mode')
 assert(preserved.weather.preset === 'blizzard', 'clamp preserves weather preset')
+assert(preserved.backdropOpacity === 0, 'clamp preserves an explicit 0 backdropOpacity')
 
 // (4) sub-config clamp helpers work standalone
 const weatherOnly = clampWeatherAmbientConfig({ preset: 'fog', intensity: 500, wind: 50, turbulence: 50, blur: 50 })
@@ -156,6 +168,10 @@ assert(
   JSON.stringify(sparse.weather) === JSON.stringify(AMBIENT_DEFAULTS.weather) &&
     JSON.stringify(sparse.matrix) === JSON.stringify(AMBIENT_DEFAULTS.matrix),
   'clamp fills missing weather/matrix sub-configs with defaults',
+)
+assert(
+  sparse.backdropOpacity === BACKDROP_OPACITY_DEFAULT,
+  'clamp fills a missing backdropOpacity with the 0.55 default',
 )
 
 // (6) mutual exclusivity: a single mode decides, invalid values resolve off

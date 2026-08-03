@@ -45,11 +45,22 @@ where people, business, and technology meet."*
   target field (`LOGO_PATHS` in `engine/constants.ts`).
 - **Usage**: show on dark backgrounds at ≥ 34 px (protected header) up to
   200 px (OG image). Never recolor the PNG; on the canvas, both mark and
-  logotype take the landing gradient (§3.2) chosen by background luminance.
+  logotype take the fixed landing gradient (§3.2).
 
 ### 3.2 Color
 
-**Core surfaces** (dark-first brand; light themes are not currently used)
+**Theme tokens** (pre-release): page, canvas, surface, text, text-muted,
+border, and accent are semantic tokens defined twice — CSS custom
+properties in `app/globals.css` (`--color-*` under
+`html[data-theme='dark']`, with an authored-but-unused
+`html[data-theme='light']` mapping) and a typed canvas palette in
+`engine/theme.ts` (`CANVAS_THEMES`). Dark is fixed for this release:
+`<html>` carries `data-theme="dark"` statically; there is no
+`prefers-color-scheme`, persistence, or toggle yet — the light tokens exist
+only so a future controller can switch. The tables below are the dark
+values.
+
+**Core surfaces** (dark-first brand; light tokens authored, not shipped)
 
 | Token | Hex | Use |
 |---|---|---|
@@ -80,15 +91,20 @@ where people, business, and technology meet."*
 
 **Brand gradients**
 
-- Landing JH glyph gradient, dark backgrounds: `#8FE3F5 → #2F9BC4`
-- Landing JH glyph gradient, light backgrounds: `#0C5E7D → #3B9EC8`
-  (chosen by background luminance — `engine/backgroundLuminance.ts`)
+- Landing canvas background (fixed radial): `#090C12` center → `#101826`
+  edge (`LANDING_CANVAS_GRADIENT` in `engine/theme.ts`)
+- Landing JH glyph gradient (fixed, left to right): `#0C5E7D → #3B9EC8` —
+  always this pair, independent of background luminance
+  (`engine/backgroundLuminance.ts`)
 - Vibe default ROYGBV glyph palette: `#ff0000` `#ff8800` `#ffff00`
   `#00ff00` `#0088ff` `#8800ff` (`ROYGBV_GLYPH_PALETTE`)
 
 **Weather mesh backdrops** (`SceneCanvas.buildAllMeshBgs`): clear
 `#DDEBEE/#F2E6D8`, rain `#012840/#364F59`, storm `#070926/#281259`, wind
-`#6D808C/#BDAC89`, fog `#6E6E6E/#222222`, snow `#0D0D0D/#1C2B3E`.
+`#6D808C/#BDAC89`, fog `#6E6E6E/#222222`, snow `#0D0D0D/#1C2B3E`. Painted
+at the ambient config's `backdropOpacity` (default 0.55; the landing's
+seasonal atmosphere sets 0, so the mesh never lightens its fixed
+background — weather particles still render).
 
 Rules: never introduce a new accent without a role above; cyan is reserved
 for highlights/call-to-action, blue for interaction; error red is never
@@ -96,23 +112,30 @@ decorative.
 
 ### 3.3 Typography
 
-One typeface family, no remote fonts: **Cutive Mono** when locally
-installed, else the system mono stack
-(`ui-monospace, 'SF Mono', Menlo, Consolas, monospace`) — `--font-mono` in
-`globals.css`.
+Two typefaces, both self-hosted (no remote font requests):
+
+- **Cabin Bold (700)** — primary display headings only: the Vibe heading,
+  the Collaborate heading, Work slide titles (Microsoft intro + project
+  titles), and protected case-study titles. Loaded via `next/font/google`
+  (`--font-display` on body), emitted as build assets.
+- **Cutive Mono** — everything else: body copy, navigation, toolbar and
+  control text, Work mode labels, narrative section headings, dialogs,
+  tuning UI, and the glyph particles themselves. Falls back to the system
+  mono stack (`--font-mono` in `globals.css`).
 
 | Style | Spec |
 |---|---|
-| Hero (intro h1) | `clamp(2.9rem, 4vw, 4.64rem)`, line-height 0.95, letter-spacing −0.05em |
-| Story title | `clamp(1.7rem, 3vw, 2.4rem)`, line-height 1.05, letter-spacing −0.03em |
-| Section heading | 1.05rem, `#f5f7fb` |
+| Hero (landing) | glyph-built logotype/monogram on the canvas — no HTML hero text |
+| Display headings | Cabin 700; Work titles `clamp(1.7rem, 3vw, 2.4rem)`, line-height 1.05, letter-spacing −0.03em |
+| Section heading | 1.05rem, mono, `#f5f7fb` |
 | Mode eyebrow | 0.78rem, uppercase, letter-spacing 0.22em, accent blue |
 | Body | 0.85–0.95rem, line-height 1.7–1.8 |
 | Caption/meta | 0.72–0.8rem, muted |
 | Wordmark | lowercase always: "joel hoke design", letter-spacing 0.08em |
 
-Rules: mono everywhere — no second typeface; sentence case for prose,
-lowercase for the wordmark, uppercase only for eyebrow labels.
+Rules: Cabin never becomes a body, control, or particle font; Cutive Mono
+is never removed; sentence case for prose, lowercase for the wordmark,
+uppercase only for eyebrow labels.
 
 ### 3.4 Imagery & iconography
 
@@ -134,6 +157,9 @@ lowercase for the wordmark, uppercase only for eyebrow labels.
 - **Buttons**: pill (radius 999px), min-height 44px, mono at 0.82rem;
   default = translucent panel + border, hover = border to `#8abaff` and
   text to `#f7fbff`; primary (consent) = `#8fe3f5` fill on `#06090e`.
+  Landing primary actions (`.primary-action-button`) are larger: min-height
+  60px desktop / 56px mobile, padding `1.25rem 2rem` desktop /
+  `1rem 1.25rem` mobile — always above the 44px accessibility floor.
 - **Focus**: 2px `#8abaff` outline, 3–4px offset, `:focus-visible` only —
   never remove it.
 - **Motion**: 160–320ms ease transitions; opacity + ≤18px translate for

@@ -1,20 +1,19 @@
 'use client'
 
-import SceneCanvas, { SceneCanvasHandle } from './SceneCanvas'
+import SceneCanvas, { SceneCanvasHandle, SceneTargetRegion } from './SceneCanvas'
 import CanvasFallback from './CanvasFallback'
-import Intro from './Intro'
 import ExperienceNav from './ExperienceNav'
 import ExperienceTransition, { useExperienceTransition } from './ExperienceTransition'
 import WorkExperience from './work/WorkExperience'
 import CollaborateExperience from './collaborate/CollaborateExperience'
 import VibeExperience, { VibeSurfaceStatus } from './vibe/VibeExperience'
+import VibeToolbar from './vibe/VibeToolbar'
 import PrimaryActions, { ExperienceKey, PRIMARY_ACTION_COUNT } from './PrimaryActions'
 import TuningPanel from './tuning/TuningPanel'
 import AnalyticsConsent from './AnalyticsConsent'
-import PlaygroundControlDock from './PlaygroundControlDock'
 import { ExperienceMode, ExperienceSceneKey } from '../engine/types'
 import { EXPERIENCE_SCENES, LANDING_SOURCE_URL } from '../engine/sceneConfig'
-import { getWorkStory, resolveWorkScene, WORK_INTRO, WORK_STORIES } from '../content/work'
+import { getWorkSlide, getWorkSlideId, resolveWorkSlideScene, WORK_SLIDES } from '../content/work'
 import {
   COLLABORATE_CONTACT,
   COLLABORATE_ENERGIZING_STATEMENT,
@@ -30,11 +29,13 @@ import {
 } from '../engine/diagnostics'
 import { QualityTier } from '../engine/qualityTiers'
 import { SceneSourceSelection } from '../engine/animatedSource'
+import { isMobileViewport } from '../engine/displayBudget'
 import {
   captureSeasonalAtmosphereInput,
   resolveSeasonalAtmosphere,
 } from '../engine/seasonalAtmosphere'
 import { AmbientConfig } from '../engine/ambientConfig'
+import { LANDING_CANVAS_GRADIENT } from '../engine/theme'
 import { AnalyticsClient, AnalyticsEvent } from '../engine/analytics'
 import {
   APPROVED_PLAYGROUND_DEFAULTS,
@@ -43,7 +44,6 @@ import {
 import {
   getFriendlyUploadError,
   getVibePreset,
-  VIBE_DOCK_INVITATION,
   VIBE_INVITATION,
   VIBE_PRESETS,
   VIBE_PRIVACY_NOTE,
@@ -59,10 +59,26 @@ import {
   PAINT_BRUSH_DIAMETER_DEFAULT,
   PAINT_BRUSH_DIAMETER_MAX,
   PAINT_BRUSH_DIAMETER_MIN,
+  PaintSnapshot,
   PaintStatus,
   PaintToolConfig,
+  clonePaintSnapshot,
+  createEmptyPaintSnapshot,
 } from '../engine/paint'
-import PlaygroundControls from './PlaygroundControls'
+import {
+  VibeHistory,
+  VibeStateSnapshot,
+  VibeTransactionKind,
+  canRedoVibe,
+  canUndoVibe,
+  clearVibeHistory,
+  cloneVibeConfig,
+  collectRetainedUrls,
+  createVibeHistory,
+  pushTransaction,
+  redoTransaction,
+  undoTransaction,
+} from '../engine/vibeHistory'
 import {
   APPROVED_SCENE_DEFAULTS,
   APPROVED_SOURCE_LAYOUT_DEFAULTS,
@@ -77,7 +93,6 @@ import {
   getTotalDuration,
   IntroPhase,
   IntroSequenceSnapshot,
-  IntroTiming,
   nextPhase,
   portfolioIntroPreset,
   previousPhase,
@@ -110,9 +125,7 @@ type SequenceDiagnostics = {
   elapsedMs: number
   phaseProgress: number
   overallProgress: number
-  taglineProgress: number
-  taglineVisible: boolean
-  taglineMounted: boolean
+  logoScale: number
   optionsProgress: number
   optionsVisible: boolean
   optionsReady: boolean
@@ -155,16 +168,71 @@ export default function PortfolioExperience() {
   const { displayed, phase: transitionPhase } = useExperienceTransition(experience)
   const modeHeadingRef = useRef<HTMLHeadingElement | null>(null)
 
-  // Active work case study. Controlled here (not inside WorkExperience) so the
-  // same index drives both the foreground story and the canvas descriptor.
-  const [workStoryIndex, setWorkStoryIndex] = useState(0)
+  // Active work slide (intro first, then one project slide per story).
+  // Controlled here (not inside WorkExperience) so the same index drives both
+  // the foreground slide and the canvas descriptor.
+  const [workSlideIndex, setWorkSlideIndex] = useState(0)
 
-  // Resolved work scene: the work baseline merged with the active story's
+  // Resolved work scene: the work baseline merged with the active slide's
   // source, palette/background, and behavior overrides.
   const workDescriptor = useMemo(
-    () => resolveWorkScene(EXPERIENCE_SCENES.work, getWorkStory(workStoryIndex)),
-    [workStoryIndex],
+    () => resolveWorkSlideScene(EXPERIENCE_SCENES.work, getWorkSlide(workSlideIndex)),
+    [workSlideIndex],
   )
+
+  // Mobile Work glyph stage: the measured viewport-relative rect the source
+  // target field is fitted into (null on desktop / outside Work mode = the
+  // canvas keeps the full-viewport treatment). Measured with a
+  // ResizeObserver on the stage (plus its layout wrapper, whose size shifts
+  // the stage's position) and window resize/orientationchange; values are
+  // rounded to whole CSS px so only real changes propagate.
+  const glyphStageRef = useRef<HTMLDivElement | null>(null)
+  const [workTargetRegion, setWorkTargetRegion] = useState<SceneTargetRegion | null>(null)
+  useEffect(() => {
+    if (displayed !== 'work') {
+      setWorkTargetRegion(null)
+      return
+    }
+    const stage = glyphStageRef.current
+    if (!stage) return
+    const measure = () => {
+      const rect = stage.getBoundingClientRect()
+      const width = Math.round(rect.width)
+      const height = Math.round(rect.height)
+      const next: SceneTargetRegion | null =
+        width > 1 && height > 1
+          ? { x: Math.round(rect.left), y: Math.round(rect.top), width, height }
+          : null
+      setWorkTargetRegion((prev) => {
+        if (prev === null && next === null) return prev
+        if (
+          prev !== null &&
+          next !== null &&
+          prev.x === next.x &&
+          prev.y === next.y &&
+          prev.width === next.width &&
+          prev.height === next.height
+        ) {
+          return prev
+        }
+        return next
+      })
+    }
+    measure()
+    let observer: ResizeObserver | null = null
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(measure)
+      observer.observe(stage)
+      if (stage.parentElement) observer.observe(stage.parentElement)
+    }
+    window.addEventListener('resize', measure)
+    window.addEventListener('orientationchange', measure)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', measure)
+      window.removeEventListener('orientationchange', measure)
+    }
+  }, [displayed])
 
   // Selected conversation starter. Controlled here (not inside
   // CollaborateExperience) so the same state also drives the canvas descriptor.
@@ -188,9 +256,12 @@ export default function PortfolioExperience() {
   }, [displayed])
   useEffect(() => {
     if (displayed !== 'work') return
-    trackEvent({ name: 'story_view', params: { story_id: getWorkStory(workStoryIndex).id } })
+    // story_view is project-only: the intro slide is mode copy, not a story.
+    const slide = getWorkSlide(workSlideIndex)
+    if (slide.kind !== 'project') return
+    trackEvent({ name: 'story_view', params: { story_id: slide.story.id } })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workStoryIndex, displayed])
+  }, [workSlideIndex, displayed])
 
   // Resolved collaborate scene: the collaborate baseline merged with the
   // selected starter's glyph phrase (baseline kept when nothing is selected).
@@ -207,14 +278,21 @@ export default function PortfolioExperience() {
     setTuningMode(isTuningMode())
   }, [])
 
-  // Editable working copies of authored configuration.
-  const [introTiming, setIntroTiming] = useState<IntroTiming>(() => ({
-    ...portfolioIntroPreset.timing,
-  }))
-  const timingRef = useRef(introTiming)
+  // Current viewport width (resize-listened; updates on resize only, never
+  // per frame). Drives the landing source choice: the JH logotype on
+  // desktop, the built-in monogram on mobile viewports.
+  const [viewportWidth, setViewportWidth] = useState(0)
   useEffect(() => {
-    timingRef.current = introTiming
-  }, [introTiming])
+    const updateViewportWidth = () => setViewportWidth(window.innerWidth)
+    updateViewportWidth()
+    window.addEventListener('resize', updateViewportWidth)
+    return () => window.removeEventListener('resize', updateViewportWidth)
+  }, [])
+
+  // Editable working copies of authored configuration. The intro sequence
+  // timing is fixed (portfolioIntroPreset); the RAF loop reads it through a
+  // stable ref so the tick closure never goes stale.
+  const timingRef = useRef(portfolioIntroPreset.timing)
 
   const [sceneConfig, setSceneConfig] = useState<SceneConfig>(() => ({
     ...APPROVED_SCENE_DEFAULTS,
@@ -233,13 +311,23 @@ export default function PortfolioExperience() {
   )
   const vibeTouchedRef = useRef(false)
 
-  // Ambient effect changes (Vibe Off/Weather/Matrix selector).
+  // Ambient effect changes (Vibe Off/Weather/Matrix selector). Undo/redo
+  // replays are excluded: analytics fire on the forward action only. The ref
+  // counts history-applied ambient-mode changes not yet consumed by the
+  // effect below (applyVibeSnapshot increments it only when the applied
+  // snapshot actually changes the mode, so increments and suppressed changes
+  // pair up exactly).
   const ambientMode = playgroundConfig.ambient.mode
   const prevAmbientModeRef = useRef(ambientMode)
+  const vibeAmbientHistoryAppliesRef = useRef(0)
   useEffect(() => {
     if (prevAmbientModeRef.current !== ambientMode) {
       prevAmbientModeRef.current = ambientMode
-      trackEvent({ name: 'effect_change', params: { mode: ambientMode } })
+      if (vibeAmbientHistoryAppliesRef.current > 0) {
+        vibeAmbientHistoryAppliesRef.current -= 1
+      } else {
+        trackEvent({ name: 'effect_change', params: { mode: ambientMode } })
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ambientMode])
@@ -250,11 +338,6 @@ export default function PortfolioExperience() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadPending, setUploadPending] = useState(false)
 
-  // Vibe shape source: the animated Black hole replaces the image field
-  // (default mark or upload) until the visitor switches back. The upload
-  // itself is preserved — toggling back to 'image' restores it.
-  const [vibeBlackHole, setVibeBlackHole] = useState(false)
-
   // Vibe presentation (Stage 3): the invitation card and the control dock
   // are mutually exclusive, and the open state lives here so the card can
   // unmount entirely and restore focus to its CTA when the dock closes.
@@ -262,13 +345,12 @@ export default function PortfolioExperience() {
   const vibeCtaRef = useRef<HTMLButtonElement | null>(null)
   const vibeControlsWasOpenRef = useRef(false)
   const vibeDockId = useId().replace(/:/g, '-')
+  const vibeToolbarId = `vibe-toolbar-${vibeDockId}`
 
   // Landing seasonal atmosphere (Stage 3): computed once on mount from the
-  // local date/locale, adopted by the completed-intro scene and faded in
-  // (intensity ramp) at the options-reveal moment.
+  // local date/locale and applied at full intensity from the first landing
+  // frame — no ramp.
   const [landingAmbient, setLandingAmbient] = useState<AmbientConfig | null>(null)
-  const landingAtmosphereRef = useRef<AmbientConfig | null>(null)
-  const landingAtmosphereStartedRef = useRef(false)
 
   // Vibe-only paint tool state (session-only; never URL-persisted) and the
   // live overlay status reported by the canvas.
@@ -280,6 +362,33 @@ export default function PortfolioExperience() {
     brushDiameter: PAINT_BRUSH_DIAMETER_DEFAULT,
   })
   const [paintStatus, setPaintStatus] = useState<PaintStatus | null>(null)
+
+  // Unified Vibe undo/redo history (launch item 6): one transaction stack
+  // covering config, text, presets, uploads, paint-tool, paint strokes, and
+  // clear paint. The canUndo/canRedo React state only updates on
+  // history-structure changes (and upload lifecycle), never per keystroke.
+  const vibeHistoryRef = useRef<VibeHistory>(createVibeHistory())
+  const [vibeCanUndo, setVibeCanUndo] = useState(false)
+  const [vibeCanRedo, setVibeCanRedo] = useState(false)
+  // Latest paint-overlay state: the "before" for the next stroke transaction
+  // (the canvas only reports stroke ENDS, so this is tracked continuously).
+  const lastPaintSnapshotRef = useRef<PaintSnapshot>(createEmptyPaintSnapshot())
+  // Stable mirrors so async/deferred handlers (uploads, keyboard shortcuts)
+  // never read stale render closures.
+  const playgroundConfigRef = useRef(playgroundConfig)
+  const paintToolRef = useRef(paintTool)
+  const uploadPendingRef = useRef(uploadPending)
+  useEffect(() => {
+    playgroundConfigRef.current = playgroundConfig
+  }, [playgroundConfig])
+  useEffect(() => {
+    paintToolRef.current = paintTool
+  }, [paintTool])
+  useEffect(() => {
+    uploadPendingRef.current = uploadPending
+    syncVibeHistoryFlags()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadPending])
 
   // Accessible confirmation for paint-destructive actions (upload, preset,
   // parametric enter/leave, variant change, leaving vibe). Holds the action
@@ -333,21 +442,23 @@ export default function PortfolioExperience() {
       if (event.key !== '[' && event.key !== ']') return
       event.preventDefault()
       const delta = (event.key === ']' ? 1 : -1) * (event.shiftKey ? 16 : 4)
-      setPaintTool((prev) => ({
-        ...prev,
-        brushDiameter: Math.min(
-          PAINT_BRUSH_DIAMETER_MAX,
-          Math.max(PAINT_BRUSH_DIAMETER_MIN, prev.brushDiameter + delta),
-        ),
-      }))
+      const next = Math.min(
+        PAINT_BRUSH_DIAMETER_MAX,
+        Math.max(PAINT_BRUSH_DIAMETER_MIN, paintToolRef.current.brushDiameter + delta),
+      )
+      if (next === paintToolRef.current.brushDiameter) return
+      handlePaintToolChange({ brushDiameter: next }, 'brushDiameter')
     }
     window.addEventListener('keydown', handleBrushKeys)
     return () => window.removeEventListener('keydown', handleBrushKeys)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayed, paintTool.enabled])
 
-  // Object-URL lifecycle: raster uploads hold a blob: URL that must be revoked
-  // when the source is replaced, cleared, or the component unmounts. SVG data
-  // URLs and built-in paths need nothing.
+  // Object-URL lifecycle: raster uploads hold a blob: URL. URLs referenced by
+  // any retained vibe-history entry (or the live source) must stay valid, so
+  // revocation happens only when history entries are trimmed/cleared, on
+  // reset, or on unmount — never when a source is replaced (the replacing
+  // transaction's before-snapshot still references it).
   const uploadedSourceRef = useRef<UploadedSourceState | null>(null)
   useEffect(() => {
     uploadedSourceRef.current = uploadedSource
@@ -358,14 +469,81 @@ export default function PortfolioExperience() {
       if (current && current.url.startsWith('blob:')) {
         URL.revokeObjectURL(current.url)
       }
+      collectRetainedUrls(vibeHistoryRef.current).forEach((url) => {
+        if (url.startsWith('blob:')) URL.revokeObjectURL(url)
+      })
     }
   }, [])
 
-  const revokeUploadedSourceUrl = () => {
-    const current = uploadedSourceRef.current
-    if (current && current.url.startsWith('blob:')) {
-      URL.revokeObjectURL(current.url)
+  // Release guard handed to the history module: never revoke the live source
+  // (trimming can surface an URL the field still samples).
+  const releaseOrphanedUrl = (url: string) => {
+    if (uploadedSourceRef.current?.url === url) return
+    if (url.startsWith('blob:')) URL.revokeObjectURL(url)
+  }
+
+  // --- Unified vibe history (launch item 6) --------------------------------
+
+  const syncVibeHistoryFlags = () => {
+    setVibeCanUndo(canUndoVibe(vibeHistoryRef.current, uploadPendingRef.current))
+    setVibeCanRedo(canRedoVibe(vibeHistoryRef.current, uploadPendingRef.current))
+  }
+
+  /** Snapshot the full vibe state (config + paint tool + paint + upload).
+   *  The paint component rides lastPaintSnapshotRef — pass an override when
+   *  the canvas state just changed synchronously. */
+  const captureVibeSnapshot = (paintOverride?: PaintSnapshot): VibeStateSnapshot => ({
+    config: cloneVibeConfig(playgroundConfigRef.current),
+    paintTool: { ...paintToolRef.current },
+    paint: paintOverride
+      ? clonePaintSnapshot(paintOverride)
+      : clonePaintSnapshot(lastPaintSnapshotRef.current),
+    upload: uploadedSourceRef.current ? { ...uploadedSourceRef.current } : null,
+  })
+
+  const recordVibeTransaction = (
+    kind: VibeTransactionKind,
+    key: string | null,
+    before: VibeStateSnapshot,
+    after: VibeStateSnapshot,
+  ) => {
+    pushTransaction(vibeHistoryRef.current, { kind, key, before, after }, releaseOrphanedUrl)
+    syncVibeHistoryFlags()
+  }
+
+  /** Default coalesce key from the patch contents: single scalar fields use
+   *  their name; nested motion/ambient use `<field>.<changed subfield>`; an
+   *  in-place palette recolor uses `glyphPalette.<index>`. Multi-field or
+   *  structural patches return null (never coalesced). */
+  const deriveConfigHistoryKey = (
+    prev: PlaygroundConfig,
+    patch: Partial<PlaygroundConfig>,
+  ): string | null => {
+    const keys = Object.keys(patch) as (keyof PlaygroundConfig)[]
+    if (keys.length !== 1) return null
+    const key = keys[0]
+    if ((key === 'motion' || key === 'ambient') && patch[key]) {
+      const prevNested = prev[key] as unknown as Record<string, unknown>
+      const nextNested = patch[key] as unknown as Record<string, unknown>
+      const changed = Object.keys(nextNested).filter(
+        (field) => JSON.stringify(nextNested[field]) !== JSON.stringify(prevNested[field]),
+      )
+      return changed.length === 1 ? `${key}.${changed[0]}` : key
     }
+    if (
+      key === 'glyphPalette' &&
+      patch.glyphPalette &&
+      patch.glyphPalette.length === prev.glyphPalette.length
+    ) {
+      const diffs = patch.glyphPalette.filter((color, i) => color !== prev.glyphPalette[i])
+      if (diffs.length === 1) {
+        return `glyphPalette.${patch.glyphPalette.findIndex(
+          (color, i) => color !== prev.glyphPalette[i],
+        )}`
+      }
+      return 'glyphPalette'
+    }
+    return key
   }
 
   // Animation-facing sequence state: updated every RAF tick for smooth progress.
@@ -373,19 +551,16 @@ export default function PortfolioExperience() {
     evaluateIntroSequence(0, portfolioIntroPreset.timing),
   )
 
-  // Direct DOM refs for full-rate visual updates (not throttled diagnostics).
-  const taglineRef = useRef<HTMLElement | null>(null)
+  // Direct DOM ref for full-rate visual updates (not throttled diagnostics).
   const actionsRef = useRef<HTMLDivElement | null>(null)
 
   // Throttled diagnostic state: drives text readouts only.
   const [diagnostics, setDiagnostics] = useState<SequenceDiagnostics>({
-    phase: 'logo-forming',
+    phase: 'logo-scale',
     elapsedMs: 0,
     phaseProgress: 0,
     overallProgress: 0,
-    taglineProgress: 0,
-    taglineVisible: false,
-    taglineMounted: true,
+    logoScale: 0,
     optionsProgress: 0,
     optionsVisible: false,
     optionsReady: false,
@@ -435,19 +610,6 @@ export default function PortfolioExperience() {
 
     let raf: number
     let lastDiagnosticTick = 0
-
-    const updateTaglineVisuals = (sequence: IntroSequenceSnapshot) => {
-      const node = taglineRef.current
-      if (!node) return
-
-      const taglineProgress = sequence.taglineVisible ? sequence.taglineProgress : 0
-      const eased = easeOutCubic(taglineProgress)
-      node.style.setProperty('--tagline-progress', String(eased))
-
-      const visuallyHidden = !sequence.taglineVisible || taglineProgress <= 0
-      node.classList.toggle('tagline-hidden', visuallyHidden)
-      node.setAttribute('aria-hidden', String(visuallyHidden))
-    }
 
     const updateActionsVisuals = (sequence: IntroSequenceSnapshot) => {
       const node = actionsRef.current
@@ -505,13 +667,14 @@ export default function PortfolioExperience() {
       const next = evaluateIntroSequence(elapsed, timing)
       sequenceRef.current = next
 
-      // Full-rate visual update path: apply directly to the DOM without React re-render.
-      updateTaglineVisuals(next)
+      // Full-rate visual update path: apply directly to the DOM/canvas
+      // without React re-render. The logo scale goes to the canvas
+      // imperatively; the option reveals are CSS custom properties.
+      sceneCanvasRef.current?.setLandingLogoScale(next.logoScale)
       const actionMeta = updateActionsVisuals(next)
 
       // Throttle diagnostic React state updates to ~10fps.
       if (now - lastDiagnosticTick > 100) {
-        const taglineProgress = next.taglineVisible ? next.taglineProgress : 0
         const optionsProgress = next.optionsVisible ? next.optionsProgress : 0
         const { itemProgresses, timingFallbackActive } = actionMeta ?? {
           itemProgresses: Array(PRIMARY_ACTION_COUNT).fill(0),
@@ -531,9 +694,7 @@ export default function PortfolioExperience() {
           elapsedMs: next.elapsedMs,
           phaseProgress: next.phase === 'complete' ? 1 : next.phaseProgress,
           overallProgress: clamp(next.elapsedMs / totalDuration, 0, 1),
-          taglineProgress,
-          taglineVisible: next.taglineVisible,
-          taglineMounted: !!taglineRef.current,
+          logoScale: next.logoScale,
           optionsProgress,
           optionsVisible: next.optionsVisible,
           optionsReady: next.optionsReady,
@@ -650,10 +811,17 @@ export default function PortfolioExperience() {
   // Safety net: whenever the settled experience is not vibe, no paint may
   // remain on the field. navigateTo confirms-then-clears on the explicit path;
   // browser back/forward resolves through the hash listener and lands here.
+  // The departure discard is non-recoverable, so the vibe undo history (which
+  // could otherwise restore paint onto a different mode's field) is dropped
+  // with it; the uploaded source itself survives mode switches.
   useEffect(() => {
     if (displayed !== 'vibe') {
       sceneCanvasRef.current?.clearPaint()
+      clearVibeHistory(vibeHistoryRef.current, releaseOrphanedUrl)
+      lastPaintSnapshotRef.current = createEmptyPaintSnapshot()
+      syncVibeHistoryFlags()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayed])
 
   // Focus management + titles: move focus to the mode heading and set a
@@ -703,22 +871,17 @@ export default function PortfolioExperience() {
     ctrl.pausedElapsed = 0
     const timing = timingRef.current
     sequenceRef.current = evaluateIntroSequence(0, timing)
-    // Force immediate visual reset so the tagline hides before the next RAF.
-    const node = taglineRef.current
-    if (node) {
-      node.style.setProperty('--tagline-progress', '0')
-      node.classList.add('tagline-hidden')
-      node.setAttribute('aria-hidden', 'true')
-    }
+    // Force the scale-in to restart immediately: the canvas snaps the glyph
+    // population to the logo center before the next RAF.
+    sceneCanvasRef.current?.setLandingLogoScale(0)
     resetActionsVisuals()
     setDiagnostics((prev) => ({
       ...prev,
-      phase: 'logo-forming',
+      phase: 'logo-scale',
       elapsedMs: 0,
       phaseProgress: 0,
       overallProgress: 0,
-      taglineProgress: 0,
-      taglineVisible: false,
+      logoScale: 0,
       optionsProgress: 0,
       optionsVisible: false,
       optionsReady: false,
@@ -738,15 +901,7 @@ export default function PortfolioExperience() {
     const next = evaluateIntroSequence(targetTime, timing)
     sequenceRef.current = next
 
-    const taglineProgress = next.taglineVisible ? next.taglineProgress : 0
-
-    const taglineNode = taglineRef.current
-    if (taglineNode) {
-      taglineNode.style.setProperty('--tagline-progress', String(easeOutCubic(taglineProgress)))
-      const visuallyHidden = !next.taglineVisible || taglineProgress <= 0
-      taglineNode.classList.toggle('tagline-hidden', visuallyHidden)
-      taglineNode.setAttribute('aria-hidden', String(visuallyHidden))
-    }
+    sceneCanvasRef.current?.setLandingLogoScale(next.logoScale)
 
     const actionsNode = actionsRef.current
     if (actionsNode) {
@@ -773,8 +928,7 @@ export default function PortfolioExperience() {
       phase,
       elapsedMs: targetTime,
       phaseProgress: phase === 'complete' ? 1 : next.phaseProgress,
-      taglineProgress,
-      taglineVisible: next.taglineVisible,
+      logoScale: next.logoScale,
       optionsProgress: next.optionsVisible ? next.optionsProgress : 0,
       optionsVisible: next.optionsVisible,
       optionsReady: next.optionsReady,
@@ -798,14 +952,6 @@ export default function PortfolioExperience() {
     setDiagnostics((prev) => ({ ...prev, speed: value }))
   }
 
-  const handleTimingChange = (key: keyof IntroTiming, value: number) => {
-    setIntroTiming((prev) => ({ ...prev, [key]: value }))
-  }
-
-  const resetIntroTiming = () => {
-    setIntroTiming({ ...portfolioIntroPreset.timing })
-  }
-
   const handleSceneConfigChange = (key: keyof SceneConfig, value: number) => {
     setSceneConfig((prev) => ({ ...prev, [key]: value }))
   }
@@ -824,7 +970,7 @@ export default function PortfolioExperience() {
 
   const handleCopyConfiguration = () => {
     const payload = {
-      timing: { ...introTiming },
+      timing: { ...portfolioIntroPreset.timing },
       scene: { ...sceneConfig },
       sourceLayout: { ...sourceLayout },
     }
@@ -834,12 +980,16 @@ export default function PortfolioExperience() {
     }
   }
 
-  const handlePlaygroundConfigChange = (patch: Partial<PlaygroundConfig>) => {
+  const handlePlaygroundConfigChange = (
+    patch: Partial<PlaygroundConfig>,
+    historyKey?: string,
+  ) => {
     vibeTouchedRef.current = true
+    const key = historyKey ?? deriveConfigHistoryKey(playgroundConfigRef.current, patch)
     // Parametric transitions (enter/leave) and variant swaps replace the
     // target field's identity, so they discard paint — with confirmation.
     if (patch.motion) {
-      const prevMotion = playgroundConfig.motion
+      const prevMotion = playgroundConfigRef.current.motion
       const nextMotion = patch.motion
       const destructive =
         (prevMotion.mode !== nextMotion.mode &&
@@ -850,69 +1000,182 @@ export default function PortfolioExperience() {
           prevMotion.variant !== nextMotion.variant)
       if (destructive) {
         withPaintConfirmation(() => {
+          const before = captureVibeSnapshot()
           sceneCanvasRef.current?.clearPaint()
+          lastPaintSnapshotRef.current =
+            sceneCanvasRef.current?.capturePaintState() ?? createEmptyPaintSnapshot()
           setPlaygroundConfig((prev) => ({ ...prev, ...patch }))
+          playgroundConfigRef.current = { ...playgroundConfigRef.current, ...patch }
+          recordVibeTransaction('config', key, before, captureVibeSnapshot())
         })
         return
       }
     }
+    const before = captureVibeSnapshot()
     setPlaygroundConfig((prev) => ({ ...prev, ...patch }))
+    playgroundConfigRef.current = { ...playgroundConfigRef.current, ...patch }
+    recordVibeTransaction('config', key, before, captureVibeSnapshot())
+  }
+
+  // Glyph text commits as ONE transaction per editing session (the panel
+  // normalizes and commits on blur), so undo restores the previous text.
+  const handleCommitGlyphText = (text: string) => {
+    vibeTouchedRef.current = true
+    const before = captureVibeSnapshot()
+    setPlaygroundConfig((prev) => ({ ...prev, glyphText: text }))
+    playgroundConfigRef.current = { ...playgroundConfigRef.current, glyphText: text }
+    recordVibeTransaction('text', null, before, captureVibeSnapshot())
   }
 
   // Reset restores EVERYTHING to the curated default composition: the full
   // editable config (text, palette, background, font, color mode, scale,
   // motion), the paint tool, and the source (any uploaded image is cleared
-  // back to the built-in default). Full Reset is immediate — no confirmation.
+  // back to the built-in default). Full Reset is immediate — no confirmation
+  // — and deliberately NOT undoable: the history is dropped and every object
+  // URL the session still references is released.
   const handleResetPlaygroundConfig = () => {
     vibeTouchedRef.current = false
     setPlaygroundConfig(clonePlaygroundConfig(EXPERIENCE_SCENES.vibe.playground))
+    playgroundConfigRef.current = cloneVibeConfig(EXPERIENCE_SCENES.vibe.playground)
     sceneCanvasRef.current?.clearPaint()
-    setPaintTool({
+    lastPaintSnapshotRef.current = createEmptyPaintSnapshot()
+    const defaultPaintTool: PaintToolConfig = {
       enabled: false,
       tool: 'paint',
       glyphColor: '#8abaff',
       backgroundColor: 'none',
       brushDiameter: PAINT_BRUSH_DIAMETER_DEFAULT,
+    }
+    setPaintTool(defaultPaintTool)
+    paintToolRef.current = defaultPaintTool
+    const orphaned = collectRetainedUrls(vibeHistoryRef.current)
+    clearVibeHistory(vibeHistoryRef.current)
+    orphaned.forEach((url) => {
+      if (url.startsWith('blob:')) URL.revokeObjectURL(url)
     })
-    setVibeBlackHole(false)
-    revokeUploadedSourceUrl()
+    const current = uploadedSourceRef.current
+    if (current && current.url.startsWith('blob:')) {
+      URL.revokeObjectURL(current.url)
+    }
     setUploadedSource(null)
+    uploadedSourceRef.current = null
+    setUploadError(null)
+    syncVibeHistoryFlags()
+  }
+
+  const handlePaintToolChange = (patch: Partial<PaintToolConfig>, historyKey?: string) => {
+    const before = captureVibeSnapshot()
+    setPaintTool((prev) => ({ ...prev, ...patch }))
+    paintToolRef.current = { ...paintToolRef.current, ...patch }
+    const key = historyKey ?? Object.keys(patch).sort().join(',')
+    recordVibeTransaction('paint-tool', key, before, captureVibeSnapshot())
+  }
+
+  // A completed stroke is one transaction: the before snapshot was captured
+  // after the previous paint-affecting event, the after comes from the canvas.
+  const handlePaintStrokeEnd = () => {
+    const canvas = sceneCanvasRef.current
+    if (!canvas) return
+    const before = captureVibeSnapshot()
+    lastPaintSnapshotRef.current = canvas.capturePaintState()
+    recordVibeTransaction('paint-stroke', null, before, captureVibeSnapshot())
+  }
+
+  // Clear paint (Paint popout action): a compound before/after paint swap.
+  const handleClearPaint = () => {
+    const canvas = sceneCanvasRef.current
+    if (!canvas || canvas.getPaintStatus().strokeCount === 0) return
+    const before = captureVibeSnapshot()
+    canvas.clearPaint()
+    lastPaintSnapshotRef.current = canvas.capturePaintState()
+    recordVibeTransaction('clear-paint', null, before, captureVibeSnapshot())
+  }
+
+  // Apply a history snapshot in either direction: config, paint tool, paint
+  // overlay, and upload reference. No analytics fire here — events belong to
+  // the forward action only.
+  const applyVibeSnapshot = (snapshot: VibeStateSnapshot) => {
+    vibeTouchedRef.current = true
+    if (snapshot.config.ambient.mode !== playgroundConfigRef.current.ambient.mode) {
+      vibeAmbientHistoryAppliesRef.current += 1
+    }
+    setPlaygroundConfig(cloneVibeConfig(snapshot.config))
+    playgroundConfigRef.current = cloneVibeConfig(snapshot.config)
+    setPaintTool({ ...snapshot.paintTool })
+    paintToolRef.current = { ...snapshot.paintTool }
+    sceneCanvasRef.current?.restorePaintState(snapshot.paint)
+    lastPaintSnapshotRef.current = clonePaintSnapshot(snapshot.paint)
+    const nextSource = snapshot.upload ? { ...snapshot.upload } : null
+    setUploadedSource(nextSource)
+    uploadedSourceRef.current = nextSource
     setUploadError(null)
   }
 
-  // Shape source selection (image field vs. the animated Black hole). Both
-  // directions are paint-destructive, so they reuse the existing confirmed
-  // discard flow; the uploaded image itself survives the switch.
-  const handleSelectSourceShape = (shape: 'image' | 'black-hole') => {
-    const next = shape === 'black-hole'
-    if (next === vibeBlackHole) return
-    withPaintConfirmation(() => {
-      sceneCanvasRef.current?.clearPaint()
-      vibeTouchedRef.current = true
-      setVibeBlackHole(next)
-      setUploadError(null)
-      trackEvent({ name: 'source_change', params: { source: next ? 'black-hole' : 'builtin' } })
-    })
+  const handleUndoVibe = () => {
+    if (!canUndoVibe(vibeHistoryRef.current, uploadPendingRef.current)) return
+    const transaction = undoTransaction(vibeHistoryRef.current)
+    if (!transaction) return
+    applyVibeSnapshot(transaction.before)
+    syncVibeHistoryFlags()
   }
+
+  const handleRedoVibe = () => {
+    if (!canRedoVibe(vibeHistoryRef.current, uploadPendingRef.current)) return
+    const transaction = redoTransaction(vibeHistoryRef.current)
+    if (!transaction) return
+    applyVibeSnapshot(transaction.after)
+    syncVibeHistoryFlags()
+  }
+
+  // Cmd/Ctrl+Z undoes, Cmd/Ctrl+Shift+Z (or Cmd/Ctrl+Y) redoes — scoped to
+  // vibe mode and never intercepted inside editable fields, where native
+  // text undo wins.
+  useEffect(() => {
+    const handleHistoryKeys = (event: KeyboardEvent) => {
+      if (displayed !== 'vibe') return
+      const tag = (event.target as HTMLElement | null)?.tagName.toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+      if (!(event.metaKey || event.ctrlKey)) return
+      const key = event.key.toLowerCase()
+      if (key === 'z' && event.shiftKey) {
+        event.preventDefault()
+        handleRedoVibe()
+      } else if (key === 'z') {
+        event.preventDefault()
+        handleUndoVibe()
+      } else if (key === 'y') {
+        event.preventDefault()
+        handleRedoVibe()
+      }
+    }
+    window.addEventListener('keydown', handleHistoryKeys)
+    return () => window.removeEventListener('keydown', handleHistoryKeys)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayed])
 
   // Presets apply a complete authored composition. A preset with a sourceUrl
   // swaps the field's source to that built-in SVG; one without clears any
   // upload back to the default source. Paint is discarded (with confirmation).
+  // The whole swap is ONE compound transaction: undo restores the previous
+  // config, paint, and upload together.
   const handleApplyVibePreset = (id: string) => {
     const preset = getVibePreset(id)
     if (!preset) return
     withPaintConfirmation(() => {
+      const before = captureVibeSnapshot()
       sceneCanvasRef.current?.clearPaint()
+      lastPaintSnapshotRef.current =
+        sceneCanvasRef.current?.capturePaintState() ?? createEmptyPaintSnapshot()
       vibeTouchedRef.current = true
       setPlaygroundConfig(clonePlaygroundConfig(preset.config))
+      playgroundConfigRef.current = cloneVibeConfig(preset.config)
       setUploadError(null)
-      setVibeBlackHole(false)
-      revokeUploadedSourceUrl()
-      if (preset.sourceUrl) {
-        setUploadedSource({ kind: 'svg', url: preset.sourceUrl, filename: `${preset.label} source` })
-      } else {
-        setUploadedSource(null)
-      }
+      const nextSource: UploadedSourceState | null = preset.sourceUrl
+        ? { kind: 'svg', url: preset.sourceUrl, filename: `${preset.label} source` }
+        : null
+      setUploadedSource(nextSource)
+      uploadedSourceRef.current = nextSource
+      recordVibeTransaction('preset', null, before, captureVibeSnapshot())
       trackEvent({ name: 'preset_change', params: { preset_id: preset.id } })
       trackEvent({ name: 'source_change', params: { source: preset.sourceUrl ? 'preset' : 'builtin' } })
     })
@@ -920,14 +1183,18 @@ export default function PortfolioExperience() {
 
   const handleUploadSource = async (file: File) => {
     withPaintConfirmation(() => {
+      // Capture the pre-upload state BEFORE the confirmed paint discard so
+      // undo restores the paint and the previous source together.
+      const before = captureVibeSnapshot()
       sceneCanvasRef.current?.clearPaint()
-      void performUploadSource(file)
+      lastPaintSnapshotRef.current =
+        sceneCanvasRef.current?.capturePaintState() ?? createEmptyPaintSnapshot()
+      void performUploadSource(file, before)
     })
   }
 
-  const performUploadSource = async (file: File) => {
+  const performUploadSource = async (file: File, before: VibeStateSnapshot) => {
     vibeTouchedRef.current = true
-    setVibeBlackHole(false)
     setUploadPending(true)
     setUploadError(null)
 
@@ -946,9 +1213,17 @@ export default function PortfolioExperience() {
     }
 
     if (result.ok) {
-      revokeUploadedSourceUrl()
-      setUploadedSource({ kind: result.kind, url: result.url, filename: result.filename })
+      const nextSource: UploadedSourceState = {
+        kind: result.kind,
+        url: result.url,
+        filename: result.filename,
+      }
+      setUploadedSource(nextSource)
+      uploadedSourceRef.current = nextSource
       setUploadError(null)
+      // Only successful uploads create history; failures leave state (and
+      // the undo stack) untouched.
+      recordVibeTransaction('source', null, before, captureVibeSnapshot())
       trackEvent({ name: 'upload_result', params: { mime_type: file.type || 'unknown', ok: true } })
       trackEvent({ name: 'source_change', params: { source: 'upload' } })
     } else {
@@ -961,42 +1236,23 @@ export default function PortfolioExperience() {
 
   // Seasonal landing atmosphere: resolve once on mount (client-only — the
   // inputs are the local clock and Intl locale/timezone, both injected into
-  // the pure resolver). Never live weather; see engine/seasonalAtmosphere.
+  // the pure resolver) and apply immediately at full intensity. Never live
+  // weather; see engine/seasonalAtmosphere.
   useEffect(() => {
     const resolved = Intl.DateTimeFormat().resolvedOptions()
-    landingAtmosphereRef.current = resolveSeasonalAtmosphere(
-      captureSeasonalAtmosphereInput(new Date(), {
-        locale: resolved.locale,
-        timeZone: resolved.timeZone,
-      }),
+    setLandingAmbient(
+      resolveSeasonalAtmosphere(
+        captureSeasonalAtmosphereInput(new Date(), {
+          locale: resolved.locale,
+          timeZone: resolved.timeZone,
+        }),
+      ),
     )
   }, [])
 
-  // Options-reveal moment: fade the atmosphere in by ramping its weather
-  // intensity from zero to the resolved target. Non-structural knob edits,
-  // so the ambient pool never rebuilds during the ramp; under reduced motion
-  // each step just re-renders the static pose.
-  useEffect(() => {
-    const target = landingAtmosphereRef.current
-    if (!diagnostics.optionsReady || !target || landingAtmosphereStartedRef.current) return
-    landingAtmosphereStartedRef.current = true
-    const finalIntensity = target.weather.intensity
-    let step = 0
-    const steps = 6
-    const interval = window.setInterval(() => {
-      step += 1
-      const intensity = Math.round((finalIntensity * step) / steps)
-      setLandingAmbient({
-        ...target,
-        weather: { ...target.weather, intensity },
-      })
-      if (step >= steps) window.clearInterval(interval)
-    }, 200)
-    return () => window.clearInterval(interval)
-  }, [diagnostics.optionsReady])
-
-  // Closing the dock (Hide or Escape) remounts the invitation card; return
-  // keyboard focus to its "Make it yours" CTA.
+  // Leaving vibe settles back to the closed-card presentation; if the
+  // invitation card remounts, return keyboard focus to its "Make it yours"
+  // CTA.
   useEffect(() => {
     if (!vibeControlsOpen && vibeControlsWasOpenRef.current) {
       vibeCtaRef.current?.focus()
@@ -1011,16 +1267,24 @@ export default function PortfolioExperience() {
 
   // The scene's source selection: the landing samples the JH logotype
   // (LANDING_SOURCE_URL, falling back to the built-in monogram on decode
-  // failure); work/collaborate sample their resolved static SVGs; vibe
-  // samples the Black hole while it's selected, else the uploaded image,
-  // else the built-in monogram.
+  // failure) on desktop viewports and the built-in JH monogram on mobile;
+  // work/collaborate sample their resolved static SVGs; vibe samples the
+  // uploaded image or the built-in monogram. (The animated Black-hole
+  // provider is retained in engine/animatedSource.ts but is not a
+  // selectable production option — nothing here can construct it.)
   const sceneSource = useMemo<SceneSourceSelection>(() => {
     if (displayed === 'intro') {
-      return { kind: 'static', url: LANDING_SOURCE_URL, sourceKind: 'svg' }
+      return isMobileViewport(viewportWidth)
+        ? { kind: 'builtin' }
+        : { kind: 'static', url: LANDING_SOURCE_URL, sourceKind: 'svg' }
     }
     if (displayed === 'work') {
       return workDescriptor.sourceUrl
-        ? { kind: 'static', url: workDescriptor.sourceUrl, sourceKind: 'svg' }
+        ? {
+            kind: 'static',
+            url: workDescriptor.sourceUrl,
+            sourceKind: workDescriptor.sourceKind ?? 'svg',
+          }
         : { kind: 'builtin' }
     }
     if (displayed === 'collaborate') {
@@ -1028,20 +1292,30 @@ export default function PortfolioExperience() {
         ? { kind: 'static', url: collaborateDescriptor.sourceUrl, sourceKind: 'svg' }
         : { kind: 'builtin' }
     }
-    if (vibeBlackHole) return { kind: 'animated', provider: 'black-hole' }
     if (uploadedSource) {
       return { kind: 'static', url: uploadedSource.url, sourceKind: uploadedSource.kind }
     }
     return { kind: 'builtin' }
-  }, [displayed, workDescriptor, collaborateDescriptor, vibeBlackHole, uploadedSource])
+  }, [displayed, viewportWidth, workDescriptor, collaborateDescriptor, uploadedSource])
 
-  // The landing (completed intro) adopts the seasonal atmosphere; every
-  // other mode keeps its own playground config untouched.
+  // The landing runs on the fixed canvas gradient (engine/theme) with the
+  // seasonal atmosphere adopted as soon as it resolves; every other mode
+  // keeps its own playground config untouched.
   const scenePlayground = useMemo<PlaygroundConfig>(() => {
     if (displayed === 'work') return workDescriptor.playground
     if (displayed === 'collaborate') return collaborateDescriptor.playground
-    if (displayed === 'intro' && landingAmbient) {
-      return { ...playgroundConfig, ambient: landingAmbient }
+    if (displayed === 'intro') {
+      return {
+        ...playgroundConfig,
+        backgroundColor1: LANDING_CANVAS_GRADIENT.color1,
+        backgroundColor2: LANDING_CANVAS_GRADIENT.color2,
+        // The landing field spells the site URL and takes its colors from the
+        // recolored source field (the fixed blue gradient, applied in
+        // SceneCanvas) — never the ROYGBV image-gradient palette.
+        glyphText: 'joelhoke.me.',
+        glyphColorMode: 'source-colors',
+        ambient: landingAmbient ?? playgroundConfig.ambient,
+      }
     }
     return playgroundConfig
   }, [displayed, workDescriptor, collaborateDescriptor, playgroundConfig, landingAmbient])
@@ -1066,7 +1340,7 @@ export default function PortfolioExperience() {
         experience={displayed}
         sceneId={
           displayed === 'work'
-            ? `work/${getWorkStory(workStoryIndex).id}`
+            ? `work/${getWorkSlideId(getWorkSlide(workSlideIndex))}`
             : displayed === 'collaborate'
               ? `collaborate/${collaborateStarterId ?? 'default'}`
               : displayed
@@ -1078,9 +1352,11 @@ export default function PortfolioExperience() {
         clickImpulseForce={sceneConfig.clickImpulseForce}
         sourceLayout={sourceLayout}
         source={sceneSource}
+        targetRegion={displayed === 'work' ? workTargetRegion : null}
         playgroundConfig={scenePlayground}
         paintTool={displayed === 'vibe' ? paintTool : undefined}
         onPaintStatusChange={setPaintStatus}
+        onPaintStrokeEnd={handlePaintStrokeEnd}
         qualityTierOverride={qualityTierOverride}
         onQualityTierChange={(from, to) =>
           trackEvent({ name: 'tier_transition', params: { from_tier: from, to_tier: to } })
@@ -1104,7 +1380,9 @@ export default function PortfolioExperience() {
           <div className="foreground-content">
             {displayed === 'intro' ? (
               <>
-                <Intro taglineRef={taglineRef} />
+                {/* Accessible landing heading: the visible mark is the canvas
+                    glyph logotype, so the h1 stays visually hidden. */}
+                <h1 className="visually-hidden">joel hoke design</h1>
                 <PrimaryActions
                   selected={selected}
                   onSelect={navigateTo}
@@ -1112,15 +1390,23 @@ export default function PortfolioExperience() {
                 />
               </>
             ) : displayed === 'work' ? (
-              <WorkExperience
-                stories={WORK_STORIES}
-                activeIndex={workStoryIndex}
-                onIndexChange={setWorkStoryIndex}
-                headingRef={modeHeadingRef}
-                titleBase={BASE_DOCUMENT_TITLE}
-                modeTitle={EXPERIENCE_SCENES.work.copy.documentTitle}
-                onTrackEvent={trackEvent}
-              />
+              <div className="work-layout">
+                {/* Glyph stage: on mobile the Work glyph field is region-bound
+                    to this measured rect (above/beside the panel) instead of
+                    rendering behind it. Empty and pointer-transparent — the
+                    fixed canvas beneath stays interactive. Desktop hides it
+                    (display:none) and keeps the full-scene treatment. */}
+                <div className="work-glyph-stage" aria-hidden="true" ref={glyphStageRef} />
+                <WorkExperience
+                  slides={WORK_SLIDES}
+                  activeIndex={workSlideIndex}
+                  onIndexChange={setWorkSlideIndex}
+                  headingRef={modeHeadingRef}
+                  titleBase={BASE_DOCUMENT_TITLE}
+                  modeTitle={EXPERIENCE_SCENES.work.copy.documentTitle}
+                  onTrackEvent={trackEvent}
+                />
+              </div>
             ) : displayed === 'collaborate' ? (
               <CollaborateExperience
                 selectedStarterId={collaborateStarterId}
@@ -1134,7 +1420,7 @@ export default function PortfolioExperience() {
                 controlsOpen={vibeControlsOpen}
                 onOpenControls={() => setVibeControlsOpen(true)}
                 ctaRef={vibeCtaRef}
-                controlsId={`vibe-controls-${vibeDockId}`}
+                controlsId={vibeToolbarId}
               />
             )}
           </div>
@@ -1148,28 +1434,34 @@ export default function PortfolioExperience() {
       {displayed !== 'work' && (
         <section className="visually-hidden" aria-label="Work case studies">
           <h2>Work</h2>
-          <p>{WORK_INTRO}</p>
-          {WORK_STORIES.map((story) => (
-            <article key={story.id}>
-              <h3>{story.title}</h3>
-              <p>{story.thesis}</p>
-              <p>
-                {story.role} — {story.context}
-              </p>
-              <p>{story.outcome}</p>
-              {story.access === 'protected' ? (
-                <a href={`/protected-work?story=${story.protectedId}`}>
-                  View this confidential case study
-                </a>
-              ) : (
-                story.links.map((link) => (
-                  <a key={link.url} href={link.url}>
-                    {link.label}
+          {WORK_SLIDES.map((slide) =>
+            slide.kind === 'intro' ? (
+              <article key={slide.id}>
+                <h3>{slide.title}</h3>
+                <p>{slide.copy}</p>
+              </article>
+            ) : (
+              <article key={slide.story.id}>
+                <h3>{slide.story.title}</h3>
+                <p>{slide.story.thesis}</p>
+                <p>
+                  {slide.story.role} — {slide.story.context}
+                </p>
+                <p>{slide.story.outcome}</p>
+                {slide.story.access === 'protected' ? (
+                  <a href={`/protected-work?story=${slide.story.protectedId}`}>
+                    View this confidential case study
                   </a>
-                ))
-              )}
-            </article>
-          ))}
+                ) : (
+                  slide.story.links.map((link) => (
+                    <a key={link.url} href={link.url}>
+                      {link.label}
+                    </a>
+                  ))
+                )}
+              </article>
+            ),
+          )}
         </section>
       )}
       {/* Crawlable collaborate digest: same rationale as the work digest
@@ -1210,40 +1502,34 @@ export default function PortfolioExperience() {
         </section>
       )}
       {displayed === 'vibe' && (
-        <PlaygroundControlDock
+        <VibeToolbar
+          id={vibeToolbarId}
           open={vibeControlsOpen}
-          onClose={() => setVibeControlsOpen(false)}
-          status={vibeStatus}
-          invitation={<>{VIBE_DOCK_INVITATION}</>}
-          paneId={`vibe-controls-${vibeDockId}`}
-          controls={
-            <PlaygroundControls
-              config={playgroundConfig}
-              uploadedFilename={uploadedSource?.filename ?? DEFAULT_UPLOADED_SVG_FILENAME}
-              uploadError={uploadError}
-              uploadPending={uploadPending}
-              uploadPendingLabel={VIBE_UPLOAD_PENDING_LABEL}
-              privacyNote={VIBE_PRIVACY_NOTE}
-              presets={VIBE_PRESETS}
-              onSelectPreset={handleApplyVibePreset}
-              sourceShape={vibeBlackHole ? 'black-hole' : 'image'}
-              onSelectSourceShape={handleSelectSourceShape}
-              canvasRef={sceneCanvasRef}
-              onChange={handlePlaygroundConfigChange}
-              onReset={handleResetPlaygroundConfig}
-              onUpload={handleUploadSource}
-              paintTool={paintTool}
-              paintStatus={paintStatus}
-              onPaintToolChange={(patch) => setPaintTool((prev) => ({ ...prev, ...patch }))}
-            />
-          }
+          config={playgroundConfig}
+          onChange={handlePlaygroundConfigChange}
+          onCommitGlyphText={handleCommitGlyphText}
+          presets={VIBE_PRESETS}
+          onSelectPreset={handleApplyVibePreset}
+          onUpload={handleUploadSource}
+          privacyNote={VIBE_PRIVACY_NOTE}
+          uploadPending={uploadPending}
+          uploadPendingLabel={VIBE_UPLOAD_PENDING_LABEL}
+          uploadError={uploadError}
+          uploadedFilename={uploadedSource?.filename ?? DEFAULT_UPLOADED_SVG_FILENAME}
+          paintTool={paintTool}
+          onPaintToolChange={handlePaintToolChange}
+          paintStatus={paintStatus}
+          canUndo={vibeCanUndo}
+          canRedo={vibeCanRedo}
+          onUndo={handleUndoVibe}
+          onRedo={handleRedoVibe}
+          onReset={handleResetPlaygroundConfig}
+          onClearPaint={handleClearPaint}
+          canvasRef={sceneCanvasRef}
         />
       )}
       {tuningMode && (
         <TuningPanel
-          introTiming={introTiming}
-          onIntroTimingChange={handleTimingChange}
-          onResetIntroTiming={resetIntroTiming}
           speed={diagnostics.speed}
           onSpeedChange={handleSpeedChange}
           sceneConfig={sceneConfig}
@@ -1262,7 +1548,7 @@ export default function PortfolioExperience() {
           onReplay={replay}
           onPrevPhase={() => jumpToPhase(previousPhase(diagnostics.phase, timingRef.current))}
           onNextPhase={() => jumpToPhase(nextPhase(diagnostics.phase, timingRef.current))}
-          totalDurationMs={getTotalDuration(introTiming)}
+          totalDurationMs={getTotalDuration(portfolioIntroPreset.timing)}
           effectiveOptionStaggerMs={diagnostics.effectiveOptionStaggerMs}
           effectiveOptionItemDurationMs={diagnostics.effectiveOptionItemDurationMs}
           timingFallbackActive={diagnostics.timingFallbackActive}

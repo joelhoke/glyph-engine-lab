@@ -3,8 +3,15 @@
  * Deterministic verification for engine/introSequence.ts.
  *
  * Compiles the TypeScript source to a temporary CommonJS module and asserts
- * the documented boundary semantics. This script is intended as a focused
- * sanity check until a unit-test framework is introduced.
+ * the documented boundary semantics of the landing sequence:
+ *
+ *   logo-scale (900ms) → logo-hold (2000ms) → options-entering (900ms,
+ *   120ms stagger) → complete
+ *
+ * Also asserts the structural removals that came with the sequence swap:
+ * no tagline machinery in the engine, no tagline copy in app/components,
+ * and no components/Intro.tsx. This script is intended as a focused sanity
+ * check until a unit-test framework is introduced.
  */
 
 const { execSync } = require('child_process')
@@ -34,13 +41,12 @@ const {
   getPrimaryActionProgresses,
   getStaggeredItemProgress,
   getTotalDuration,
+  portfolioIntroPreset,
 } = require(path.join(tmpDir, 'introSequence.js'))
 
 const timing = {
-  logoFormDuration: 900,
+  logoScaleDuration: 900,
   logoHoldDuration: 2000,
-  taglineTransitionDuration: 900,
-  taglineHoldDuration: 1500,
   optionsTransitionDuration: 900,
   optionStagger: 120,
 }
@@ -60,95 +66,123 @@ function approx(a, b, tolerance = 0.0001) {
   return Math.abs(a - b) <= tolerance
 }
 
+// --- preset shape ------------------------------------------------------------
+
+const presetTimingKeys = Object.keys(portfolioIntroPreset.timing).sort()
+assert(
+  presetTimingKeys.length === 4 &&
+    presetTimingKeys.join(',') ===
+      ['logoHoldDuration', 'logoScaleDuration', 'optionStagger', 'optionsTransitionDuration']
+        .sort()
+        .join(','),
+  'IntroTiming preset has exactly the four landing keys',
+)
+assert(
+  portfolioIntroPreset.timing.logoScaleDuration === 900 &&
+    portfolioIntroPreset.timing.logoHoldDuration === 2000 &&
+    portfolioIntroPreset.timing.optionsTransitionDuration === 900 &&
+    portfolioIntroPreset.timing.optionStagger === 120,
+  'preset carries the launch timing (900 / 2000 / 900 / 120)',
+)
+
+// --- exact phase boundaries ----------------------------------------------------
+
 // Time zero
 let s = evaluateIntroSequence(0, timing)
-assert(s.phase === 'logo-forming', 'time zero is logo-forming')
+assert(s.phase === 'logo-scale', 'time zero is logo-scale')
 assert(s.elapsedMs === 0, 'time zero elapsed is 0')
 assert(s.phaseProgress === 0, 'time zero progress is 0')
-assert(s.logoVisible && !s.taglineVisible && !s.optionsVisible, 'time zero visibility')
+assert(s.logoScale === 0, 'logo scale is 0 at t=0')
+assert(!s.optionsVisible && !s.optionsReady, 'time zero options hidden and inert')
 
 // Negative elapsed behaves as zero
 s = evaluateIntroSequence(-1000, timing)
-assert(s.phase === 'logo-forming' && s.elapsedMs === 0, 'negative elapsed clamps to 0')
+assert(s.phase === 'logo-scale' && s.elapsedMs === 0, 'negative elapsed clamps to 0')
+assert(s.logoScale === 0, 'negative elapsed keeps logo scale 0')
 
-// Interior of logo-forming
+// Interior of logo-scale
 s = evaluateIntroSequence(450, timing)
-assert(s.phase === 'logo-forming', 'interior logo-forming')
-assert(approx(s.phaseProgress, 0.5), 'logo-forming progress at midpoint')
+assert(s.phase === 'logo-scale', 'interior logo-scale')
+assert(approx(s.phaseProgress, 0.5), 'logo-scale progress at midpoint')
+assert(approx(s.logoScale, 0.5), 'logo scale 0.5 at midpoint')
 
-// Exact boundary: logo-forming end / logo-hold start
+// Exact boundary: logo-scale end / logo-hold start
 s = evaluateIntroSequence(900, timing)
 assert(s.phase === 'logo-hold', 'exact 900ms boundary belongs to logo-hold')
+assert(s.logoScale === 1, 'logo scale is 1 from logo-hold on')
 
 // Interior of logo-hold
-s = evaluateIntroSequence(1500, timing)
+s = evaluateIntroSequence(2000, timing)
 assert(s.phase === 'logo-hold', 'interior logo-hold')
 assert(s.phaseProgress === 0, 'logo-hold progress is 0')
+assert(s.logoScale === 1, 'logo scale stays 1 through the hold')
+assert(!s.optionsVisible, 'options still hidden during logo-hold')
 
-// Exact boundary: logo-hold end / tagline-entering start
+// Exact boundary: logo-hold end / options-entering start
 s = evaluateIntroSequence(2900, timing)
-assert(s.phase === 'tagline-entering', 'exact 2900ms boundary belongs to tagline-entering')
-
-// Interior of tagline-entering
-s = evaluateIntroSequence(3350, timing)
-assert(s.phase === 'tagline-entering', 'interior tagline-entering')
-assert(approx(s.taglineProgress, 0.5), 'tagline progress at midpoint')
-assert(s.taglineVisible && !s.optionsVisible, 'tagline entering visibility')
-
-// Exact boundary: tagline-entering end / tagline-hold start
-s = evaluateIntroSequence(3800, timing)
-assert(s.phase === 'tagline-hold', 'exact 3800ms boundary belongs to tagline-hold')
-
-// Interior of tagline-hold
-s = evaluateIntroSequence(4550, timing)
-assert(s.phase === 'tagline-hold', 'interior tagline-hold')
-assert(s.taglineProgress === 1, 'tagline-hold progress is 1')
-
-// Exact boundary: tagline-hold end / options-entering start
-s = evaluateIntroSequence(5300, timing)
-assert(s.phase === 'options-entering', 'exact 5300ms boundary belongs to options-entering')
+assert(s.phase === 'options-entering', 'exact 2900ms boundary belongs to options-entering')
+assert(s.optionsVisible && !s.optionsReady, 'options visible but not ready at 2900ms')
+assert(s.optionsProgress === 0, 'options progress 0 at options-entering start')
 
 // Interior of options-entering
-s = evaluateIntroSequence(5750, timing)
+s = evaluateIntroSequence(3350, timing)
 assert(s.phase === 'options-entering', 'interior options-entering')
 assert(approx(s.optionsProgress, 0.5), 'options progress at midpoint')
 assert(s.optionsVisible && !s.optionsReady, 'options entering: visible but not ready')
+assert(s.logoScale === 1, 'logo scale stays 1 through options-entering')
 
 // Complete boundary
-s = evaluateIntroSequence(6200, timing)
-assert(s.phase === 'complete', 'exact 6200ms boundary is complete')
+s = evaluateIntroSequence(3800, timing)
+assert(s.phase === 'complete', 'exact 3800ms boundary is complete')
 assert(s.optionsReady, 'options ready at complete')
 assert(s.optionsProgress === 1, 'options progress capped at 1')
+assert(s.logoScale === 1, 'logo scale is 1 at complete')
 
 // Beyond completion remains stable
 s = evaluateIntroSequence(10000, timing)
 assert(s.phase === 'complete', 'beyond completion remains complete')
 assert(s.elapsedMs === 10000, 'elapsed beyond completion is preserved')
 
+// logoScale monotonicity across the whole sequence
+let previousScale = -1
+let monotonic = true
+for (let t = 0; t <= 4200; t += 25) {
+  const scale = evaluateIntroSequence(t, timing).logoScale
+  if (scale < previousScale) monotonic = false
+  previousScale = scale
+}
+assert(monotonic, 'logoScale is monotonically non-decreasing across the sequence')
+
+// Reduced-motion equivalent: elapsed at or beyond the total duration lands
+// completed, with the logo fully scaled and the choices usable.
+s = evaluateIntroSequence(getTotalDuration(timing), timing)
+assert(
+  s.phase === 'complete' && s.logoScale === 1 && s.optionsReady,
+  'elapsed >= total duration is complete with logoScale 1 and optionsReady',
+)
+
 // Zero-duration phases are skipped deterministically
 const zeroTiming = {
-  logoFormDuration: 0,
+  logoScaleDuration: 0,
   logoHoldDuration: 0,
-  taglineTransitionDuration: 0,
-  taglineHoldDuration: 0,
   optionsTransitionDuration: 0,
   optionStagger: 0,
 }
 s = evaluateIntroSequence(0, zeroTiming)
 assert(s.phase === 'complete', 'zero durations collapse to complete at time 0')
+assert(s.logoScale === 1, 'zero durations keep logo scale 1')
 
 // Phase-start calculations
-assert(getPhaseStartTime('logo-forming', timing) === 0, 'logo-forming start')
+assert(getPhaseStartTime('logo-scale', timing) === 0, 'logo-scale start')
 assert(getPhaseStartTime('logo-hold', timing) === 900, 'logo-hold start')
-assert(getPhaseStartTime('tagline-entering', timing) === 2900, 'tagline-entering start')
-assert(getPhaseStartTime('tagline-hold', timing) === 3800, 'tagline-hold start')
-assert(getPhaseStartTime('options-entering', timing) === 5300, 'options-entering start')
-assert(getPhaseStartTime('complete', timing) === 6200, 'complete start')
+assert(getPhaseStartTime('options-entering', timing) === 2900, 'options-entering start')
+assert(getPhaseStartTime('complete', timing) === 3800, 'complete start')
 
 // Total duration
-assert(getTotalDuration(timing) === 6200, 'total duration')
+assert(getTotalDuration(timing) === 3800, 'total duration')
 
-// Staggered item progress helper
+// --- stagger math (unchanged) --------------------------------------------------
+
 const stagger = getStaggeredItemProgress
 const optionDuration = timing.optionsTransitionDuration
 const staggerMs = timing.optionStagger
@@ -217,7 +251,7 @@ function allInRange(arr) {
 
 // Before options-entering: all zero
 let actionProgresses = getPrimaryActionProgresses(
-  evaluateIntroSequence(getPhaseStartTime('tagline-hold', timing), timing),
+  evaluateIntroSequence(getPhaseStartTime('logo-hold', timing), timing),
   itemCount,
   timing,
 )
@@ -236,7 +270,7 @@ assert(allEqual(actionProgresses, 0), 'progress: all zero at options-entering st
 
 // Interior of options-entering: staggered values
 actionProgresses = getPrimaryActionProgresses(
-  evaluateIntroSequence(5750, timing),
+  evaluateIntroSequence(3350, timing),
   itemCount,
   timing,
 )
@@ -253,7 +287,7 @@ assert(allInRange(actionProgresses), 'progress: clamped during options-entering'
 
 // Exact options completion boundary: all one
 actionProgresses = getPrimaryActionProgresses(
-  evaluateIntroSequence(6200, timing),
+  evaluateIntroSequence(3800, timing),
   itemCount,
   timing,
 )
@@ -275,6 +309,51 @@ actionProgresses = getPrimaryActionProgresses(
 )
 assert(allEqual(actionProgresses, 1), 'progress: all one beyond completion')
 assert(allFinite(actionProgresses), 'progress: finite beyond completion')
+
+// --- structural removals ---------------------------------------------------------
+
+const engineSource = fs.readFileSync(sourceFile, 'utf8')
+assert(!/tagline/i.test(engineSource), 'engine/introSequence.ts contains no tagline machinery')
+
+function collectFiles(dir, extensions) {
+  const results = []
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name.startsWith('._') || entry.name === 'node_modules' || entry.name === '.next') {
+      continue
+    }
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) {
+      results.push(...collectFiles(full, extensions))
+    } else if (extensions.some((ext) => entry.name.endsWith(ext))) {
+      results.push(full)
+    }
+  }
+  return results
+}
+
+const appComponentFiles = [
+  ...collectFiles(path.join(projectRoot, 'app'), ['.ts', '.tsx', '.css']),
+  ...collectFiles(path.join(projectRoot, 'components'), ['.ts', '.tsx', '.css']),
+]
+const taglineCopyFiles = appComponentFiles.filter((file) =>
+  fs.readFileSync(file, 'utf8').includes("This isn't a portfolio"),
+)
+assert(
+  taglineCopyFiles.length === 0,
+  `no "This isn't a portfolio" copy in app/components${taglineCopyFiles.length ? ` (found: ${taglineCopyFiles.join(', ')})` : ''}`,
+)
+
+assert(
+  !fs.existsSync(path.join(projectRoot, 'components', 'Intro.tsx')),
+  'components/Intro.tsx no longer exists',
+)
+const introImportFiles = appComponentFiles.filter((file) =>
+  /from\s+['"][^'"]*\/Intro['"]|from\s+['"]\.\/Intro['"]/.test(fs.readFileSync(file, 'utf8')),
+)
+assert(
+  introImportFiles.length === 0,
+  `components/Intro.tsx is no longer imported${introImportFiles.length ? ` (found: ${introImportFiles.join(', ')})` : ''}`,
+)
 
 // Cleanup
 fs.rmSync(tmpDir, { recursive: true, force: true })

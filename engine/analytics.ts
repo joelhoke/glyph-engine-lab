@@ -79,7 +79,7 @@ export function writeConsent(
 export type ExperienceKey = 'intro' | 'work' | 'vibe' | 'collaborate'
 export type AmbientMode = 'off' | 'weather' | 'matrix'
 export type MediaKind = 'image' | 'video' | 'embed'
-export type SourceChange = 'builtin' | 'preset' | 'upload' | 'black-hole'
+export type SourceChange = 'builtin' | 'preset' | 'upload'
 
 export type AnalyticsEvent =
   | { name: 'experience_view'; params: { experience: ExperienceKey } }

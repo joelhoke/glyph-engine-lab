@@ -53,7 +53,8 @@ attachments (label + URL), and media references (media IDs, see below).
 
 ## Canvas treatment
 
-- **Glyph hero SVG** (path under `public/assets/work/`):
+- **Glyph hero source** (path under `public/assets/work/`):
+- **Source kind** (`svg` default, or `raster` for PNG/JPEG heroes):
 - **Palette** (hex list, optional override):
 - **Background** (two hex colors, optional gradient override):
 - **Color mode** (`image-gradient` default, or `source-colors` to sample the

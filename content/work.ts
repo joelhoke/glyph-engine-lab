@@ -14,6 +14,7 @@
 
 import { SceneDescriptor } from '../engine/sceneConfig'
 import { GlyphColorMode } from '../engine/colorDistribution'
+import { VisualSourceKind } from '../engine/visualSource'
 
 export type WorkStoryLink = {
   /** External URL (https). Plain <a href> — works in the static export. */
@@ -109,8 +110,10 @@ export type WorkStory = {
   details?: WorkStoryDetailsSection[]
   /** Gallery media — public stories only. */
   media?: WorkMedia[]
-  /** Hero SVG sampled as the canvas target field, under public/assets/work/. */
+  /** Hero source sampled as the canvas target field, under public/assets/work/. */
   sourceUrl: string
+  /** Source asset kind — 'svg' by default; 'raster' for PNG/JPEG heroes. */
+  sourceKind?: VisualSourceKind
   /** Optional per-story glyph palette override (hex colors). */
   palette?: string[]
   /** Optional per-story background gradient override. */
@@ -121,10 +124,6 @@ export type WorkStory = {
   /** Optional per-story simulation overrides (merged over the work scene). */
   behavior?: Partial<SceneDescriptor['behavior']>
 }
-
-/** Optional Work-mode introduction, shown under the mode heading. */
-export const WORK_INTRO =
-  'Over nearly eight years at Microsoft, I had the privilege of helping shape the future of work by designing thoughtful experiences where people, business, and technology meet.'
 
 export const WORK_STORIES: WorkStory[] = [
   {
@@ -177,13 +176,62 @@ export const WORK_STORIES: WorkStory[] = [
       },
     ],
     media: [],
-    // Microsoft story: the field takes the sampled brand colors (colored
-    // squares, white wordmark) straight from the source SVG.
-    sourceUrl: '/assets/work/story-03.svg',
+    // Microsoft project: the field takes the sampled brand colors straight
+    // from the source SVG.
+    sourceUrl: '/assets/work/building-multiple.svg',
     colorMode: 'source-colors',
     // This story's field reacts to the pointer a little more than the
     // work-mode baseline.
     behavior: { particleRepel: 0.3 },
+  },
+  {
+    id: 'microsoft-employee-experience',
+    title: 'Global & Puget Sound Employee Experience',
+    role: 'Junior to Senior Designer',
+    context: 'Microsoft · cross-functional team across design, product management, research, and engineering · 2019–2026',
+    thesis: 'Supporting efficiency across Microsoft by reducing fragmentation across internal tools, enabling employees to complete tasks more easily and return their focus to the work at hand.',
+    outcome: 'I helped Microsoft move toward a more unified employee-experience ecosystem by aligning teams around shared patterns, reusable components, and a standardized design process.',
+    links: [
+      { label: 'Microsoft MyHub', url: 'https://apps.apple.com/us/app/microsoft-myhub/id1476326475' },
+      { label: 'Microsoft Viva Connections', url: 'https://www.microsoft.com/en-us/microsoft-viva/connections' },
+      { label: 'The People Powered Workplace — an Employee Experience Platform analysis', url: 'https://pulse.microsoft.com/wp-content/uploads/2023/11/Microsoft-Viva-Ebook.pdf' },
+    ],
+    access: 'public',
+    sourceUrl: '/assets/work/MyHubTest.png',
+    sourceKind: 'raster',
+    colorMode: 'source-colors',
+    media: [],
+    details: [
+      { heading: 'The thesis', paragraphs: [
+        'Employee experience at the scale of a business like Microsoft — built over 50 years — presents challenges from many perspectives. The work ranged from helping employees commute, order lunch, and review compensation information to supporting broader business needs and engagement targets that help employees stay focused and efficient.',
+      ] },
+      { heading: 'The challenge', paragraphs: [
+        'At Microsoft’s scale, employee experience was not a single product — it was an interconnected ecosystem of services owned by many different business groups. From pay, stock, and retirement benefits to commuter transportation, workplace reporting, and facilities support, employees expected a clear and consistent experience even when the systems behind it were highly distributed.',
+        'The challenge was to make those organizational boundaries less visible: defragmenting journeys, aligning interaction patterns, and coordinating teams around a more coherent employee experience, while helping employees complete tasks efficiently and return to the work at hand.',
+      ] },
+      { heading: 'The approach', paragraphs: [
+        'Every engagement was shaped by the needs of the business, project goals, and stakeholders involved, while defragmentation and user efficiency remained foundational priorities.',
+        'Once we aligned on the problem, desired outcomes, and key constraints, we used the Double Diamond as a flexible framework for discovery, definition, development, and delivery. Research guided each iteration — first helping us understand challenges in the existing experience, and later evaluating prototypes or working solutions to identify remaining friction and opportunities.',
+        'We used those insights to refine the experience, validate decisions, and repeat the process until we had addressed both employee needs and business objectives.',
+      ] },
+      { heading: 'My contributions, 2019–2024', items: [
+        'Stock experience',
+        'Pay preview',
+        'Shuttles',
+        'Connectors (private buses)',
+        'Facilities requests',
+        'Security: Report It Now',
+        'Ecosystem alignment and transitions between platforms',
+        'Component toolkits for use across tools and business verticals',
+        'Lobby experience',
+        'Return-to-work implementation and tracking',
+      ] },
+      { heading: 'The outcome', paragraphs: [
+        'I helped Microsoft move toward a more unified employee-experience ecosystem by aligning teams around shared patterns, reusable components, and a standardized design process.',
+        'As employee services transitioned from MyHub to Microsoft Viva Connections, our team created the EX Toolkit — a common design language and component library that reduced variation and duplicated implementation across teams, made platform capabilities and constraints clearer to developers, streamlined partner onboarding, and improved consistency across compensation, benefits, workplace services, and daily employee tasks.',
+        'This work supported an employee platform deployed globally at Microsoft, established practices shared with other product teams and external customers, and contributed to the broader evolution from fragmented employee tools toward a centralized Viva experience. Microsoft later reported usage above 97% among employees across the Viva suite.',
+      ] },
+    ],
   },
 ]
 
@@ -212,6 +260,63 @@ export function getWorkMedia(story: WorkStory, mediaId: string): WorkMedia | nul
 }
 
 /**
+ * One Work slide. The intro slide opens the mode with the tenure summary and
+ * its own hero source; project slides wrap a story from WORK_STORIES, so
+ * appending a story automatically appends a project slide.
+ */
+export type WorkSlide =
+  | {
+      kind: 'intro'
+      /** Stable, unique identifier — used as the React key and in diagnostics. */
+      id: string
+      title: string
+      /** The Work introduction copy (formerly WORK_INTRO). */
+      copy: string
+      /** Hero SVG sampled as the canvas target field, under public/assets/work/. */
+      sourceUrl: string
+      /** Optional glyph-text override for the slide's field. */
+      glyphText?: string
+      /** Optional brand mark shown at the top right of the slide card. */
+      markUrl?: string
+      /** Optional color-distribution override (e.g. source-colors). */
+      colorMode?: GlyphColorMode
+    }
+  | { kind: 'project'; story: WorkStory }
+
+export const WORK_SLIDES: WorkSlide[] = [
+  {
+    kind: 'intro',
+    id: 'microsoft',
+    title: 'Microsoft',
+    copy: 'Over nearly eight years at Microsoft, I had the privilege of helping shape the future of work by designing thoughtful experiences where people, business, and technology meet.',
+    // The full-color Microsoft logo/wordmark SVG; the field takes the sampled
+    // brand colors straight from the source.
+    sourceUrl: '/assets/work/story-03.svg',
+    glyphText: 'culture eats strategy for breakfast ',
+    markUrl: '/assets/work/microsoft-mark.svg',
+    colorMode: 'source-colors',
+  },
+  ...WORK_STORIES.map((story): WorkSlide => ({ kind: 'project', story })),
+]
+
+export const WORK_SLIDE_COUNT = WORK_SLIDES.length
+
+/** Bounds-safe slide lookup — out-of-range indices fall back to the intro slide. */
+export function getWorkSlide(index: number): WorkSlide {
+  return WORK_SLIDES[index] ?? WORK_SLIDES[0]
+}
+
+/** Stable slide id (the story id for project slides) — analytics/diagnostics. */
+export function getWorkSlideId(slide: WorkSlide): string {
+  return slide.kind === 'project' ? slide.story.id : slide.id
+}
+
+/** Slide display/document title (the story title for project slides). */
+export function getWorkSlideTitle(slide: WorkSlide): string {
+  return slide.kind === 'project' ? slide.story.title : slide.title
+}
+
+/**
  * Resolve the full scene descriptor for a story: the work scene's baseline
  * with the story's source, palette/background, and behavior merged on top.
  * The base descriptor is never mutated.
@@ -220,6 +325,7 @@ export function resolveWorkScene(base: SceneDescriptor, story: WorkStory): Scene
   return {
     ...base,
     sourceUrl: story.sourceUrl,
+    sourceKind: story.sourceKind ?? 'svg',
     playground: {
       ...base.playground,
       ...(story.palette ? { glyphPalette: story.palette } : {}),
@@ -232,6 +338,29 @@ export function resolveWorkScene(base: SceneDescriptor, story: WorkStory): Scene
       ...(story.colorMode ? { glyphColorMode: story.colorMode } : {}),
     },
     behavior: { ...base.behavior, ...story.behavior },
+    sourceLayout: { ...base.sourceLayout },
+    copy: { ...base.copy },
+  }
+}
+
+/**
+ * Resolve the full scene descriptor for either slide kind: project slides
+ * resolve exactly like their story; the intro slide applies its own source
+ * and color-mode override over the work baseline. The base descriptor is
+ * never mutated.
+ */
+export function resolveWorkSlideScene(base: SceneDescriptor, slide: WorkSlide): SceneDescriptor {
+  if (slide.kind === 'project') return resolveWorkScene(base, slide.story)
+  return {
+    ...base,
+    sourceUrl: slide.sourceUrl,
+    sourceKind: 'svg',
+    playground: {
+      ...base.playground,
+      ...(slide.glyphText ? { glyphText: slide.glyphText } : {}),
+      ...(slide.colorMode ? { glyphColorMode: slide.colorMode } : {}),
+    },
+    behavior: { ...base.behavior },
     sourceLayout: { ...base.sourceLayout },
     copy: { ...base.copy },
   }

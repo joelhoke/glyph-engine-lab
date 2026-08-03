@@ -26,7 +26,7 @@ try {
   process.exit(1)
 }
 
-const { WORK_STORIES } = require(path.join(tmpDir, 'content', 'work.js'))
+const { WORK_STORIES, WORK_SLIDES } = require(path.join(tmpDir, 'content', 'work.js'))
 
 let failures = 0
 
@@ -144,6 +144,40 @@ for (const story of WORK_STORIES) {
       )
     }
   }
+}
+
+// slide model: media and narrative details belong to project slides only —
+// the intro slide carries its title, copy, and hero source, nothing else.
+assert(WORK_SLIDES.length === 3, 'the work carousel has three slides (intro + two projects)')
+for (const slide of WORK_SLIDES) {
+  if (slide.kind === 'intro') {
+    assert(
+      !('media' in slide) && !('details' in slide),
+      `${slide.id}: intro slide carries no media or details`,
+    )
+  } else {
+    assert(
+      WORK_STORIES.includes(slide.story),
+      `${slide.story.id}: project slide wraps a WORK_STORIES entry (its media rules apply above)`,
+    )
+  }
+}
+
+// slide hero sources: every source exists in public/, and the source kind is
+// 'raster' exactly on the PNG story (svg is the default everywhere else).
+for (const slide of WORK_SLIDES) {
+  const sourceUrl = slide.kind === 'intro' ? slide.sourceUrl : slide.story.sourceUrl
+  const sourceKind = slide.kind === 'intro' ? 'svg' : (slide.story.sourceKind ?? 'svg')
+  const id = slide.kind === 'intro' ? slide.id : slide.story.id
+  assert(
+    fs.existsSync(path.join(projectRoot, 'public', sourceUrl)),
+    `${id}: hero source exists in public/ (${sourceUrl})`,
+  )
+  const isRaster = sourceUrl.toLowerCase().endsWith('.png')
+  assert(
+    isRaster ? sourceKind === 'raster' : sourceKind === 'svg',
+    `${id}: sourceKind '${sourceKind}' matches the hero asset type`,
+  )
 }
 
 if (failures > 0) {

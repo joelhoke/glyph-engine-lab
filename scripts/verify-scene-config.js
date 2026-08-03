@@ -203,6 +203,9 @@ for (const key of EXPERIENCE_SCENE_KEYS) {
       VALID_WEATHER_PRESETS.includes(ambient.weather.preset) &&
       !!ambient.matrix &&
       typeof ambient.interactionStrength === 'number' &&
+      typeof ambient.backdropOpacity === 'number' &&
+      ambient.backdropOpacity >= 0 &&
+      ambient.backdropOpacity <= 1 &&
       typeof ambient.weather.intensity === 'number' &&
       typeof ambient.weather.wind === 'number' &&
       typeof ambient.weather.turbulence === 'number' &&
