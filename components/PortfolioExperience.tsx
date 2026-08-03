@@ -18,6 +18,7 @@ import {
   COLLABORATE_CONTACT,
   COLLABORATE_ENERGIZING_STATEMENT,
   COLLABORATE_HEADLINE,
+  COLLABORATE_SHOW_STARTERS,
   CONVERSATION_STARTERS,
   getCollaborateStarter,
   resolveCollaborateScene,
@@ -1474,13 +1475,15 @@ export default function PortfolioExperience() {
           <h2>Collaborate</h2>
           <p>{COLLABORATE_HEADLINE}</p>
           <p>{COLLABORATE_ENERGIZING_STATEMENT}</p>
-          <ul>
-            {CONVERSATION_STARTERS.map((starter) => (
-              <li key={starter.id}>
-                {starter.label} {starter.response}
-              </li>
-            ))}
-          </ul>
+          {COLLABORATE_SHOW_STARTERS && (
+            <ul>
+              {CONVERSATION_STARTERS.map((starter) => (
+                <li key={starter.id}>
+                  {starter.label} {starter.response}
+                </li>
+              ))}
+            </ul>
+          )}
           <a href={COLLABORATE_CONTACT.mailtoUrl}>{COLLABORATE_CONTACT.primaryLabel}</a>
         </section>
       )}

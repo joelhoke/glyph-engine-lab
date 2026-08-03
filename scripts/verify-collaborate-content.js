@@ -29,6 +29,7 @@ const {
   COLLABORATE_HEADLINE,
   COLLABORATE_ENERGIZING_STATEMENT,
   COLLABORATE_CONTACT,
+  COLLABORATE_SHOW_STARTERS,
   COLLABORATE_STARTER_COUNT,
   CONVERSATION_STARTERS,
   getCollaborateStarter,
@@ -52,6 +53,17 @@ assert(CONVERSATION_STARTERS.length === 3, 'exactly 3 conversation starters')
 assert(
   COLLABORATE_STARTER_COUNT === CONVERSATION_STARTERS.length,
   'COLLABORATE_STARTER_COUNT matches the array',
+)
+
+// the starters are hidden for launch (model retained for the rework)
+assert(COLLABORATE_SHOW_STARTERS === false, 'conversation starters are hidden for launch')
+const collaborateSurface = fs.readFileSync(
+  path.join(projectRoot, 'components', 'collaborate', 'CollaborateExperience.tsx'),
+  'utf8',
+)
+assert(
+  collaborateSurface.includes('COLLABORATE_SHOW_STARTERS'),
+  'the collaborate surface gates the starters on the launch flag',
 )
 
 // unique ids

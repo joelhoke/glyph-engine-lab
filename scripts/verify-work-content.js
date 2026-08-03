@@ -136,7 +136,7 @@ assert(
 const employeeProject = projectSlides.find((slide) => slide.story.id === 'microsoft-employee-experience')
 assert(!!employeeProject, 'the microsoft-employee-experience project slide exists')
 assert(
-  !!employeeProject && employeeProject.story.title === 'Global & Puget Sound Employee Experience',
+  !!employeeProject && employeeProject.story.title === 'Microsoft Employee Experience',
   'employee-experience story carries its exact title',
 )
 assert(
