@@ -12,7 +12,7 @@ import PrimaryActions, { ExperienceKey, PRIMARY_ACTION_COUNT } from './PrimaryAc
 import TuningPanel from './tuning/TuningPanel'
 import AnalyticsConsent from './AnalyticsConsent'
 import { ExperienceMode, ExperienceSceneKey } from '../engine/types'
-import { EXPERIENCE_SCENES, LANDING_SOURCE_URL } from '../engine/sceneConfig'
+import { EXPERIENCE_SCENES, LANDING_SOURCE_URL, resolveScenePlayground } from '../engine/sceneConfig'
 import { getWorkSlide, getWorkSlideId, resolveWorkSlideScene, WORK_SLIDES } from '../content/work'
 import {
   COLLABORATE_CONTACT,
@@ -36,7 +36,9 @@ import {
   resolveSeasonalAtmosphere,
 } from '../engine/seasonalAtmosphere'
 import { AmbientConfig } from '../engine/ambientConfig'
-import { LANDING_CANVAS_GRADIENT } from '../engine/theme'
+import { LANDING_CANVAS_GRADIENT, ThemeName, resolveThemedSourceUrl } from '../engine/theme'
+import { useSystemTheme } from '../engine/useSystemTheme'
+import { resolvePlaygroundConfig } from '../engine/playgroundTheme'
 import { AnalyticsClient, AnalyticsEvent } from '../engine/analytics'
 import {
   APPROVED_PLAYGROUND_DEFAULTS,
@@ -160,6 +162,10 @@ type UploadedSourceState = {
 }
 
 export default function PortfolioExperience() {
+  // System light/dark theme (feature/light-dark): 'dark' on the first paint,
+  // the real preference after hydration, live updates on OS changes. Drives
+  // the canvas colors and the CSS is handled by globals.css media queries.
+  const theme = useSystemTheme()
   // Shell state: intro → work ↔ vibe ↔ collaborate. Starts at intro unless a
   // deep-link hash resolves to a mode on mount (handled below).
   const [experience, setExperience] = useState<ExperienceMode>('intro')
@@ -311,6 +317,34 @@ export default function PortfolioExperience() {
     clonePlaygroundConfig(APPROVED_PLAYGROUND_DEFAULTS),
   )
   const vibeTouchedRef = useRef(false)
+
+  // Stable theme mirror for deferred/imperative readers (the scene-adoption
+  // effect, preset/reset handlers) so they never capture a stale theme.
+  const themeRef = useRef<ThemeName>(theme)
+  useEffect(() => {
+    themeRef.current = theme
+  }, [theme])
+
+  /** The vibe default composition resolved against a theme — the entry
+   *  adoption, the live system-follow, and the reset target. */
+  const resolveVibeDefault = (forTheme: ThemeName): PlaygroundConfig =>
+    resolvePlaygroundConfig(EXPERIENCE_SCENES.vibe.themedPlayground, forTheme)
+
+  // Theme follow-through (feature/light-dark): while the vibe composition is
+  // untouched, the default tracks the system theme live. This is deliberately
+  // NOT a vibe-history transaction and never sets vibeTouchedRef — a theme
+  // change is not a visitor edit, and an applied preset or any manual edit
+  // sticks across later system changes.
+  const vibeThemeAppliedRef = useRef<ThemeName>(theme)
+  useEffect(() => {
+    if (vibeThemeAppliedRef.current === theme) return
+    vibeThemeAppliedRef.current = theme
+    if (vibeTouchedRef.current) return
+    const resolved = resolveVibeDefault(theme)
+    setPlaygroundConfig(resolved)
+    playgroundConfigRef.current = cloneVibeConfig(resolved)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [theme])
 
   // Ambient effect changes (Vibe Off/Weather/Matrix selector). Undo/redo
   // replays are excluded: analytics fire on the forward action only. The ref
@@ -803,9 +837,10 @@ export default function PortfolioExperience() {
     setSourceLayout({ ...scene.sourceLayout })
     // Vibe entry: adopt the curated default composition so the mode is
     // visually complete before the dock is opened — unless the visitor has
-    // already made their own edits, which survive mode switches.
+    // already made their own edits, which survive mode switches. Resolved
+    // against the active theme (the untouched default follows the system).
     if (displayed === 'vibe' && !vibeTouchedRef.current) {
-      setPlaygroundConfig(clonePlaygroundConfig(scene.playground))
+      setPlaygroundConfig(resolveVibeDefault(themeRef.current))
     }
   }, [displayed, workDescriptor, collaborateDescriptor])
 
@@ -1036,8 +1071,11 @@ export default function PortfolioExperience() {
   // URL the session still references is released.
   const handleResetPlaygroundConfig = () => {
     vibeTouchedRef.current = false
-    setPlaygroundConfig(clonePlaygroundConfig(EXPERIENCE_SCENES.vibe.playground))
-    playgroundConfigRef.current = cloneVibeConfig(EXPERIENCE_SCENES.vibe.playground)
+    // Reset restores the CURRENT themed default (feature/light-dark) and —
+    // by clearing the touched flag — resumes following the system theme.
+    const defaultConfig = resolveVibeDefault(themeRef.current)
+    setPlaygroundConfig(clonePlaygroundConfig(defaultConfig))
+    playgroundConfigRef.current = cloneVibeConfig(defaultConfig)
     sceneCanvasRef.current?.clearPaint()
     lastPaintSnapshotRef.current = createEmptyPaintSnapshot()
     const defaultPaintTool: PaintToolConfig = {
@@ -1154,11 +1192,13 @@ export default function PortfolioExperience() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayed])
 
-  // Presets apply a complete authored composition. A preset with a sourceUrl
-  // swaps the field's source to that built-in SVG; one without clears any
-  // upload back to the default source. Paint is discarded (with confirmation).
-  // The whole swap is ONE compound transaction: undo restores the previous
-  // config, paint, and upload together.
+  // Presets apply a complete authored composition, resolved against the
+  // ACTIVE theme at selection time (feature/light-dark) — the resolution
+  // sticks: later system changes never overwrite an applied preset. A preset
+  // with a sourceUrl swaps the field's source to that built-in SVG; one
+  // without clears any upload back to the default source. Paint is discarded
+  // (with confirmation). The whole swap is ONE compound transaction: undo
+  // restores the previous config, paint, and upload together.
   const handleApplyVibePreset = (id: string) => {
     const preset = getVibePreset(id)
     if (!preset) return
@@ -1168,8 +1208,9 @@ export default function PortfolioExperience() {
       lastPaintSnapshotRef.current =
         sceneCanvasRef.current?.capturePaintState() ?? createEmptyPaintSnapshot()
       vibeTouchedRef.current = true
-      setPlaygroundConfig(clonePlaygroundConfig(preset.config))
-      playgroundConfigRef.current = cloneVibeConfig(preset.config)
+      const resolvedPreset = resolvePlaygroundConfig(preset.config, themeRef.current)
+      setPlaygroundConfig(clonePlaygroundConfig(resolvedPreset))
+      playgroundConfigRef.current = cloneVibeConfig(resolvedPreset)
       setUploadError(null)
       const nextSource: UploadedSourceState | null = preset.sourceUrl
         ? { kind: 'svg', url: preset.sourceUrl, filename: `${preset.label} source` }
@@ -1280,13 +1321,20 @@ export default function PortfolioExperience() {
         : { kind: 'static', url: LANDING_SOURCE_URL, sourceKind: 'svg' }
     }
     if (displayed === 'work') {
-      return workDescriptor.sourceUrl
-        ? {
-            kind: 'static',
-            url: workDescriptor.sourceUrl,
-            sourceKind: workDescriptor.sourceKind ?? 'svg',
-          }
-        : { kind: 'builtin' }
+      if (!workDescriptor.sourceUrl) return { kind: 'builtin' }
+      // Theme-aware source (feature/light-dark): a slide/story may carry an
+      // optional lightSourceUrl twin (e.g. a wordmark that would vanish on
+      // the light field). Absent = the base source in both themes.
+      const activeSlide = getWorkSlide(workSlideIndex)
+      const lightSourceUrl =
+        activeSlide.kind === 'intro'
+          ? (activeSlide as { lightSourceUrl?: string }).lightSourceUrl
+          : (activeSlide.story as { lightSourceUrl?: string }).lightSourceUrl
+      return {
+        kind: 'static',
+        url: resolveThemedSourceUrl(workDescriptor.sourceUrl, lightSourceUrl, theme),
+        sourceKind: workDescriptor.sourceKind ?? 'svg',
+      }
     }
     if (displayed === 'collaborate') {
       return collaborateDescriptor.sourceUrl
@@ -1297,21 +1345,22 @@ export default function PortfolioExperience() {
       return { kind: 'static', url: uploadedSource.url, sourceKind: uploadedSource.kind }
     }
     return { kind: 'builtin' }
-  }, [displayed, viewportWidth, workDescriptor, collaborateDescriptor, uploadedSource])
+  }, [displayed, viewportWidth, workDescriptor, collaborateDescriptor, uploadedSource, workSlideIndex, theme])
 
-  // The landing runs on the fixed canvas gradient (engine/theme) with the
-  // seasonal atmosphere adopted as soon as it resolves; every other mode
+  // The landing runs on the themed canvas gradient (engine/theme) with the
+  // seasonal atmosphere adopted as soon as it resolves; the work/collaborate
+  // scenes resolve their themed baselines against the active theme; vibe
   // keeps its own playground config untouched.
   const scenePlayground = useMemo<PlaygroundConfig>(() => {
-    if (displayed === 'work') return workDescriptor.playground
-    if (displayed === 'collaborate') return collaborateDescriptor.playground
+    if (displayed === 'work') return resolveScenePlayground(workDescriptor, theme)
+    if (displayed === 'collaborate') return resolveScenePlayground(collaborateDescriptor, theme)
     if (displayed === 'intro') {
       return {
         ...playgroundConfig,
-        backgroundColor1: LANDING_CANVAS_GRADIENT.color1,
-        backgroundColor2: LANDING_CANVAS_GRADIENT.color2,
+        backgroundColor1: LANDING_CANVAS_GRADIENT[theme].color1,
+        backgroundColor2: LANDING_CANVAS_GRADIENT[theme].color2,
         // The landing field spells the site URL and takes its colors from the
-        // recolored source field (the fixed blue gradient, applied in
+        // recolored source field (the themed landing gradient, applied in
         // SceneCanvas) — never the ROYGBV image-gradient palette.
         glyphText: 'joelhoke.me.',
         glyphColorMode: 'source-colors',
@@ -1319,7 +1368,7 @@ export default function PortfolioExperience() {
       }
     }
     return playgroundConfig
-  }, [displayed, workDescriptor, collaborateDescriptor, playgroundConfig, landingAmbient])
+  }, [displayed, workDescriptor, collaborateDescriptor, playgroundConfig, landingAmbient, theme])
 
   // Vibe surface status: a subtle indicator for the upload lifecycle, kept
   // visible even if the visitor hides the control dock mid-processing.
@@ -1336,6 +1385,7 @@ export default function PortfolioExperience() {
       <CanvasFallback />
       <SceneCanvas
         ref={sceneCanvasRef}
+        theme={theme}
         tuningMode={tuningMode}
         sequenceDiagnostics={diagnostics}
         experience={displayed}

@@ -23,6 +23,27 @@ export type WorkStoryLink = {
   label: string
 }
 
+/**
+ * Reusable per-slide brand-mark slot for the Work card header. Every slide
+ * may show a mark (all current slides are Microsoft case studies); future
+ * case studies can supply a different mark or omit the field entirely.
+ */
+export type WorkBrandMark = {
+  /** Default (dark-theme) asset, under public/assets/work/. */
+  src: string
+  /** Optional light-theme variant, selected via a <picture> media query. */
+  lightSrc?: string
+  /** Accessible label. Omit for decorative marks (the brand is already named
+   *  in the visible copy, as with Microsoft). */
+  alt?: string
+}
+
+/** The shared Microsoft mark: white squares on dark, #101826 on light. */
+export const MICROSOFT_BRAND_MARK: WorkBrandMark = {
+  src: '/assets/work/microsoft-mark.svg',
+  lightSrc: '/assets/work/microsoft-mark-light.svg',
+}
+
 /** Public image media (AVIF, WebP, JPEG, PNG). Dimensions and alt are required. */
 export type WorkMediaImage = {
   kind: 'image'
@@ -112,6 +133,10 @@ export type WorkStory = {
   media?: WorkMedia[]
   /** Hero source sampled as the canvas target field, under public/assets/work/. */
   sourceUrl: string
+  /** Optional light-theme hero variant (white marks would vanish on light). */
+  lightSourceUrl?: string
+  /** Optional glyph-text override for the story's field. */
+  glyphText?: string
   /** Source asset kind — 'svg' by default; 'raster' for PNG/JPEG heroes. */
   sourceKind?: VisualSourceKind
   /** Optional per-story glyph palette override (hex colors). */
@@ -121,6 +146,8 @@ export type WorkStory = {
   /** Optional per-story color-distribution override (e.g. source-colors so the
    *  sampled brand colors paint the field instead of a palette). */
   colorMode?: GlyphColorMode
+  /** Optional brand mark shown in the Work card header for this story. */
+  mark?: WorkBrandMark
   /** Optional per-story simulation overrides (merged over the work scene). */
   behavior?: Partial<SceneDescriptor['behavior']>
 }
@@ -138,6 +165,7 @@ export const WORK_STORIES: WorkStory[] = [
       'Two agent-integrated operational dashboards that synthesized information spread across 48+ Power BI dashboards and SharePoint folders — and a foundation for an operational ecosystem of tools serving teams domestically and internationally.',
     links: [],
     access: 'public',
+    mark: MICROSOFT_BRAND_MARK,
     details: [
       {
         heading: 'Two products, one operational stack',
@@ -179,6 +207,8 @@ export const WORK_STORIES: WorkStory[] = [
     // Microsoft project: the field takes the sampled brand colors straight
     // from the source SVG.
     sourceUrl: '/assets/work/building-multiple.svg',
+    lightSourceUrl: '/assets/work/building-multiple-light.svg',
+    glyphText: 'Do more with less ',
     colorMode: 'source-colors',
     // This story's field reacts to the pointer a little more than the
     // work-mode baseline.
@@ -200,6 +230,8 @@ export const WORK_STORIES: WorkStory[] = [
     sourceUrl: '/assets/work/MyHubTest.png',
     sourceKind: 'raster',
     colorMode: 'source-colors',
+    mark: MICROSOFT_BRAND_MARK,
+    glyphText: 'Defragmenting the Employee Experience ',
     media: [],
     details: [
       { heading: 'The thesis', paragraphs: [
@@ -274,10 +306,12 @@ export type WorkSlide =
       copy: string
       /** Hero SVG sampled as the canvas target field, under public/assets/work/. */
       sourceUrl: string
+      /** Optional light-theme hero variant (white marks would vanish on light). */
+      lightSourceUrl?: string
       /** Optional glyph-text override for the slide's field. */
       glyphText?: string
-      /** Optional brand mark shown at the top right of the slide card. */
-      markUrl?: string
+      /** Optional brand mark shown in the Work card header. */
+      mark?: WorkBrandMark
       /** Optional color-distribution override (e.g. source-colors). */
       colorMode?: GlyphColorMode
     }
@@ -292,8 +326,9 @@ export const WORK_SLIDES: WorkSlide[] = [
     // The full-color Microsoft logo/wordmark SVG; the field takes the sampled
     // brand colors straight from the source.
     sourceUrl: '/assets/work/story-03.svg',
+    lightSourceUrl: '/assets/work/story-03-light.svg',
     glyphText: 'culture eats strategy for breakfast ',
-    markUrl: '/assets/work/microsoft-mark.svg',
+    mark: MICROSOFT_BRAND_MARK,
     colorMode: 'source-colors',
   },
   ...WORK_STORIES.map((story): WorkSlide => ({ kind: 'project', story })),
@@ -309,6 +344,11 @@ export function getWorkSlide(index: number): WorkSlide {
 /** Stable slide id (the story id for project slides) — analytics/diagnostics. */
 export function getWorkSlideId(slide: WorkSlide): string {
   return slide.kind === 'project' ? slide.story.id : slide.id
+}
+
+/** Brand mark for either slide kind, or null when the slide has none. */
+export function getWorkSlideMark(slide: WorkSlide): WorkBrandMark | null {
+  return slide.kind === 'project' ? (slide.story.mark ?? null) : (slide.mark ?? null)
 }
 
 /** Slide display/document title (the story title for project slides). */
@@ -328,6 +368,7 @@ export function resolveWorkScene(base: SceneDescriptor, story: WorkStory): Scene
     sourceKind: story.sourceKind ?? 'svg',
     playground: {
       ...base.playground,
+      ...(story.glyphText ? { glyphText: story.glyphText } : {}),
       ...(story.palette ? { glyphPalette: story.palette } : {}),
       ...(story.background
         ? {

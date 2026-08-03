@@ -7,7 +7,8 @@
 // change when copy or compositions evolve.
 // =============================================================================
 
-import { PlaygroundConfig, VIBE_DEFAULT_PLAYGROUND } from '../engine/playgroundConfig'
+import { ThemedPlaygroundConfig } from '../engine/playgroundTheme'
+import { VIBE_THEMED_PLAYGROUND, WORK_THEME_COLORS, COLLABORATE_THEME_COLORS } from '../engine/sceneConfig'
 import { AMBIENT_DEFAULTS } from '../engine/ambientConfig'
 import { MOTION_DEFAULTS } from '../engine/motionConfig'
 
@@ -97,8 +98,10 @@ export type VibePreset = {
   id: string
   /** The preset's name, shown on its button in the control dock. */
   label: string
-  /** Complete composition: text, palette, background, font, color mode, size. */
-  config: PlaygroundConfig
+  /** Complete composition with dark+light color tables: text, palette,
+   *  background, font, color mode, size. Applying a preset resolves it
+   *  against the ACTIVE theme at selection time (feature/light-dark). */
+  config: ThemedPlaygroundConfig
   /** Optional built-in SVG source for the composition. When omitted, applying
    *  the preset clears any uploaded SVG and returns to the default source. */
   sourceUrl?: string
@@ -106,32 +109,30 @@ export type VibePreset = {
 
 /**
  * Authored presets: complete compositions applied in one tap from the control
- * dock. The first preset mirrors VIBE_DEFAULT_PLAYGROUND — it is the curated
- * entry composition and doubles as the "back to the start" option; the verify
- * script asserts the vibe scene descriptor matches it.
+ * dock. The first preset mirrors the curated default (VIBE_THEMED_PLAYGROUND)
+ * — it is the entry composition and doubles as the "back to the start"
+ * option; the verify script asserts the vibe scene descriptor matches it.
+ * Dark color tables are the original compositions; light tables keep each
+ * preset's identity on the light field.
  */
 export const VIBE_PRESETS: VibePreset[] = [
   {
     id: 'signature',
     label: 'Signature',
-    config: {
-      ...VIBE_DEFAULT_PLAYGROUND,
-      glyphPalette: [...VIBE_DEFAULT_PLAYGROUND.glyphPalette],
-    },
+    config: VIBE_THEMED_PLAYGROUND,
   },
   {
     id: 'blueprint',
     label: 'Blueprint',
     config: {
       glyphText: 'draft · draw · measure · make · ',
-      glyphPalette: ['#8abaff', '#bcd7ff', '#5a8fd6', '#dbe9ff'],
-      backgroundColor1: '#080b12',
-      backgroundColor2: '#101826',
       glyphFont: "'Courier New', monospace",
       glyphColorMode: 'rows',
       glyphSizePt: 12,
       motion: { ...MOTION_DEFAULTS },
       ambient: { ...AMBIENT_DEFAULTS },
+      dark: WORK_THEME_COLORS.dark,
+      light: WORK_THEME_COLORS.light,
     },
     sourceUrl: '/assets/work/story-01.svg',
   },
@@ -140,14 +141,13 @@ export const VIBE_PRESETS: VibePreset[] = [
     label: 'Ember',
     config: {
       glyphText: 'ember · glow · slow fire · ',
-      glyphPalette: ['#f2b28a', '#ffd9c4', '#d68a5a', '#fff0e6'],
-      backgroundColor1: '#100a0a',
-      backgroundColor2: '#201410',
       glyphFont: "'Georgia', serif",
       glyphColorMode: 'word-cycle',
       glyphSizePt: 16,
       motion: { ...MOTION_DEFAULTS },
       ambient: { ...AMBIENT_DEFAULTS },
+      dark: COLLABORATE_THEME_COLORS.dark,
+      light: COLLABORATE_THEME_COLORS.light,
     },
     sourceUrl: '/assets/work/story-02.svg',
   },
@@ -156,14 +156,21 @@ export const VIBE_PRESETS: VibePreset[] = [
     label: 'Mono',
     config: {
       glyphText: 'form follows feeling — ',
-      glyphPalette: ['#f5f5f5', '#9a9a9a', '#ffffff'],
-      backgroundColor1: '#050505',
-      backgroundColor2: '#141414',
       glyphFont: "'Times New Roman', serif",
       glyphColorMode: 'glyph-cycle',
       glyphSizePt: 24,
       motion: { ...MOTION_DEFAULTS },
       ambient: { ...AMBIENT_DEFAULTS },
+      dark: {
+        backgroundColor1: '#050505',
+        backgroundColor2: '#141414',
+        glyphPalette: ['#f5f5f5', '#9a9a9a', '#ffffff'],
+      },
+      light: {
+        backgroundColor1: '#FAFAFA',
+        backgroundColor2: '#E5E7EB',
+        glyphPalette: ['#111827', '#4B5563', '#000000'],
+      },
     },
     sourceUrl: '/assets/work/story-03.svg',
   },

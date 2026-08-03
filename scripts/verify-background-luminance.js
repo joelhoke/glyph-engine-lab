@@ -30,7 +30,7 @@ try {
 }
 
 const gradientModule = require(path.join(tmpDir, 'backgroundLuminance.js'))
-const { applyHorizontalGlyphGradient, LANDING_GLYPH_GRADIENT } = gradientModule
+const { applyHorizontalGlyphGradient, LANDING_GLYPH_GRADIENT, LANDING_GLYPH_GRADIENT_THEMES } = gradientModule
 const { packSourceRgba, unpackSourceA, unpackSourceB, unpackSourceG, unpackSourceR } = require(
   path.join(tmpDir, 'targetSampling.js'),
 )
@@ -51,6 +51,22 @@ function assert(condition, message) {
 assert(
   LANDING_GLYPH_GRADIENT.from === '#0C5E7D' && LANDING_GLYPH_GRADIENT.to === '#3B9EC8',
   'the landing glyph gradient is exactly #0C5E7D → #3B9EC8',
+)
+
+// --- the gradient is unified across themes (feature/light-dark) ------------------
+
+assert(
+  LANDING_GLYPH_GRADIENT_THEMES.dark === LANDING_GLYPH_GRADIENT,
+  'the dark theme uses the shared landing gradient',
+)
+assert(
+  LANDING_GLYPH_GRADIENT_THEMES.light === LANDING_GLYPH_GRADIENT,
+  'the light theme uses the same landing gradient as dark',
+)
+assert(
+  LANDING_GLYPH_GRADIENT_THEMES.light.from === '#0C5E7D' &&
+    LANDING_GLYPH_GRADIENT_THEMES.light.to === '#3B9EC8',
+  'the light landing glyph gradient is exactly #0C5E7D → #3B9EC8',
 )
 
 // --- luminance-independence: no conditional selection survives -------------------

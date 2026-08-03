@@ -1,7 +1,10 @@
+/* Protected case-study viewer shell (Stage 4b). A plain document — every
+   color resolves through the global theme tokens (app/globals.css), so the
+   shell follows the visitor's system light/dark theme like the public site. */
 .protectedShell {
   min-height: 100vh;
-  background: #090c12;
-  color: #d8e2f2;
+  background: var(--color-page);
+  color: var(--color-text-muted);
   font-family: 'Cutive Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
   display: flex;
   flex-direction: column;
@@ -22,7 +25,7 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  color: #f5f7fb;
+  color: var(--color-text);
   font-size: 0.85rem;
   letter-spacing: 0.08em;
 }
@@ -34,16 +37,16 @@
 
 .protectedLogout {
   font-size: 0.8rem;
-  color: #8abaff;
+  color: var(--color-accent);
   text-decoration: none;
-  border-bottom: 1px solid rgba(138, 186, 255, 0.4);
+  border-bottom: 1px solid var(--color-accent-border);
   padding-bottom: 2px;
 }
 
 .protectedLogout:hover,
 .protectedLogout:focus-visible {
-  color: #dbe9ff;
-  border-color: #dbe9ff;
+  color: var(--color-accent-strong);
+  border-color: var(--color-accent-strong);
 }
 
 .protectedMain {
@@ -56,11 +59,11 @@
 .protectedNotice {
   font-size: 0.9rem;
   line-height: 1.8;
-  color: #c5d4ea;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-input-border);
   border-radius: 10px;
   padding: 1.25rem 1.5rem;
-  background: rgba(14, 22, 32, 0.6);
+  background: var(--color-surface-panel);
 }
 
 .protectedTitle {
@@ -68,13 +71,13 @@
   font-size: clamp(1.7rem, 3vw, 2.4rem);
   line-height: 1.05;
   letter-spacing: -0.03em;
-  color: #f5f7fb;
+  color: var(--color-text);
 }
 
 .protectedSummary {
   font-size: 0.95rem;
   line-height: 1.7;
-  color: #e8f0fa;
+  color: var(--color-text);
 }
 
 .protectedSection {
@@ -85,14 +88,14 @@
 
 .protectedSection h2 {
   font-size: 1.05rem;
-  color: #f5f7fb;
+  color: var(--color-text);
 }
 
 .protectedSection p,
 .protectedSection li {
   font-size: 0.85rem;
   line-height: 1.8;
-  color: #d8e2f2;
+  color: var(--color-text-muted);
 }
 
 .protectedSection ul {
@@ -113,12 +116,12 @@
   max-width: 100%;
   height: auto;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--color-input-border);
   background: #06090e;
 }
 
 .protectedMedia figcaption {
   font-size: 0.78rem;
   line-height: 1.6;
-  color: #8aa4c5;
+  color: var(--color-text-faint);
 }

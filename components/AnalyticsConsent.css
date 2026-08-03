@@ -7,6 +7,9 @@
  * tabs, and feedback form. `button.`/`div.` prefixes keep specificity at or
  * above the globals.css rules they override (including its mobile media
  * query, which media queries alone cannot outrank).
+ *
+ * All colors resolve through the globals.css theme tokens, so the panel
+ * follows the system light/dark theme like the rest of the chrome.
  */
 
 /* FAB: top-right with safe-area offsets (was bottom-right). */
@@ -31,10 +34,10 @@ button.privacy-settings-button {
   gap: 0.9rem;
   padding: 1.1rem 1.4rem 1.25rem;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(6, 9, 14, 0.92);
+  border: 1px solid var(--color-input-border);
+  background: var(--color-surface-panel-strong);
   backdrop-filter: blur(10px);
-  color: #d8e2f2;
+  color: var(--color-text-muted);
 }
 
 .privacy-panel-header {
@@ -56,22 +59,22 @@ button.privacy-settings-button {
   padding: 0.4rem 0.95rem;
   border-radius: 999px;
   cursor: pointer;
-  color: #c5d4ea;
+  color: var(--color-text-muted);
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid var(--color-border-strong);
   transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
 }
 
 .privacy-tab:hover,
 .privacy-tab:focus-visible {
-  color: #f7fbff;
-  border-color: #8abaff;
+  color: var(--color-text);
+  border-color: var(--color-accent);
 }
 
 .privacy-tab[aria-selected='true'] {
-  color: #06090e;
-  background: #8fe3f5;
-  border-color: #8fe3f5;
+  color: var(--color-on-accent);
+  background: var(--color-accent-vivid);
+  border-color: var(--color-accent-vivid);
 }
 
 .privacy-panel-close {
@@ -84,9 +87,9 @@ button.privacy-settings-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #8aa4c5;
+  color: var(--color-text-faint);
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--color-input-border);
   border-radius: 50%;
   cursor: pointer;
   transition: color 180ms ease, border-color 180ms ease;
@@ -94,8 +97,8 @@ button.privacy-settings-button {
 
 .privacy-panel-close:hover,
 .privacy-panel-close:focus-visible {
-  color: #dbe9ff;
-  border-color: #8abaff;
+  color: var(--color-accent-strong);
+  border-color: var(--color-accent);
 }
 
 .privacy-tabpanel {
@@ -120,16 +123,16 @@ button.privacy-settings-button {
 
 .feedback-label {
   font-size: 0.78rem;
-  color: #c5d4ea;
+  color: var(--color-text-muted);
 }
 
 .feedback-input,
 .feedback-textarea {
   font: inherit;
   font-size: 0.82rem;
-  color: #f5f7fb;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--color-text);
+  background: var(--color-input-bg);
+  border: 1px solid var(--color-border-strong);
   border-radius: 8px;
   padding: 0.55rem 0.7rem;
   width: 100%;
@@ -144,26 +147,26 @@ button.privacy-settings-button {
 .feedback-input:focus-visible,
 .feedback-textarea:focus-visible {
   outline: none;
-  border-color: #8abaff;
+  border-color: var(--color-accent);
 }
 
 .feedback-hint {
   font-size: 0.72rem;
   line-height: 1.5;
-  color: #8aa4c5;
+  color: var(--color-text-faint);
   min-height: 1.1em;
   margin: 0;
 }
 
 .feedback-status {
   font-size: 0.78rem;
-  color: #9fe8c0;
+  color: var(--color-success);
   margin: 0;
 }
 
 .feedback-error {
   font-size: 0.78rem;
-  color: #f5a8a8;
+  color: var(--color-error);
   margin: 0;
 }
 
@@ -173,7 +176,7 @@ button.privacy-settings-button {
 }
 
 .feedback-form .consent-allow:disabled:hover {
-  background: #8fe3f5;
+  background: var(--color-accent-vivid);
 }
 
 @media (max-width: 640px) {

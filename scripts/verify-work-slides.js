@@ -13,15 +13,34 @@
  * 4. Slide-change scroll behavior: WorkExperience never calls
  *    scrollIntoView — it resets the panel's own scrollTop and focuses the
  *    slide heading with preventScroll so the document/shell never move.
- * 5. The retired building-orchestrator-live-campus asset path is referenced
+ * 5. The brand-mark model: every current slide resolves the shared Microsoft
+ *    mark via getWorkSlideMark (either WorkSlide kind), both theme variants
+ *    of the asset exist, the mark renders once in the shared card header row
+ *    with a <picture> light swap, and marks are omittable.
+ * 6. The retired building-orchestrator-live-campus asset path is referenced
  *    nowhere, and the work sceneSource threads the descriptor's sourceKind
  *    (raster heroes) instead of hardcoding 'svg'.
  */
 
+const { execSync } = require('child_process')
 const fs = require('fs')
 const path = require('path')
 
 const projectRoot = path.resolve(__dirname, '..')
+const tmpDir = path.join(projectRoot, 'tmp-verify-work-slides')
+
+try {
+  fs.rmSync(tmpDir, { recursive: true, force: true })
+  fs.mkdirSync(tmpDir, { recursive: true })
+  execSync(
+    `npx tsc "${path.join(projectRoot, 'content', 'work.ts')}" --outDir "${tmpDir}" --module commonjs --target es2020 --strict false --esModuleInterop true`,
+    { stdio: 'inherit', cwd: projectRoot },
+  )
+} catch (error) {
+  console.error('Compilation failed:', error)
+  process.exit(1)
+}
+
 const portfolioSource = fs.readFileSync(
   path.join(projectRoot, 'components', 'PortfolioExperience.tsx'),
   'utf8',
@@ -135,11 +154,45 @@ assert(
   'slide heading focus keeps preventScroll: true',
 )
 assert(
-  workExperienceSource.includes("slide.kind === 'intro' && slide.markUrl"),
-  'the intro brand mark renders at card level, outside the slide flow',
+  workExperienceSource.includes('getWorkSlideMark(slide)'),
+  'the brand mark resolves for either WorkSlide kind (not intro-only)',
+)
+assert(
+  workExperienceSource.includes('work-card-header'),
+  'the mark renders once in the shared Work card header row',
+)
+assert(
+  workExperienceSource.includes('prefers-color-scheme: light'),
+  'the mark swaps its light variant via a <picture> media query',
 )
 
-// --- 5. retired asset path + sourceKind threading -----------------------------
+// --- 5. brand-mark model ------------------------------------------------------
+
+const { MICROSOFT_BRAND_MARK, WORK_SLIDES, getWorkSlideMark } = require(
+  path.join(tmpDir, 'content', 'work.js'),
+)
+
+for (const slide of WORK_SLIDES) {
+  const resolved = getWorkSlideMark(slide)
+  assert(
+    resolved === MICROSOFT_BRAND_MARK,
+    `${slide.kind === 'project' ? slide.story.id : slide.id}: resolves the shared Microsoft mark`,
+  )
+}
+
+// Both theme variants of the Microsoft mark exist in public/.
+for (const asset of [MICROSOFT_BRAND_MARK.src, MICROSOFT_BRAND_MARK.lightSrc]) {
+  assert(
+    !!asset && fs.existsSync(path.join(projectRoot, 'public', asset)),
+    `brand-mark asset exists: ${asset}`,
+  )
+}
+
+// A slide may override or omit the mark.
+const bare = getWorkSlideMark({ kind: 'intro', id: 'x', title: 'x', copy: 'x', sourceUrl: '/assets/work/story-01.svg' })
+assert(bare === null, 'an intro slide without a mark resolves null (omittable)')
+
+// --- 6. retired asset path + sourceKind threading -----------------------------
 
 for (const [label, source] of [
   ['PortfolioExperience.tsx', portfolioSource],

@@ -1,18 +1,23 @@
 /**
- * Landing glyph gradient (pre-release): the completed-intro landing recolors
- * the JH glyph field with a FIXED left-to-right gradient — always the same
- * deep-to-bright cyan pair, independent of the background behind it, so the
- * mark reads identically on every visitor's landing. (The earlier
- * luminance-conditional dark/light pair selection was retired with the fixed
- * landing background gradient.)
+ * Landing glyph gradient: the completed-intro landing recolors the JH glyph
+ * field with a FIXED left-to-right gradient — always the same deep-to-bright
+ * cyan pair on both themes, independent of the background behind it, so the
+ * mark reads identically on every visitor's landing in either theme.
  *
  * Pure functions only — verified by scripts/verify-background-luminance.js.
  */
 
 import { packSourceRgba } from './targetSampling'
+import { ThemeName } from './theme'
 
-/** The fixed landing glyph gradient: left stop → right stop. */
+/** The fixed landing glyph gradient (both themes): left stop → right stop. */
 export const LANDING_GLYPH_GRADIENT = { from: '#0C5E7D', to: '#3B9EC8' }
+
+/** The landing glyph gradient per theme — unified: both themes use the same pair. */
+export const LANDING_GLYPH_GRADIENT_THEMES: Record<ThemeName, { from: string; to: string }> = {
+  dark: LANDING_GLYPH_GRADIENT,
+  light: LANDING_GLYPH_GRADIENT,
+}
 
 function parseHexChannels(hex: string): { r: number; g: number; b: number } {
   const value = parseInt(hex.replace('#', ''), 16)
