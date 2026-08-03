@@ -5,6 +5,7 @@ import {
   COLLABORATE_CONTACT,
   COLLABORATE_ENERGIZING_STATEMENT,
   COLLABORATE_HEADLINE,
+  COLLABORATE_SHOW_STARTERS,
   CONVERSATION_STARTERS,
   getCollaborateStarter,
 } from '../../content/collaborate'
@@ -76,19 +77,23 @@ export default function CollaborateExperience({
         {COLLABORATE_HEADLINE}
       </h2>
       <p className="collaborate-statement">{COLLABORATE_ENERGIZING_STATEMENT}</p>
-      <div className="conversation-starters" role="group" aria-label="Conversation starters">
-        {CONVERSATION_STARTERS.map((starter) => (
-          <ConversationStarter
-            key={starter.id}
-            starter={starter}
-            selected={starter.id === selectedStarterId}
-            onSelect={onSelectStarter}
-          />
-        ))}
-      </div>
-      <p className="conversation-response" aria-live="polite">
-        {selectedStarter ? selectedStarter.response : ''}
-      </p>
+      {COLLABORATE_SHOW_STARTERS && (
+        <>
+          <div className="conversation-starters" role="group" aria-label="Conversation starters">
+            {CONVERSATION_STARTERS.map((starter) => (
+              <ConversationStarter
+                key={starter.id}
+                starter={starter}
+                selected={starter.id === selectedStarterId}
+                onSelect={onSelectStarter}
+              />
+            ))}
+          </div>
+          <p className="conversation-response" aria-live="polite">
+            {selectedStarter ? selectedStarter.response : ''}
+          </p>
+        </>
+      )}
       <div className="collaborate-contact">
         <a className="collaborate-primary-action" href={COLLABORATE_CONTACT.mailtoUrl}>
           {COLLABORATE_CONTACT.primaryLabel}
