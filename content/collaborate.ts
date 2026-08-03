@@ -4,9 +4,17 @@
 // The headline, the energizing-collaboration statement, every conversation
 // starter, and both contact destinations (mailto + copy-to-clipboard) live
 // below. Nothing outside this file should need to change when copy evolves.
+//
+// The conversation starters are currently HIDDEN (COLLABORATE_SHOW_STARTERS
+// = false): the conversational piece is being reworked and is not ready for
+// launch. The model and plumbing stay intact — flip the flag to bring them
+// back; nothing else needs to change.
 // =============================================================================
 
 import { SceneDescriptor } from '../engine/sceneConfig'
+
+/** Launch gate for the conversation starters (see header). */
+export const COLLABORATE_SHOW_STARTERS = false
 
 export type ConversationStarter = {
   /** Stable, unique identifier — used as the React key and selection state. */
