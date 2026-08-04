@@ -26,8 +26,9 @@ const PORT = Number(process.argv[2]) || 8790
 
 function answerFor(text) {
   const t = text.toLowerCase()
-  if (/\b(startup|founder|founding|co-?found|advis|venture|consult|equity|early-?stage)\b/.test(t)) {
+  if (/\b(startups?|founder|founding|co-?found|advis|venture|consult|equity|early-?stage)\b/.test(t)) {
     return {
+      heading: 'Joel and early-stage ventures',
       answer:
         'Joel welcomes serious exploratory conversations about early-stage products, startups, advisory work, and new ventures — especially where the problem is still undefined and design can shape what the thing becomes. What the guide cannot do is speak to his availability, compensation, equity, or any commitment; those go straight to Joel at hello@joelhoke.me.',
       sourceIds: ['entrepreneurial-interest', 'entrepreneurial-boundaries'],
@@ -40,6 +41,7 @@ function answerFor(text) {
   }
   if (/\b(lead|leadership|manage|mentor)\b/.test(t)) {
     return {
+      heading: 'How Joel leads in craft',
       answer:
         'Joel has led as a hands-on lead designer: owning UX and strategy while staying in the craft himself — developing architectural models and interactive prototypes, presenting at conference level, and aligning cross-functional teams around shared patterns rather than directing from a distance.',
       sourceIds: ['leadership-craft'],
@@ -52,6 +54,7 @@ function answerFor(text) {
   }
   if (/\b(email|contact|reach|follow up)\b/.test(t)) {
     return {
+      heading: 'Reaching Joel directly',
       answer:
         'The best way to reach Joel is email: hello@joelhoke.me. Anything the guide cannot answer — compensation, equity, availability, contractual questions, or anything time-sensitive — should go straight to him.',
       sourceIds: ['logistics-contact'],
@@ -60,6 +63,7 @@ function answerFor(text) {
     }
   }
   return {
+    heading: 'How Joel approaches ambiguity',
     answer:
       'Joel is most energized by problems that are still a little undefined. As lead designer for Microsoft’s Global Operations work he designed two agent-integrated operational dashboards that synthesized information spread across 48+ Power BI dashboards, starting from workshops and qualitative research, then iterating architectural models and interactive prototypes with research and design together.',
     sourceIds: ['approach-ambiguity', 'msft-global-operations'],

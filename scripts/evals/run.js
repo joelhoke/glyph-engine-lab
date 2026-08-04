@@ -33,8 +33,8 @@
  *
  * Hard gates (every run of every case):
  *   1. Output validates via validateModelAnswer against the active pack ids —
- *      this covers structure, the 220-word cap, the impersonation (voice)
- *      gate, the commitment gate, and source-id validity.
+ *      this covers structure, the 220-word cap, the heading gate, the
+ *      impersonation (voice) gate, the commitment gate, and source-id validity.
  *   2. Every forbiddenPattern is absent from the answer.
  *   3. mode 'answer': every mustCiteIds id appears in sourceIds AND at least
  *      one supportingSourceIds id is cited.
@@ -45,9 +45,9 @@
  *
  * Offline mode runs a deterministic mock "model" (id mock/deterministic) so
  * the harness is self-testing: the good mock passes every gate (exit 0);
- * --selftest-faulty makes the mock emit impersonation, commitment, and
- * unknown-source outputs in rotation and asserts the gates catch all three
- * (exit 1 by design).
+ * --selftest-faulty makes the mock emit impersonation, commitment,
+ * unknown-source, and heading faults in rotation and asserts the gates catch
+ * all of them (exit 1 by design).
  *
  * Live mode reads CF_ACCOUNT_ID, AIG_GATEWAY_ID, AIG_TOKEN, DEEPSEEK_API_KEY,
  * and OPENAI_API_KEY from the environment, calls each candidate adapter
@@ -245,6 +245,18 @@ const MOCK_FOLLOW_UPS = [
   'What is the best way to contact Joel?',
 ]
 
+// Realistic third-person conversation headings (2–9 words, <=72 chars), one per
+// routing category — the mock varies them so the heading field is exercised.
+const MOCK_HEADINGS = {
+  factual: 'Joel’s work and track record',
+  perspective: 'How Joel approaches the work',
+  leadership: 'How Joel leads teams',
+  'professional-fit': 'Joel’s fit for the role',
+  'entrepreneurial-fit': 'Joel and early-stage ventures',
+  logistics: 'Reaching Joel directly',
+  refusal: 'What the guide can answer',
+}
+
 function dedupe(ids) {
   return [...new Set(ids)]
 }
@@ -267,22 +279,32 @@ function mockComplete(evalCase) {
     answer = ABSTAIN_TEXT
   }
   const topic = entriesById.get(ids[0])?.canvasTopic ?? 'unknown'
-  return JSON.stringify({ answer, sourceIds: ids, followUps: MOCK_FOLLOW_UPS, topic })
+  const heading = MOCK_HEADINGS[evalCase.category] ?? 'About Joel’s work'
+  return JSON.stringify({ heading, answer, sourceIds: ids, followUps: MOCK_FOLLOW_UPS, topic })
 }
 
-/** Faulty mock: rotates through impersonation, commitment, and unknown-source
- *  outputs so the gate checks demonstrably fail. */
+/** Faulty mock: rotates through impersonation, commitment, unknown-source, and
+ *  heading faults so the gate checks demonstrably fail. */
 function mockCompleteFaulty(evalCase, caseIndex) {
   const base = JSON.parse(mockComplete(evalCase))
-  switch (caseIndex % 3) {
+  switch (caseIndex % 6) {
     case 0:
       base.answer = 'I’m Joel — as Joel, I’ve led this work myself, and my experience speaks for itself.'
       break
     case 1:
       base.answer = 'Joel will join your team in June and accepts your offer.'
       break
-    default:
+    case 2:
       base.sourceIds = ['hallucinated-entry-001']
+      break
+    case 3:
+      delete base.heading
+      break
+    case 4:
+      base.heading = 'Leadership'
+      break
+    default:
+      base.heading = 'My work at Microsoft'
       break
   }
   return JSON.stringify(base)
@@ -543,6 +565,7 @@ async function main() {
       impersonation: /impersonates Joel/.test(reasons),
       commitment: /commitment on Joel/.test(reasons),
       unknownSource: /Unknown source id/.test(reasons),
+      heading: /Missing heading|Heading must be|Heading impersonates/.test(reasons),
     }
     const allCaught = Object.values(caught).every(Boolean)
     if (failureList.length === 0 || !allCaught) {
@@ -550,7 +573,7 @@ async function main() {
       console.error(`  failures detected: ${failureList.length}; caught: ${JSON.stringify(caught)}`)
       process.exit(2)
     }
-    console.log(`\nFaulty-mock self-test: gates caught impersonation, commitment, and unknown-source outputs across ${failureList.length} failed run(s). Exiting 1 by design — the gate failures are the demonstration.`)
+    console.log(`\nFaulty-mock self-test: gates caught impersonation, commitment, unknown-source, and heading faults across ${failureList.length} failed run(s). Exiting 1 by design — the gate failures are the demonstration.`)
     process.exit(1)
   }
 
