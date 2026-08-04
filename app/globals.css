@@ -1461,8 +1461,29 @@ button:focus-visible {
   font-family: var(--font-display), var(--font-mono);
 }
 
+/* Bounded scroll panel (components/BoundedScrollPanel.tsx): the shared
+   inner-viewport mechanics for the Work and Collaborate cards. The consumer's
+   frame class owns all surface treatment and height constraints; this class
+   owns only scrolling behavior. overscroll-behavior: contain keeps swipes
+   from chaining into the page at either end. */
+.bounded-scroll-viewport {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+@supports (scrollbar-gutter: stable) {
+  .bounded-scroll-viewport {
+    scrollbar-gutter: stable;
+  }
+}
+
 /* --- Work experience (M4) --- */
 
+/* Fixed outer frame: border/background/height stay stationary while the
+   inner viewport (BoundedScrollPanel) scrolls the slide content. */
 .work-experience {
   position: relative;
   width: min(100%, 40rem);
@@ -1470,12 +1491,19 @@ button:focus-visible {
   color: var(--color-text);
   display: flex;
   flex-direction: column;
-  gap: 1.1rem;
-  padding: 1.75rem 2rem;
   border-radius: 12px;
   border: 1px solid var(--color-border-subtle);
   background: var(--color-surface-panel-soft);
   backdrop-filter: blur(8px);
+}
+
+/* The scrolling viewport: carries the padding and content layout the card
+   itself used to own, so the geometry is identical to the pre-split card. */
+.work-experience-viewport {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding: 1.75rem 2rem;
 }
 
 .work-mode-heading {
@@ -1618,7 +1646,7 @@ button:focus-visible {
 }
 
 @media (max-width: 560px) {
-  .work-experience {
+  .work-experience-viewport {
     padding: 1.25rem 1.25rem;
   }
 }
@@ -1626,14 +1654,13 @@ button:focus-visible {
 /* Work mode scrolls vertically inside its panel while the canvas stays
    fixed behind it. The 100dvh + safe-area variant wins where supported so
    the panel clears the iOS browser chrome and home-indicator insets; the
-   100vh line is the fallback for older engines. */
+   100vh line is the fallback for older engines. Height constraints live on
+   the frame; the inner viewport owns the actual scrolling. */
 .work-experience {
   max-height: calc(100vh - 9rem);
   max-height: calc(
     100dvh - 9rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
   );
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 /* Work glyph stage (mobile): the stage reserves real layout space so the
@@ -2110,19 +2137,28 @@ button:focus-visible {
 
 /* --- Collaborate experience (M6) --- */
 
+/* Fixed outer frame (BoundedScrollPanel): the border/background stay
+   stationary while the inner viewport scrolls the invitation content. */
 .collaborate-experience {
   width: min(100%, 44rem);
   text-align: center;
   color: var(--color-text);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 1.1rem;
-  padding: 1.75rem 2rem;
   border-radius: 12px;
   border: 1px solid var(--color-border-subtle);
   background: var(--color-surface-warm-panel);
   backdrop-filter: blur(8px);
+}
+
+/* The scrolling viewport: carries the padding and content layout the card
+   itself used to own, so the geometry is identical to the pre-split card. */
+.collaborate-experience-viewport {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.1rem;
+  padding: 1.75rem 2rem;
 }
 
 .collaborate-heading {
@@ -2261,7 +2297,7 @@ button:focus-visible {
 }
 
 @media (max-width: 560px) {
-  .collaborate-experience {
+  .collaborate-experience-viewport {
     padding: 1.25rem 1.25rem;
   }
 }
@@ -2270,6 +2306,9 @@ button:focus-visible {
 
 .collaborate-guide {
   text-align: left;
+}
+
+.collaborate-guide .collaborate-experience-viewport {
   align-items: stretch;
 }
 
@@ -2388,6 +2427,9 @@ a.guide-source:focus-visible {
   gap: 0.5rem;
 }
 
+/* Follow-up prompt buttons: the strong panel token keeps the animated canvas
+   from showing through the text; backdrop blur is layered on only as
+   progressive enhancement (the chip is legible without it). */
 .guide-followup {
   font: inherit;
   font-size: 0.8rem;
@@ -2396,16 +2438,22 @@ a.guide-source:focus-visible {
   min-height: 44px;
   border-radius: 999px;
   border: 1px solid var(--color-border);
-  background: transparent;
+  background: var(--color-surface-panel-strong);
   color: var(--color-warm-text);
   cursor: pointer;
   transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
 }
 
+@supports (backdrop-filter: blur(8px)) {
+  .guide-followup {
+    backdrop-filter: blur(8px);
+  }
+}
+
 .guide-followup:hover,
 .guide-followup:focus-visible {
   color: var(--color-warm-strong);
-  background: var(--color-input-bg);
+  background: var(--color-action-bg-hover);
   border-color: var(--color-warm);
 }
 
@@ -2492,6 +2540,12 @@ a.guide-source:focus-visible {
   font-size: 0.85rem;
   line-height: 1.65;
   color: var(--color-warm-text);
+}
+
+.guide-limit a {
+  color: var(--color-warm-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .guide-input-row {
@@ -2661,29 +2715,38 @@ a.guide-source:focus-visible {
 /* --- Collaborate layout scope (landing + chat) --- */
 
 /* Shared layout values for the collaborate mode only (Work/Vibe untouched):
-   a fluid horizontal gutter, the 40rem reading column, and nav/safe-area
-   clearances that reserve a non-overlapping band for the top nav. */
+   a fluid horizontal gutter, the 40rem reading column, the wide-screen
+   transcript lane offset, and nav/safe-area clearances that reserve a
+   non-overlapping band for the top nav. */
 .foreground-layer--collaborate {
   --collab-gutter: clamp(1.25rem, 4vw, 4rem);
   --collab-column: 40rem;
+  /* Two-lane transcript stage: the visitor lane's right edge sits this far
+     right of the guide lane's right edge. Collapses below the tablet
+     breakpoint (matches the Work layout shift at 760px). */
+  --collab-lane-offset: clamp(6rem, 12vw, 11.5rem);
   --collab-top-clearance: calc(env(safe-area-inset-top, 0px) + 6.5rem);
   --collab-bottom-clearance: calc(env(safe-area-inset-bottom, 0px) + 1rem);
   padding: var(--collab-top-clearance) var(--collab-gutter) var(--collab-bottom-clearance);
 }
 
-/* The landing card scrolls instead of clipping when its content exceeds the
-   available height: the content column owns vertical scrolling, and the
-   card's auto margins center it only while there is room to spare. */
+@media (max-width: 760px) {
+  .foreground-layer--collaborate {
+    --collab-lane-offset: 0rem;
+  }
+}
+
+/* The landing card is a fixed frame bounded by the space between the
+   persistent nav and the bottom safe area: the surrounding content column
+   never scrolls — only the card's inner viewport does. */
 .foreground-layer--collaborate .foreground-content:not(.foreground-content-chat) {
-  justify-content: flex-start;
   min-height: 0;
-  overflow-y: auto;
 }
 
 .foreground-layer--collaborate .collaborate-experience {
-  flex: 0 0 auto;
-  margin-top: auto;
-  margin-bottom: auto;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 100%;
 }
 
 @media (max-width: 560px) {
@@ -2882,13 +2945,14 @@ a.guide-source:focus-visible {
   border-radius: 4px;
 }
 
-/* Independently scrolling transcript with extra breathing room; its content
-   stays in the narrow centered column and the grid row keeps it from ever
-   scrolling beneath the composer. */
+/* Independently scrolling transcript with extra breathing room; the grid row
+   keeps it from ever scrolling beneath the composer, and overscroll
+   containment keeps end-of-scroll swipes from chaining into the page. */
 .chat-transcript {
   min-height: 0;
   min-width: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
@@ -2902,19 +2966,29 @@ a.guide-source:focus-visible {
   margin-right: auto;
 }
 
+/* The conversation stage: wider than the composer column by the lane offset,
+   so the guide lane (left, max 40rem) and the visitor lane (right, max
+   29rem) read as two distinct lanes on wide screens. The offset collapses
+   to zero below the tablet breakpoint via --collab-lane-offset, and the
+   min(100%, …) keeps the stage from ever exceeding the transcript. */
+.chat-transcript > .chat-turns {
+  width: min(100%, calc(var(--collab-column, 40rem) + var(--collab-lane-offset, 0rem)));
+}
+
 .chat-turns {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  gap: 1.375rem;
   padding: 0.25rem;
 }
 
+/* Lanes: guide turns pin to the stage's left edge, visitor turns to its
+   right edge. Long messages wrap inside their lane (min-width: 0 +
+   overflow-wrap on the text) without expanding the stage. */
 .chat-turn {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.3rem;
+  min-width: 0;
 }
 
 .chat-turn-meta {
@@ -2928,14 +3002,14 @@ a.guide-source:focus-visible {
 }
 
 .chat-turn-visitor {
-  align-items: flex-end;
+  justify-content: flex-end;
 }
 
 /* Visitor bubble: metadata sits INSIDE the card above the message,
    right-aligned; the message takes Cabin Regular (the conversation-copy
    exception — docs/style-guide.md §3.3). */
 .chat-visitor-card {
-  max-width: 30rem;
+  max-width: min(29rem, 100%);
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -2962,6 +3036,7 @@ a.guide-source:focus-visible {
 }
 
 .chat-answer {
+  width: min(100%, var(--collab-column, 40rem));
   min-width: 0;
   background: var(--color-surface-warm-panel);
   border: 1px solid var(--color-border-subtle);
@@ -2991,51 +3066,6 @@ a.guide-source:focus-visible {
 
 .guide-source svg {
   flex: 0 0 auto;
-}
-
-/* The <details> footer at the end of the transcript: direct-email actions. */
-.chat-details {
-  border-top: 1px solid var(--color-border-subtle);
-  padding: 0.25rem 0 0.75rem;
-}
-
-.chat-details summary {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-warm-text);
-  cursor: pointer;
-  border-radius: 4px;
-}
-
-.chat-details summary:hover {
-  color: var(--color-warm-strong);
-}
-
-.chat-details summary:focus-visible {
-  outline: 2px solid var(--color-warm);
-  outline-offset: 3px;
-}
-
-.chat-details-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.9rem;
-  padding-top: 0.4rem;
-}
-
-.chat-details .collaborate-contact {
-  justify-content: flex-start;
-}
-
-.chat-details .collaborate-copy-feedback,
-.chat-details .collaborate-address {
-  align-self: flex-start;
-  text-align: left;
 }
 
 /* Fixed bottom area: follow-up rail above the composer, the share control

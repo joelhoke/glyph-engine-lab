@@ -14,6 +14,7 @@ import {
 } from '../../content/collaborate'
 import ConversationStarter from './ConversationStarter'
 import ContactActions from './ContactActions'
+import BoundedScrollPanel from '../BoundedScrollPanel'
 import ChatShell from './ChatShell'
 import GuideExperience from './GuideExperience'
 import { GuideConversationState } from './guideConversation'
@@ -72,7 +73,11 @@ export default function CollaborateExperience({
       // Pre-session render (SSR / first paint): the static invitation only —
       // no interactive controls that would depend on the session id.
       return (
-        <section className="collaborate-experience collaborate-guide" aria-label="Collaborate">
+        <BoundedScrollPanel
+          className="collaborate-experience collaborate-guide"
+          viewportClassName="collaborate-experience-viewport"
+          label="Collaborate"
+        >
           <h2
             ref={headingRef as RefObject<HTMLHeadingElement>}
             tabIndex={-1}
@@ -83,7 +88,7 @@ export default function CollaborateExperience({
           <p className="collaborate-statement">{COLLABORATE_ENERGIZING_STATEMENT}</p>
           <p className="guide-disclosure">{COLLABORATE_GUIDE_DISCLOSURE}</p>
           <ContactActions contact={COLLABORATE_GUIDE_CONTACT} />
-        </section>
+        </BoundedScrollPanel>
       )
     }
     if (guide.view === 'chat') {
@@ -138,7 +143,11 @@ function ScriptedInvitation({
   const selectedStarter = getCollaborateStarter(selectedStarterId)
 
   return (
-    <section className="collaborate-experience" aria-label="Collaborate">
+    <BoundedScrollPanel
+      className="collaborate-experience"
+      viewportClassName="collaborate-experience-viewport"
+      label="Collaborate"
+    >
       <h2
         ref={headingRef as RefObject<HTMLHeadingElement>}
         tabIndex={-1}
@@ -165,6 +174,6 @@ function ScriptedInvitation({
         </>
       )}
       <ContactActions contact={COLLABORATE_CONTACT} />
-    </section>
+    </BoundedScrollPanel>
   )
 }

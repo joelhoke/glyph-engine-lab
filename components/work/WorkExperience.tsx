@@ -10,6 +10,7 @@ import {
   WorkSlide,
 } from '../../content/work'
 import { AnalyticsEvent } from '../../engine/analytics'
+import BoundedScrollPanel from '../BoundedScrollPanel'
 import WorkStoryView from './WorkStory'
 
 type WorkExperienceProps = {
@@ -47,13 +48,14 @@ export default function WorkExperience({
   const mark = getWorkSlideMark(slide)
   const slideTitle = getWorkSlideTitle(slide)
   const slideHeadingRef = useRef<HTMLHeadingElement | null>(null)
-  const panelRef = useRef<HTMLElement | null>(null)
+  // The INNER viewport of the scroll panel — the element that scrolls.
+  const panelRef = useRef<HTMLDivElement | null>(null)
   const hasMountedRef = useRef(false)
 
-  // Slide change: reset the panel's own scroll position (the card is the
-  // scroll container), move focus to the new slide heading without
-  // scrolling, and extend the document title. The document and foreground
-  // shell must not move — never scroll the heading into view here.
+  // Slide change: reset the viewport's scroll position, move focus to the
+  // new slide heading without scrolling, and extend the document title. The
+  // document and foreground shell must not move — never scroll the heading
+  // into view here.
   // Expansion/lightbox state lives inside WorkStoryView, which remounts on
   // slide change (key={slide id}) — so both close automatically. The first
   // render is skipped — entering the mode is handled by the M3 mode-level
@@ -92,11 +94,12 @@ export default function WorkExperience({
   }
 
   return (
-    <section
+    <BoundedScrollPanel
       className="work-experience"
-      aria-label="Work case studies"
+      viewportClassName="work-experience-viewport"
+      label="Work case studies"
       onKeyDown={handleKeyDown}
-      ref={panelRef}
+      viewportRef={panelRef}
     >
       <div className="work-card-header">
         <h2
@@ -167,6 +170,6 @@ export default function WorkExperience({
           </button>
         </div>
       )}
-    </section>
+    </BoundedScrollPanel>
   )
 }
