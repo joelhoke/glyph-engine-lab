@@ -91,6 +91,7 @@ export type AnalyticsEvent =
   | { name: 'effect_change'; params: { mode: AmbientMode } }
   | { name: 'source_change'; params: { source: SourceChange } }
   | { name: 'tier_transition'; params: { from_tier: number; to_tier: number } }
+  | { name: 'collaborate_guide_answered'; params: { topic: string; model_class: string } }
 
 /** Parameter keys each event may carry — anything else is stripped. */
 const ALLOWED_PARAMS: Record<AnalyticsEvent['name'], readonly string[]> = {
@@ -103,6 +104,7 @@ const ALLOWED_PARAMS: Record<AnalyticsEvent['name'], readonly string[]> = {
   effect_change: ['mode'],
   source_change: ['source'],
   tier_transition: ['from_tier', 'to_tier'],
+  collaborate_guide_answered: ['topic', 'model_class'],
 }
 
 /** Keys that must never appear in an event payload (defense in depth). */
