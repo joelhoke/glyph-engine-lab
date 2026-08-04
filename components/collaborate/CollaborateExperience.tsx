@@ -1,15 +1,20 @@
 'use client'
 
-import { RefObject, useEffect, useState } from 'react'
+import { RefObject } from 'react'
 import {
+  COLLABORATE_AI_GUIDE,
   COLLABORATE_CONTACT,
   COLLABORATE_ENERGIZING_STATEMENT,
   COLLABORATE_HEADLINE,
   COLLABORATE_SHOW_STARTERS,
   CONVERSATION_STARTERS,
+  CollaborateTopic,
   getCollaborateStarter,
 } from '../../content/collaborate'
+import { AnalyticsEvent } from '../../engine/analytics'
 import ConversationStarter from './ConversationStarter'
+import ContactActions from './ContactActions'
+import GuideExperience from './GuideExperience'
 
 type CollaborateExperienceProps = {
   /** Controlled starter selection (owned by PortfolioExperience so the same
@@ -18,54 +23,61 @@ type CollaborateExperienceProps = {
   onSelectStarter: (id: string) => void
   /** Mode-level focus target (owned by PortfolioExperience's focus management). */
   headingRef: RefObject<HTMLHeadingElement | null>
+  /** Guide mode only: reports the latest answer's canvas topic upward. */
+  onGuideTopic?: (topic: CollaborateTopic | null) => void
+  /** Guide mode only: consented, metadata-only analytics. */
+  onTrackEvent?: (event: AnalyticsEvent) => void
 }
 
-type CopyState = 'idle' | 'success' | 'failure'
-
 /**
- * Conversation invitation surface: a headline, a statement about energizing
- * collaboration, three keyboard-accessible starters, and two contact routes.
- * Starter selection only announces its reply via aria-live — focus stays
- * where the user put it. The primary action is a plain mailto: link (works
- * without JavaScript); copy-to-clipboard is progressive enhancement, falling
- * back to the address as selectable text when the Clipboard API is missing
- * or the write fails. Everything here is readable with the canvas disabled.
+ * Conversation invitation surface. Two variants behind content flags:
+ *
+ * - COLLABORATE_AI_GUIDE on: the conversational AI guide (GuideExperience).
+ * - Otherwise (production today): a headline, a statement about energizing
+ *   collaboration, the scripted starters (gated by COLLABORATE_SHOW_STARTERS),
+ *   and the two contact routes. Starter selection only announces its reply
+ *   via aria-live — focus stays where the user put it.
+ *
+ * Everything here is readable with the canvas disabled.
  */
 export default function CollaborateExperience({
   selectedStarterId,
   onSelectStarter,
   headingRef,
+  onGuideTopic,
+  onTrackEvent,
 }: CollaborateExperienceProps) {
-  const selectedStarter = getCollaborateStarter(selectedStarterId)
-  const [copyState, setCopyState] = useState<CopyState>('idle')
-
-  // Clipboard availability is only known on the client, after hydration —
-  // detecting it in an effect keeps the SSR/no-JS render (selectable address
-  // text) free of hydration mismatches.
-  const [clipboardAvailable, setClipboardAvailable] = useState(false)
-  useEffect(() => {
-    setClipboardAvailable(
-      typeof navigator !== 'undefined' &&
-        typeof navigator.clipboard?.writeText === 'function',
+  if (COLLABORATE_AI_GUIDE) {
+    return (
+      <GuideExperience
+        headingRef={headingRef}
+        onGuideTopic={onGuideTopic}
+        onTrackEvent={onTrackEvent}
+      />
     )
-  }, [])
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(COLLABORATE_CONTACT.email)
-      setCopyState('success')
-    } catch {
-      setCopyState('failure')
-    }
   }
+  return (
+    <ScriptedInvitation
+      selectedStarterId={selectedStarterId}
+      onSelectStarter={onSelectStarter}
+      headingRef={headingRef}
+    />
+  )
+}
 
-  const showAddressText = !clipboardAvailable || copyState === 'failure'
-  const copyFeedback =
-    copyState === 'success'
-      ? COLLABORATE_CONTACT.copySuccessMessage
-      : copyState === 'failure'
-        ? COLLABORATE_CONTACT.copyFailureMessage
-        : ''
+type ScriptedInvitationProps = {
+  selectedStarterId: string | null
+  onSelectStarter: (id: string) => void
+  headingRef: RefObject<HTMLHeadingElement | null>
+}
+
+/** The original scripted experience — unchanged while the guide is gated. */
+function ScriptedInvitation({
+  selectedStarterId,
+  onSelectStarter,
+  headingRef,
+}: ScriptedInvitationProps) {
+  const selectedStarter = getCollaborateStarter(selectedStarterId)
 
   return (
     <section className="collaborate-experience" aria-label="Collaborate">
@@ -94,24 +106,7 @@ export default function CollaborateExperience({
           </p>
         </>
       )}
-      <div className="collaborate-contact">
-        <a className="collaborate-primary-action" href={COLLABORATE_CONTACT.mailtoUrl}>
-          {COLLABORATE_CONTACT.primaryLabel}
-        </a>
-        {clipboardAvailable && (
-          <button type="button" className="collaborate-copy-button" onClick={handleCopy}>
-            {COLLABORATE_CONTACT.copyLabel}
-          </button>
-        )}
-      </div>
-      <p className="collaborate-copy-feedback" role="status">
-        {copyFeedback}
-      </p>
-      {showAddressText && (
-        <p className="collaborate-address">
-          <span className="collaborate-address-value">{COLLABORATE_CONTACT.email}</span>
-        </p>
-      )}
+      <ContactActions contact={COLLABORATE_CONTACT} />
     </section>
   )
 }

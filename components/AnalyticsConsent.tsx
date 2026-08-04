@@ -327,6 +327,16 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
                 them. Optional feedback submissions are stored server-side for
                 180 days with an optional reply email — no other personal data.
               </p>
+              <p className="consent-copy">
+                The AI guide to Joel sends collaborate messages to the server,
+                where approved providers (Cloudflare AI Gateway; OpenAI and
+                DeepSeek hosted routes) generate answers. Guide conversations
+                are ephemeral by default and never sent to analytics. Sharing
+                one is optional and stores the transcript for 180 days with an
+                optional reply email. OpenAI API content isn’t used for
+                training but may be retained up to 30 days for abuse
+                monitoring. Please don’t submit confidential information.
+              </p>
               <div className="consent-actions">
                 <button
                   type="button"

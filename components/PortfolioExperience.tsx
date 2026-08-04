@@ -20,10 +20,11 @@ import {
   COLLABORATE_HEADLINE,
   COLLABORATE_SHOW_STARTERS,
   CONVERSATION_STARTERS,
+  CollaborateTopic,
   getCollaborateStarter,
   resolveCollaborateScene,
 } from '../content/collaborate'
-import { formatExperienceHash, parseExperienceHash } from '../engine/experienceHash'
+import { formatExperienceHash, parseExperienceHashTarget } from '../engine/experienceHash'
 import {
   createDefaultDiagnosticsSnapshot,
   SceneDiagnosticsSnapshot,
@@ -245,6 +246,10 @@ export default function PortfolioExperience() {
   // CollaborateExperience) so the same state also drives the canvas descriptor.
   const [collaborateStarterId, setCollaborateStarterId] = useState<string | null>(null)
 
+  // Latest guide answer topic, reported up from CollaborateExperience so the
+  // canvas morphs to the authored per-topic treatment (null = starter/baseline).
+  const [collaborateGuideTopic, setCollaborateGuideTopic] = useState<CollaborateTopic | null>(null)
+
   // Sealed analytics client (Stage 5): no-op until the visitor opts in via
   // the consent UI; every track call is silent on failure.
   const analyticsClientRef = useRef<AnalyticsClient | null>(null)
@@ -271,14 +276,16 @@ export default function PortfolioExperience() {
   }, [workSlideIndex, displayed])
 
   // Resolved collaborate scene: the collaborate baseline merged with the
-  // selected starter's glyph phrase (baseline kept when nothing is selected).
+  // selected starter's glyph phrase, or — when the guide has answered — the
+  // authored treatment for the latest answer's topic (topic wins).
   const collaborateDescriptor = useMemo(
     () =>
       resolveCollaborateScene(
         EXPERIENCE_SCENES.collaborate,
         getCollaborateStarter(collaborateStarterId),
+        collaborateGuideTopic,
       ),
-    [collaborateStarterId],
+    [collaborateStarterId, collaborateGuideTopic],
   )
 
   useEffect(() => {
@@ -806,13 +813,21 @@ export default function PortfolioExperience() {
   }
 
   // Deep links: resolve the initial hash (skipping the intro) and keep the
-  // mode in sync with back/forward navigation.
+  // mode in sync with back/forward navigation. `#work/<storyId>` deep links
+  // also select that story's project slide; unknown story ids degrade to the
+  // bare work mode (slide untouched).
   useEffect(() => {
     const applyHash = () => {
-      const mode = parseExperienceHash(window.location.hash)
-      if (mode) {
-        setSelected(mode)
-        setExperience(mode)
+      const target = parseExperienceHashTarget(window.location.hash)
+      if (target) {
+        setSelected(target.key)
+        setExperience(target.key)
+        if (target.key === 'work' && target.storyId) {
+          const index = WORK_SLIDES.findIndex(
+            (slide) => slide.kind === 'project' && slide.story.id === target.storyId,
+          )
+          if (index >= 0) setWorkSlideIndex(index)
+        }
       }
     }
     applyHash()
@@ -1393,7 +1408,9 @@ export default function PortfolioExperience() {
           displayed === 'work'
             ? `work/${getWorkSlideId(getWorkSlide(workSlideIndex))}`
             : displayed === 'collaborate'
-              ? `collaborate/${collaborateStarterId ?? 'default'}`
+              ? `collaborate/${collaborateStarterId ?? 'default'}${
+                  collaborateGuideTopic ? `/${collaborateGuideTopic}` : ''
+                }`
               : displayed
         }
         mouseR={sceneConfig.mouseR}
@@ -1463,6 +1480,8 @@ export default function PortfolioExperience() {
                 selectedStarterId={collaborateStarterId}
                 onSelectStarter={setCollaborateStarterId}
                 headingRef={modeHeadingRef}
+                onGuideTopic={setCollaborateGuideTopic}
+                onTrackEvent={trackEvent}
               />
             ) : (
               <VibeExperience
@@ -1504,11 +1523,14 @@ export default function PortfolioExperience() {
                     View this confidential case study
                   </a>
                 ) : (
-                  slide.story.links.map((link) => (
-                    <a key={link.url} href={link.url}>
-                      {link.label}
-                    </a>
-                  ))
+                  <>
+                    <a href={`#work/${slide.story.id}`}>View this case study</a>
+                    {slide.story.links.map((link) => (
+                      <a key={link.url} href={link.url}>
+                        {link.label}
+                      </a>
+                    ))}
+                  </>
                 )}
               </article>
             ),

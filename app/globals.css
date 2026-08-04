@@ -2259,6 +2259,421 @@ button:focus-visible {
   }
 }
 
+/* --- Collaborate AI guide (preview-only, behind COLLABORATE_AI_GUIDE) --- */
+
+.collaborate-guide {
+  text-align: left;
+  align-items: stretch;
+}
+
+.collaborate-guide .collaborate-heading,
+.collaborate-guide .collaborate-statement,
+.collaborate-guide .guide-disclosure {
+  text-align: center;
+}
+
+.collaborate-guide .conversation-starters,
+.collaborate-guide .collaborate-contact {
+  justify-content: center;
+}
+
+.collaborate-guide .collaborate-copy-feedback,
+.collaborate-guide .collaborate-address {
+  align-self: center;
+  text-align: center;
+}
+
+.guide-disclosure {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--color-warm-text);
+  opacity: 0.75;
+}
+
+.guide-log {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  width: 100%;
+}
+
+.guide-turn-user {
+  margin: 0;
+  align-self: flex-end;
+  max-width: 34rem;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--color-warm-strong);
+  background: var(--color-surface-warm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 12px;
+  padding: 0.6rem 0.9rem;
+}
+
+.guide-turn-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-warm-text);
+  opacity: 0.8;
+  margin-bottom: 0.2rem;
+}
+
+.guide-answer {
+  align-self: stretch;
+  background: var(--color-surface-warm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.guide-answer:focus {
+  outline: none;
+}
+
+.guide-answer:focus-visible {
+  outline: 2px solid var(--color-warm);
+  outline-offset: 3px;
+}
+
+.guide-answer-text {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.75;
+  color: var(--color-warm-strong);
+}
+
+.guide-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.guide-source {
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+  padding: 0.3rem 0.7rem;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-warm-panel);
+  color: var(--color-warm-text);
+  text-decoration: none;
+}
+
+a.guide-source:hover,
+a.guide-source:focus-visible {
+  color: var(--color-warm-strong);
+  border-color: var(--color-warm);
+}
+
+.guide-followups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.guide-followup {
+  font: inherit;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+  padding: 0.55rem 1rem;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-warm-text);
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+.guide-followup:hover,
+.guide-followup:focus-visible {
+  color: var(--color-warm-strong);
+  background: var(--color-input-bg);
+  border-color: var(--color-warm);
+}
+
+.guide-followup:disabled,
+.conversation-starter:disabled,
+.guide-submit:disabled,
+.guide-retry:disabled,
+.guide-share-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.guide-loading {
+  margin: 0;
+  align-self: center;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  color: var(--color-warm-text);
+  /* CSS-only pulse; the global prefers-reduced-motion kill-switch covers it. */
+  animation: guide-loading-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes guide-loading-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.guide-error {
+  align-self: stretch;
+  border: 1px solid var(--color-warm);
+  border-radius: 12px;
+  background: var(--color-surface-warm);
+  padding: 0.8rem 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.guide-error p {
+  margin: 0;
+  flex: 1 1 16rem;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--color-warm-strong);
+}
+
+.guide-error a {
+  color: var(--color-warm-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.guide-retry {
+  font: inherit;
+  font-size: 0.8rem;
+  letter-spacing: 0.03em;
+  padding: 0.55rem 1.1rem;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-warm-panel);
+  color: var(--color-warm-text);
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+.guide-retry:hover,
+.guide-retry:focus-visible {
+  color: var(--color-warm-strong);
+  border-color: var(--color-warm);
+}
+
+.guide-limit {
+  margin: 0;
+  align-self: center;
+  text-align: center;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--color-warm-text);
+}
+
+.guide-input-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+.guide-input-label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-warm-text);
+}
+
+.guide-input-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+
+.guide-input {
+  font: inherit;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  flex: 1 1 auto;
+  min-width: 0;
+  resize: vertical;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  padding: 0.6rem 0.8rem;
+}
+
+.guide-input:focus-visible {
+  outline: 2px solid var(--color-warm);
+  outline-offset: 2px;
+  border-color: var(--color-warm);
+}
+
+.guide-input::placeholder {
+  color: var(--color-warm-text);
+  opacity: 0.6;
+}
+
+.guide-submit {
+  font: inherit;
+  font-size: 0.85rem;
+  letter-spacing: 0.03em;
+  padding: 0.6rem 1.4rem;
+  min-height: 44px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 1px solid var(--color-warm);
+  background: var(--color-warm);
+  color: var(--color-on-warm);
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.guide-submit:hover:not(:disabled),
+.guide-submit:focus-visible {
+  background: var(--color-warm-strong);
+}
+
+.guide-share {
+  align-self: stretch;
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.guide-share-consent {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 44px;
+  font-size: 0.88rem;
+  color: var(--color-warm-strong);
+  cursor: pointer;
+}
+
+.guide-share-consent input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--color-warm);
+}
+
+.guide-share-note {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--color-warm-text);
+  opacity: 0.85;
+}
+
+.guide-share-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.guide-share-email-label {
+  flex: 0 0 100%;
+  font-size: 0.78rem;
+  color: var(--color-warm-text);
+}
+
+.guide-share-email {
+  font: inherit;
+  font-size: 0.85rem;
+  flex: 1 1 14rem;
+  min-width: 0;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  padding: 0.5rem 1rem;
+}
+
+.guide-share-email:focus-visible {
+  outline: 2px solid var(--color-warm);
+  outline-offset: 2px;
+  border-color: var(--color-warm);
+}
+
+.guide-share-button {
+  font: inherit;
+  font-size: 0.82rem;
+  letter-spacing: 0.03em;
+  padding: 0.55rem 1.2rem;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-warm);
+  color: var(--color-warm-text);
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+.guide-share-button:hover:not(:disabled),
+.guide-share-button:focus-visible {
+  color: var(--color-warm-strong);
+  border-color: var(--color-warm);
+}
+
+.guide-share-error {
+  flex: 0 0 100%;
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--color-warm-strong);
+}
+
+.guide-share-receipt {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.65;
+  color: var(--color-warm-strong);
+}
+
+.guide-share-receipt-id {
+  font-family: var(--font-mono);
+  user-select: all;
+  border-bottom: 1px solid var(--color-warm);
+  padding-bottom: 1px;
+}
+
+@media (max-width: 560px) {
+  .guide-input-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .guide-submit,
+  .guide-share-button,
+  .guide-share-email,
+  .guide-retry {
+    width: 100%;
+    flex: 1 1 auto;
+  }
+}
+
 /* --- Vibe experience (M5) --- */
 
 .vibe-experience {
