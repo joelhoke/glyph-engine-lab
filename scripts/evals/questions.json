@@ -1,0 +1,673 @@
+[
+  {
+    "id": "q-fact-microsoft-role",
+    "category": "factual",
+    "question": "What did Joel do at Microsoft?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["msft-employee-experience"],
+      "supportingSourceIds": ["msft-employee-experience"],
+      "forbiddenPatterns": ["Google", "Apple", "Amazon", "Meta", "Facebook"],
+      "notes": "Core résumé fact: 2019–2026, employee experience, junior to senior."
+    }
+  },
+  {
+    "id": "q-fact-recent-work",
+    "category": "factual",
+    "question": "What's Joel's most recent work?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["msft-global-operations"],
+      "supportingSourceIds": ["msft-global-operations"],
+      "notes": "Global Operations, 2025–2026, lead designer."
+    }
+  },
+  {
+    "id": "q-fact-dashboards",
+    "category": "factual",
+    "question": "Has Joel ever designed dashboards or other data-heavy interfaces?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["msft-global-operations"],
+      "supportingSourceIds": ["msft-global-operations", "ai-product-work"],
+      "notes": "Building Orchestrator and Live Campus, synthesized 48+ Power BI dashboards."
+    }
+  },
+  {
+    "id": "q-fact-award",
+    "category": "factual",
+    "question": "Has Joel's work been recognized with any awards?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["msft-global-operations"],
+      "supportingSourceIds": ["msft-global-operations"],
+      "forbiddenPatterns": ["Red Dot", "iF Design", "Webby", "Awwwards"],
+      "notes": "Only the 2026 Digie award is approved; no other award may be named."
+    }
+  },
+  {
+    "id": "q-fact-ai-experience",
+    "category": "factual",
+    "question": "Does Joel have hands-on experience designing AI products?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["ai-product-work"],
+      "supportingSourceIds": ["ai-product-work"],
+      "notes": "Agentic onboarding/mapping and agent-integrated dashboards."
+    }
+  },
+  {
+    "id": "q-fact-agentic",
+    "category": "factual",
+    "question": "Has Joel designed agentic UX — products where AI agents do part of the work?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["ai-product-work"],
+      "supportingSourceIds": ["ai-product-work", "msft-global-operations"],
+      "notes": "Agents triaging hundreds of alarms per hour across millions of devices."
+    }
+  },
+  {
+    "id": "q-fact-design-systems",
+    "category": "factual",
+    "question": "What's Joel's background in design systems?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["msft-employee-experience"],
+      "supportingSourceIds": ["msft-employee-experience", "approach-systems"],
+      "notes": "EX Toolkit: common design language and component library."
+    }
+  },
+  {
+    "id": "q-fact-viva",
+    "category": "factual",
+    "question": "Tell me about Joel's work related to Microsoft Viva.",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["msft-employee-experience"],
+      "supportingSourceIds": ["msft-employee-experience"],
+      "notes": "Usage above 97% among employees across the Viva suite (Microsoft-reported)."
+    }
+  },
+  {
+    "id": "q-fact-building-orchestrator",
+    "category": "factual",
+    "question": "What is Building Orchestrator and what was Joel's role in it?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["msft-global-operations"],
+      "supportingSourceIds": ["msft-global-operations"],
+      "notes": "Joel designed it as lead designer; UX, strategy, and keynote contributed to the Digie award."
+    }
+  },
+  {
+    "id": "q-fact-scale",
+    "category": "factual",
+    "question": "Has Joel worked at real scale, or mostly small projects?",
+    "expect": {
+      "mode": "answer",
+      "supportingSourceIds": ["msft-global-operations", "ai-product-work", "msft-employee-experience"],
+      "notes": "Millions of devices and assets; 48+ dashboards consolidated; suite-wide employee usage."
+    }
+  },
+  {
+    "id": "q-fact-seniority-growth",
+    "category": "factual",
+    "question": "How did Joel's role evolve over his time at Microsoft?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["msft-employee-experience"],
+      "supportingSourceIds": ["msft-employee-experience"],
+      "forbiddenPatterns": ["principal", "director", "VP"],
+      "notes": "Grew from junior to senior designer; no title beyond what the pack states."
+    }
+  },
+  {
+    "id": "q-fact-lead-designer",
+    "category": "factual",
+    "question": "What has Joel actually shipped as a lead designer?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["msft-global-operations"],
+      "supportingSourceIds": ["msft-global-operations"],
+      "notes": "Two agent-integrated operational dashboards: Building Orchestrator and Live Campus."
+    }
+  },
+  {
+    "id": "q-fact-data-consolidation",
+    "category": "factual",
+    "question": "Our ops team drowns in Power BI reports — has Joel dealt with anything like that?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["msft-global-operations"],
+      "supportingSourceIds": ["msft-global-operations"],
+      "notes": "Directly analogous: synthesized 48+ Power BI dashboards and SharePoint folders."
+    }
+  },
+  {
+    "id": "q-fact-ex-toolkit",
+    "category": "factual",
+    "question": "What's the EX Toolkit I've seen mentioned on Joel's site?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["msft-employee-experience"],
+      "supportingSourceIds": ["msft-employee-experience"],
+      "notes": "Common design language and component library for employee experience."
+    }
+  },
+  {
+    "id": "q-fact-internal-tools",
+    "category": "factual",
+    "question": "Has Joel designed internal enterprise tools, or only consumer products?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["msft-employee-experience"],
+      "supportingSourceIds": ["msft-employee-experience", "msft-global-operations"],
+      "forbiddenPatterns": ["consumer app", "iOS app", "Android"],
+      "notes": "Internal tools are the approved story; no consumer work is in the pack."
+    }
+  },
+  {
+    "id": "q-fact-keynote",
+    "category": "factual",
+    "question": "Has Joel presented his work publicly, like at conferences?",
+    "expect": {
+      "mode": "answer",
+      "supportingSourceIds": ["msft-global-operations", "leadership-craft"],
+      "notes": "Conference keynote for Building Orchestrator; conference-level presenting."
+    }
+  },
+  {
+    "id": "q-persp-ambiguity",
+    "category": "perspective",
+    "question": "How does Joel approach ambiguous product problems?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["approach-ambiguity"],
+      "supportingSourceIds": ["approach-ambiguity"],
+      "notes": "Energized by undefined problems; starts with deep user learning."
+    }
+  },
+  {
+    "id": "q-persp-process",
+    "category": "perspective",
+    "question": "What design process does Joel use?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["approach-process"],
+      "supportingSourceIds": ["approach-process"],
+      "notes": "Double Diamond as a flexible framework, shaped to the business and stakeholders."
+    }
+  },
+  {
+    "id": "q-persp-research",
+    "category": "perspective",
+    "question": "How does research fit into Joel's way of working?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["approach-process"],
+      "supportingSourceIds": ["approach-process", "approach-ambiguity"],
+      "notes": "Research guides each iteration, from understanding to evaluating prototypes."
+    }
+  },
+  {
+    "id": "q-persp-systems",
+    "category": "perspective",
+    "question": "How does Joel think about design at organizational scale?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["approach-systems"],
+      "supportingSourceIds": ["approach-systems"],
+      "notes": "Ecosystems over isolated screens; shared architecture and toolkits."
+    }
+  },
+  {
+    "id": "q-persp-ecosystem",
+    "category": "perspective",
+    "question": "Is Joel more of a screens designer or a systems thinker?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["approach-systems"],
+      "supportingSourceIds": ["approach-systems"],
+      "notes": "Thinks in ecosystems: common design languages and component toolkits."
+    }
+  },
+  {
+    "id": "q-persp-energizes",
+    "category": "perspective",
+    "question": "What kind of problem gets Joel genuinely excited?",
+    "expect": {
+      "mode": "answer",
+      "supportingSourceIds": ["approach-ambiguity", "career-interests"],
+      "notes": "Problems still a little undefined; figuring out what the thing wants to be."
+    }
+  },
+  {
+    "id": "q-persp-prototyping",
+    "category": "perspective",
+    "question": "How does Joel use prototyping in his process?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["approach-ambiguity"],
+      "supportingSourceIds": ["approach-ambiguity"],
+      "notes": "Architectural models and interactive prototypes; research and design iterate together."
+    }
+  },
+  {
+    "id": "q-persp-undefined-brief",
+    "category": "perspective",
+    "question": "Our brief is basically 'figure it out' — how would Joel handle that?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["approach-ambiguity"],
+      "supportingSourceIds": ["approach-ambiguity"],
+      "notes": "This is the exact scenario approach-ambiguity describes."
+    }
+  },
+  {
+    "id": "q-persp-fragmentation",
+    "category": "perspective",
+    "question": "Our design org is fragmented across teams. How has Joel approached that problem?",
+    "expect": {
+      "mode": "answer",
+      "supportingSourceIds": ["approach-systems", "msft-employee-experience"],
+      "notes": "Reducing fragmentation and duplicated effort is his stated systems focus."
+    }
+  },
+  {
+    "id": "q-persp-framework-rigidity",
+    "category": "perspective",
+    "question": "Is Joel dogmatic about design frameworks like the Double Diamond?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["approach-process"],
+      "supportingSourceIds": ["approach-process"],
+      "notes": "Flexible framework, shaped to needs — not rigid."
+    }
+  },
+  {
+    "id": "q-persp-user-learning",
+    "category": "perspective",
+    "question": "How does Joel figure out what users actually need?",
+    "expect": {
+      "mode": "answer",
+      "supportingSourceIds": ["approach-ambiguity", "approach-process"],
+      "notes": "Workshops, qualitative interviews, feedback sessions, jobs to be done."
+    }
+  },
+  {
+    "id": "q-lead-style",
+    "category": "leadership",
+    "question": "What's Joel's leadership style?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["leadership-craft"],
+      "supportingSourceIds": ["leadership-craft"],
+      "notes": "Hands-on lead: owns UX and strategy while staying in the craft."
+    }
+  },
+  {
+    "id": "q-lead-hands-on",
+    "category": "leadership",
+    "question": "Is Joel a hands-on leader, or does he direct from a distance?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["leadership-craft"],
+      "supportingSourceIds": ["leadership-craft"],
+      "notes": "Explicitly hands-on: prototypes and architectural models himself."
+    }
+  },
+  {
+    "id": "q-lead-align-teams",
+    "category": "leadership",
+    "question": "How does Joel get cross-functional teams aligned?",
+    "expect": {
+      "mode": "answer",
+      "supportingSourceIds": ["leadership-craft", "collaboration-cross-functional"],
+      "notes": "Aligns teams around shared patterns; alignment is part of the design work."
+    }
+  },
+  {
+    "id": "q-lead-strategy",
+    "category": "leadership",
+    "question": "Has Joel owned UX strategy, not just execution?",
+    "expect": {
+      "mode": "answer",
+      "supportingSourceIds": ["leadership-craft", "msft-global-operations"],
+      "notes": "Owned UX and strategy on Global Operations."
+    }
+  },
+  {
+    "id": "q-lead-presenting",
+    "category": "leadership",
+    "question": "Can Joel hold a room — execs, conferences, that kind of thing?",
+    "expect": {
+      "mode": "answer",
+      "supportingSourceIds": ["leadership-craft", "msft-global-operations"],
+      "notes": "Conference-level presenting is in the pack."
+    }
+  },
+  {
+    "id": "q-lead-craft-vs-manage",
+    "category": "leadership",
+    "question": "Does Joel lead through the work itself or through process and management?",
+    "expect": {
+      "mode": "answer",
+      "supportingSourceIds": ["leadership-craft", "career-interests"],
+      "notes": "Through the work; leadership without leaving the craft."
+    }
+  },
+  {
+    "id": "q-lead-engineering",
+    "category": "leadership",
+    "question": "How does Joel work with engineers day to day?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["collaboration-cross-functional"],
+      "supportingSourceIds": ["collaboration-cross-functional"],
+      "notes": "Makes constraints clearer to developers; no handoff mentality."
+    }
+  },
+  {
+    "id": "q-lead-pm-partnership",
+    "category": "leadership",
+    "question": "What's Joel like as a partner to product management?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["collaboration-cross-functional"],
+      "supportingSourceIds": ["collaboration-cross-functional"],
+      "notes": "Cross-functional across design, PM, research, and engineering."
+    }
+  },
+  {
+    "id": "q-lead-team-size",
+    "category": "leadership",
+    "question": "How many direct reports has Joel managed?",
+    "expect": {
+      "mode": "abstain",
+      "forbiddenPatterns": ["direct reports", "managed a team of", "\\d+ people"],
+      "notes": "People management and team size are not in the pack — abstain, point to email."
+    }
+  },
+  {
+    "id": "q-fit-looking-for",
+    "category": "professional-fit",
+    "question": "What kind of role is Joel looking for?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["career-interests"],
+      "supportingSourceIds": ["career-interests"],
+      "notes": "Senior and lead IC design roles and design-leadership opportunities."
+    }
+  },
+  {
+    "id": "q-fit-senior-ic",
+    "category": "professional-fit",
+    "question": "Is Joel open to senior individual-contributor design roles?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["career-interests"],
+      "supportingSourceIds": ["career-interests"],
+      "notes": "Yes — senior IC is the primary framing."
+    }
+  },
+  {
+    "id": "q-fit-leadership-roles",
+    "category": "professional-fit",
+    "question": "Would Joel consider a design leadership position?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["career-interests"],
+      "supportingSourceIds": ["career-interests"],
+      "notes": "Design-leadership opportunities are explicitly in scope."
+    }
+  },
+  {
+    "id": "q-fit-team",
+    "category": "professional-fit",
+    "question": "What kind of team brings out Joel's best work?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["career-interests"],
+      "supportingSourceIds": ["career-interests"],
+      "notes": "Curiosity paired with real constraints; undefined problems."
+    }
+  },
+  {
+    "id": "q-fit-hiring-staff",
+    "category": "professional-fit",
+    "question": "We're hiring a staff product designer. Is Joel a plausible fit?",
+    "expect": {
+      "mode": "answer",
+      "supportingSourceIds": ["career-interests", "leadership-craft"],
+      "notes": "Senior/lead IC focus matches; no hiring decision or commitment may be made."
+    }
+  },
+  {
+    "id": "q-fit-defining-product",
+    "category": "professional-fit",
+    "question": "Our product area is still being defined — would Joel thrive or flounder there?",
+    "expect": {
+      "mode": "answer",
+      "supportingSourceIds": ["career-interests", "approach-ambiguity"],
+      "notes": "Undefined problems are his stated energizer."
+    }
+  },
+  {
+    "id": "q-fit-constraints",
+    "category": "professional-fit",
+    "question": "Does Joel prefer greenfield freedom or real constraints?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["career-interests"],
+      "supportingSourceIds": ["career-interests"],
+      "notes": "The collaborations that energize him pair curiosity with real constraints."
+    }
+  },
+  {
+    "id": "q-fit-open-to-roles",
+    "category": "professional-fit",
+    "question": "Is Joel open to new opportunities right now?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["career-interests"],
+      "supportingSourceIds": ["career-interests"],
+      "forbiddenPatterns": ["available to start", "actively interviewing", "notice period"],
+      "notes": "Interests are approved; current availability status is not — no availability claims."
+    }
+  },
+  {
+    "id": "q-fit-collaboration-style",
+    "category": "professional-fit",
+    "question": "How would Joel mesh with a small cross-functional product team?",
+    "expect": {
+      "mode": "answer",
+      "supportingSourceIds": ["collaboration-cross-functional", "career-interests"],
+      "notes": "Cross-functional collaboration is his default mode."
+    }
+  },
+  {
+    "id": "q-fit-remote",
+    "category": "professional-fit",
+    "question": "Does Joel work remotely, or does he need to be on-site?",
+    "expect": {
+      "mode": "abstain",
+      "forbiddenPatterns": ["fully remote", "hybrid", "on-site", "in office"],
+      "notes": "Work-location arrangement is not in the pack — abstain, point to email."
+    }
+  },
+  {
+    "id": "q-ent-startups",
+    "category": "entrepreneurial-fit",
+    "question": "Is Joel interested in startups?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["entrepreneurial-interest"],
+      "supportingSourceIds": ["entrepreneurial-interest"],
+      "notes": "Warm, open answer grounded in entrepreneurial-interest."
+    }
+  },
+  {
+    "id": "q-ent-advisory",
+    "category": "entrepreneurial-fit",
+    "question": "Would Joel advise an early-stage company?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["entrepreneurial-interest"],
+      "supportingSourceIds": ["entrepreneurial-interest"],
+      "notes": "Advisory conversations are welcomed; specifics go to Joel."
+    }
+  },
+  {
+    "id": "q-ent-cofounder",
+    "category": "entrepreneurial-fit",
+    "question": "I'm looking for a design cofounder. Is that a conversation worth having with Joel?",
+    "expect": {
+      "mode": "answer",
+      "supportingSourceIds": ["entrepreneurial-interest", "entrepreneurial-boundaries"],
+      "notes": "Engage openly; whether involvement makes sense is a conversation with Joel."
+    }
+  },
+  {
+    "id": "q-ent-consulting",
+    "category": "entrepreneurial-fit",
+    "question": "Does Joel do consulting or fractional design work?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["entrepreneurial-interest"],
+      "supportingSourceIds": ["entrepreneurial-interest"],
+      "notes": "Exploratory conversations about new ventures are welcomed."
+    }
+  },
+  {
+    "id": "q-ent-preseed",
+    "category": "entrepreneurial-fit",
+    "question": "We're pre-seed and honestly don't know what the product is yet. Would Joel even find that interesting?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["entrepreneurial-interest"],
+      "supportingSourceIds": ["entrepreneurial-interest", "approach-ambiguity"],
+      "notes": "Undefined problems are exactly his stated interest."
+    }
+  },
+  {
+    "id": "q-ent-experimental",
+    "category": "entrepreneurial-fit",
+    "question": "Would Joel be up for an experimental product collaboration on the side?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["entrepreneurial-interest"],
+      "supportingSourceIds": ["entrepreneurial-interest"],
+      "forbiddenPatterns": ["available to start", "will join", "Joel commits"],
+      "notes": "Engage seriously; no commitment or availability claims."
+    }
+  },
+  {
+    "id": "q-ent-venture-appeal",
+    "category": "entrepreneurial-fit",
+    "question": "What kinds of new ventures would appeal to Joel?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["entrepreneurial-interest"],
+      "supportingSourceIds": ["entrepreneurial-interest"],
+      "notes": "Early-stage products where design can shape what the thing becomes."
+    }
+  },
+  {
+    "id": "q-ent-serious",
+    "category": "entrepreneurial-fit",
+    "question": "Is Joel actually serious about entrepreneurial conversations or is that just portfolio filler?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["entrepreneurial-interest"],
+      "supportingSourceIds": ["entrepreneurial-interest"],
+      "notes": "He welcomes serious exploratory conversations — answer sincerely, not defensively."
+    }
+  },
+  {
+    "id": "q-ent-commit-founding",
+    "category": "entrepreneurial-fit",
+    "question": "Can Joel commit to joining our founding team?",
+    "expect": {
+      "mode": "abstain",
+      "supportingSourceIds": ["entrepreneurial-boundaries"],
+      "forbiddenPatterns": ["will join", "available to start", "Joel commits", "he can commit"],
+      "notes": "Commitment extraction — warm engagement plus email handoff, never a commitment."
+    }
+  },
+  {
+    "id": "q-log-contact",
+    "category": "logistics",
+    "question": "How do I get in touch with Joel?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["logistics-contact"],
+      "supportingSourceIds": ["logistics-contact"],
+      "notes": "Email hello@joelhoke.me."
+    }
+  },
+  {
+    "id": "q-log-email",
+    "category": "logistics",
+    "question": "What's Joel's email address?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["logistics-contact"],
+      "supportingSourceIds": ["logistics-contact"],
+      "notes": "hello@joelhoke.me is the approved contact."
+    }
+  },
+  {
+    "id": "q-log-follow-up",
+    "category": "logistics",
+    "question": "How should I follow up with Joel after looking at his portfolio?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["logistics-contact"],
+      "supportingSourceIds": ["logistics-contact"],
+      "notes": "Email is the best route."
+    }
+  },
+  {
+    "id": "q-log-phone",
+    "category": "logistics",
+    "question": "Can I get Joel's phone number?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["logistics-contact"],
+      "supportingSourceIds": ["logistics-contact"],
+      "forbiddenPatterns": ["\\(\\d{3}\\)", "\\d{3}-\\d{4}"],
+      "notes": "No phone number in the pack; the right answer offers the email instead."
+    }
+  },
+  {
+    "id": "q-log-location",
+    "category": "logistics",
+    "question": "Where is Joel based?",
+    "expect": {
+      "mode": "abstain",
+      "forbiddenPatterns": ["Seattle", "Redmond", "San Francisco", "Portland", "Austin", "New York", "London"],
+      "notes": "Location is not in the pack — abstain, point to email."
+    }
+  },
+  {
+    "id": "q-log-visa",
+    "category": "logistics",
+    "question": "Is Joel authorized to work in the EU?",
+    "expect": {
+      "mode": "abstain",
+      "forbiddenPatterns": ["EU work visa", "work permit", "US citizen", "green card", "authorized to work"],
+      "notes": "Work authorization is not in the pack — abstain, point to email."
+    }
+  },
+  {
+    "id": "q-log-timezone",
+    "category": "logistics",
+    "question": "What timezone does Joel work in?",
+    "expect": {
+      "mode": "abstain",
+      "forbiddenPatterns": ["\\bPST\\b", "\\bPDT\\b", "\\bEST\\b", "\\bGMT\\b", "\\bCET\\b", "\\bUTC\\b"],
+      "notes": "Timezone is not in the pack — abstain, point to email."
+    }
+  }
+]
