@@ -36,6 +36,10 @@ type CollaborateEnv = {
   AIG_TOKEN?: string
   DEEPSEEK_API_KEY?: string
   OPENAI_API_KEY?: string
+  /** Full-URL overrides — local preview/mocks only; production goes through
+   *  the AI Gateway URLs constructed from CF_ACCOUNT_ID + AIG_GATEWAY_ID. */
+  AIG_DEEPSEEK_URL?: string
+  AIG_OPENAI_URL?: string
 }
 
 const JSON_HEADERS = {
@@ -55,6 +59,8 @@ export const onRequestPost: PagesFunction<CollaborateEnv> = async (context) => {
     gatewayToken: context.env.AIG_TOKEN,
     deepseekApiKey: context.env.DEEPSEEK_API_KEY,
     openaiApiKey: context.env.OPENAI_API_KEY,
+    deepseekUrl: context.env.AIG_DEEPSEEK_URL,
+    openaiUrl: context.env.AIG_OPENAI_URL,
   }
   if (!isAdapterConfigured(config)) return json(503, { ok: false, error: 'The AI guide is unavailable.' })
 
