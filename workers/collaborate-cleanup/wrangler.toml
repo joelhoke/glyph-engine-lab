@@ -1,0 +1,28 @@
+# Daily cleanup Worker for the Collaborate AI guide's shared transcripts.
+#
+# Standalone scheduled Worker (separate from the jh-portfolio Pages project):
+# deletes expired rows from the COLLABORATE_DB D1 database once a day.
+# Shares also get deleted opportunistically on writes (see
+# functions/lib/collaborateShare.ts) — this Worker is the authoritative sweep.
+#
+# One-time setup (see workers/collaborate-cleanup/README.md):
+#   1. wrangler d1 create jh-collaborate
+#   2. wrangler d1 migrations apply jh-collaborate  (from the repo root)
+#   3. fill in database_id below, then wrangler deploy (from this directory)
+
+name = "collaborate-cleanup"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+# D1 binding — uncomment and fill in the database_id from `wrangler d1 create`.
+# The Pages project binds the SAME database as COLLABORATE_DB separately
+# (Pages dashboard → Settings → Functions → D1 database bindings).
+#
+# [[d1_databases]]
+# binding = "COLLABORATE_DB"
+# database_name = "jh-collaborate"
+# database_id = "REPLACE_WITH_DATABASE_ID"
+
+[triggers]
+# Daily at 04:17 UTC (17 4 * * *).
+crons = ["17 4 * * *"]
