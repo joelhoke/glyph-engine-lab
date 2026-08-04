@@ -295,6 +295,10 @@ for (const token of [
   '--color-error: #a12a2a',
   '--color-success: #1c6b49',
   '--color-warm: #8a3f1a',
+  '--color-chat-agent-surface: rgba(255, 255, 255, 0.94)',
+  '--color-chat-agent-border: rgba(16, 24, 38, 0.10)',
+  '--color-chat-user-surface: rgba(138, 63, 26, 0.12)',
+  '--color-chat-user-border: rgba(138, 63, 26, 0.34)',
 ]) {
   assert(lightBlock.includes(token), `light override carries exact token "${token}"`)
 }
@@ -310,6 +314,10 @@ for (const token of [
     '--color-text-muted: #c5d4ea',
     '--color-border: rgba(255, 255, 255, 0.14)',
     '--color-accent: #8abaff',
+    '--color-chat-agent-surface: rgba(6, 9, 14, 0.94)',
+    '--color-chat-agent-border: rgba(255, 255, 255, 0.10)',
+    '--color-chat-user-surface: rgba(66, 38, 29, 0.92)',
+    '--color-chat-user-border: rgba(242, 178, 138, 0.36)',
   ]) {
     assert(rootBlock.includes(token), `:root dark default carries token "${token}"`)
   }

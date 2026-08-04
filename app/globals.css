@@ -42,6 +42,13 @@
   --color-warm-text: #e9d5c8;
   --color-on-warm: #1c120c;
 
+  /* Chat color hierarchy (collaborate guide): neutral agent surfaces for
+     guide-provided content, warm-accent user surfaces for visitor content. */
+  --color-chat-agent-surface: rgba(6, 9, 14, 0.94);
+  --color-chat-agent-border: rgba(255, 255, 255, 0.10);
+  --color-chat-user-surface: rgba(66, 38, 29, 0.92);
+  --color-chat-user-border: rgba(242, 178, 138, 0.36);
+
   /* Translucent surfaces (panels, cards, overlays). */
   --color-surface-panel: rgba(8, 12, 18, 0.72);
   --color-surface-panel-soft: rgba(6, 9, 14, 0.62);
@@ -98,6 +105,13 @@
     --color-warm-text: #5a2c18;
     --color-on-warm: #ffffff;
 
+    /* Chat color hierarchy (collaborate guide): neutral agent surfaces for
+       guide-provided content, warm-accent user surfaces for visitor content. */
+    --color-chat-agent-surface: rgba(255, 255, 255, 0.94);
+    --color-chat-agent-border: rgba(16, 24, 38, 0.10);
+    --color-chat-user-surface: rgba(138, 63, 26, 0.12);
+    --color-chat-user-border: rgba(138, 63, 26, 0.34);
+
     /* Translucent surfaces. */
     --color-surface-panel: rgba(255, 255, 255, 0.78);
     --color-surface-panel-soft: rgba(255, 255, 255, 0.72);
@@ -136,6 +150,10 @@
   html.theme-ready .experience-nav-list,
   html.theme-ready .work-experience,
   html.theme-ready .collaborate-experience,
+  html.theme-ready .chat-answer,
+  html.theme-ready .chat-visitor-card,
+  html.theme-ready .chat-composer,
+  html.theme-ready .guide-followup,
   html.theme-ready .vibe-invitation-card,
   html.theme-ready .vibe-toolbar-panel,
   html.theme-ready .vibe-toolbar-capsule,
@@ -160,6 +178,10 @@
   html.theme-ready .experience-nav-list,
   html.theme-ready .work-experience,
   html.theme-ready .collaborate-experience,
+  html.theme-ready .chat-answer,
+  html.theme-ready .chat-visitor-card,
+  html.theme-ready .chat-composer,
+  html.theme-ready .guide-followup,
   html.theme-ready .vibe-invitation-card,
   html.theme-ready .vibe-toolbar-panel,
   html.theme-ready .vibe-toolbar-capsule,
@@ -2427,9 +2449,9 @@ a.guide-source:focus-visible {
   gap: 0.5rem;
 }
 
-/* Follow-up prompt buttons: the strong panel token keeps the animated canvas
-   from showing through the text; backdrop blur is layered on only as
-   progressive enhancement (the chip is legible without it). */
+/* Follow-up prompt buttons (agent-provided options): the neutral agent
+   surface keeps the animated canvas from showing through the text; backdrop
+   blur is layered on only as progressive enhancement. */
 .guide-followup {
   font: inherit;
   font-size: 0.8rem;
@@ -2437,8 +2459,8 @@ a.guide-source:focus-visible {
   padding: 0.55rem 1rem;
   min-height: 44px;
   border-radius: 999px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-panel-strong);
+  border: 1px solid var(--color-chat-agent-border);
+  background: var(--color-chat-agent-surface);
   color: var(--color-warm-text);
   cursor: pointer;
   transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
@@ -2725,6 +2747,17 @@ a.guide-source:focus-visible {
      right of the guide lane's right edge. Collapses below the tablet
      breakpoint (matches the Work layout shift at 760px). */
   --collab-lane-offset: clamp(6rem, 12vw, 11.5rem);
+  /* The ONE responsive chat stage shared by the header, transcript, prompt
+     rail, composer, and share control: ~60vw at large desktop, never less
+     than the guide/visitor offset minimum, never wider than the guttered
+     content box (≈100% at ≤760px where the offset collapses). */
+  --collab-chat-stage: min(
+    calc(100vw - var(--collab-gutter) - var(--collab-gutter)),
+    max(
+      calc(var(--collab-column) + var(--collab-lane-offset)),
+      60vw
+    )
+  );
   --collab-top-clearance: calc(env(safe-area-inset-top, 0px) + 6.5rem);
   --collab-bottom-clearance: calc(env(safe-area-inset-bottom, 0px) + 1rem);
   padding: var(--collab-top-clearance) var(--collab-gutter) var(--collab-bottom-clearance);
@@ -2808,9 +2841,11 @@ a.guide-source:focus-visible {
 }
 
 .guide-preview-actions {
+  width: 100%;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 0.6rem;
 }
 
@@ -2859,11 +2894,13 @@ a.guide-source:focus-visible {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 0.6rem;
 }
 
 .guide-preview-confirm-prompt {
   flex: 1 1 100%;
+  text-align: center;
   font-size: 0.82rem;
   line-height: 1.6;
   color: var(--color-warm-strong);
@@ -2871,9 +2908,11 @@ a.guide-source:focus-visible {
 
 /* --- Collaborate guide: chat view (behind COLLABORATE_AI_GUIDE) --- */
 
-/* Full-height host: foreground-content stops centering and hands its whole
-   box to the chat grid. */
+/* Full-height, full-width host: foreground-content stops centering, sheds
+   the inherited 960px cap, and hands its whole box to the chat grid so the
+   stage can actually reach 60vw. */
 .foreground-content-chat {
+  width: 100%;
   align-self: stretch;
   justify-content: flex-start;
   gap: 0;
@@ -2891,7 +2930,7 @@ a.guide-source:focus-visible {
 }
 
 .chat-header {
-  width: min(100%, var(--collab-column, 40rem));
+  width: min(100%, var(--collab-chat-stage));
   margin: 0 auto;
   min-width: 0;
   display: flex;
@@ -2961,20 +3000,25 @@ a.guide-source:focus-visible {
 }
 
 .chat-transcript > * {
-  width: min(100%, var(--collab-column, 40rem));
+  width: min(100%, var(--collab-chat-stage));
   margin-left: auto;
   margin-right: auto;
 }
 
-/* The conversation stage: wider than the composer column by the lane offset,
-   so the guide lane (left, max 40rem) and the visitor lane (right, max
-   29rem) read as two distinct lanes on wide screens. The offset collapses
-   to zero below the tablet breakpoint via --collab-lane-offset, and the
-   min(100%, …) keeps the stage from ever exceeding the transcript. */
-.chat-transcript > .chat-turns {
-  width: min(100%, calc(var(--collab-column, 40rem) + var(--collab-lane-offset, 0rem)));
+/* Error and session-limit cards stay on the GUIDE lane: 40rem wide, pinned
+   to the stage's left edge rather than stretched or centered across it. */
+.chat-transcript > .guide-error,
+.chat-transcript > .guide-limit {
+  width: min(100%, var(--collab-column, 40rem));
+  margin-left: max(0px, calc((100% - min(100%, var(--collab-chat-stage))) / 2));
+  margin-right: 0;
 }
 
+/* The conversation stage: the guide lane (left, max 40rem) and the visitor
+   lane (right, max 29rem) read as two distinct lanes on wide screens; the
+   lane offset collapses to zero below the tablet breakpoint via
+   --collab-lane-offset, and the min(100%, …) stage never exceeds the
+   transcript. */
 .chat-turns {
   list-style: none;
   display: flex;
@@ -3014,8 +3058,8 @@ a.guide-source:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  background: var(--color-surface-warm);
-  border: 1px solid var(--color-border-subtle);
+  background: var(--color-chat-user-surface);
+  border: 1px solid var(--color-chat-user-border);
   border-radius: 12px;
   padding: 0.875rem 1rem;
 }
@@ -3035,11 +3079,20 @@ a.guide-source:focus-visible {
   white-space: pre-wrap;
 }
 
+@media (prefers-color-scheme: light) {
+  /* The 12% warm tint lifts the visitor bubble close to the page color, where
+     warm-strong drops below 4.5:1 (~4.0:1); the deeper warm accent restores
+     ~5.7:1. Guide cards (94% white) keep warm-strong at ~4.8:1. */
+  .chat-visitor-text {
+    color: var(--color-warm);
+  }
+}
+
 .chat-answer {
   width: min(100%, var(--collab-column, 40rem));
   min-width: 0;
-  background: var(--color-surface-warm-panel);
-  border: 1px solid var(--color-border-subtle);
+  background: var(--color-chat-agent-surface);
+  border: 1px solid var(--color-chat-agent-border);
   border-radius: 12px;
   padding: 1rem 1.125rem;
   display: flex;
@@ -3068,10 +3121,11 @@ a.guide-source:focus-visible {
   flex: 0 0 auto;
 }
 
-/* Fixed bottom area: follow-up rail above the composer, the share control
-   below it — all in the same centered column, safe-area aware. */
+/* Fixed bottom area spanning the ENTIRE stage: the composer's left edge is
+   the guide lane's left edge, its right edge the visitor lane's right edge;
+   the follow-up rail and share control inherit those same outer margins. */
 .chat-bottom {
-  width: min(100%, var(--collab-column, 40rem));
+  width: min(100%, var(--collab-chat-stage));
   margin: 0 auto;
   min-width: 0;
   display: flex;
@@ -3080,12 +3134,25 @@ a.guide-source:focus-visible {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* Follow-ups: ONE horizontal row at every breakpoint (the wide stage is the
+   primary fit mechanism), scrolling horizontally only as a fallback. */
 .chat-rail {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.6rem;
   min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.chat-rail .guide-followups {
+  flex-wrap: nowrap;
+}
+
+.chat-rail .guide-followup {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 /* The share control directly below the composer: a switch (purely local
@@ -3194,8 +3261,8 @@ a.guide-source:focus-visible {
   display: flex;
   align-items: flex-end;
   gap: 0.5rem;
-  background: var(--color-surface-panel-strong);
-  border: 1px solid var(--color-input-border);
+  background: var(--color-chat-user-surface);
+  border: 1px solid var(--color-chat-user-border);
   border-radius: 26px;
   padding: 0.35rem 0.35rem 0.35rem 1.1rem;
   backdrop-filter: blur(10px);
@@ -3273,22 +3340,10 @@ a.guide-source:focus-visible {
     max-width: 88%;
   }
 
-  /* Follow-ups stay ONE horizontally scrollable row on mobile — never
-     wrapping into several lines. */
+  /* Let the single-row rail bleed to the card edges on narrow screens. */
   .chat-rail {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
     margin: 0 -0.25rem;
     padding: 0 0.25rem;
-  }
-
-  .chat-rail .guide-followups {
-    flex-wrap: nowrap;
-  }
-
-  .chat-rail .guide-followup {
-    flex: 0 0 auto;
   }
 }
 
