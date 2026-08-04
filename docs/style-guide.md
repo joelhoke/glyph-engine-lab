@@ -145,10 +145,16 @@ Two typefaces, both self-hosted (no remote font requests):
   the Collaborate heading, Work slide titles (Microsoft intro + project
   titles), and protected case-study titles. Loaded via `next/font/google`
   (`--font-display` on body), emitted as build assets.
+- **Cabin Regular (400)** — the intentional exception to the mono default,
+  reserved for the collaborate AI guide's conversation copy: visitor message
+  text, guide response text, typed composer content, and the landing preview
+  excerpts (~1rem, line-height 1.6–1.7, `font-weight: 400`). Loaded from the
+  same self-hosted `next/font` build as Cabin Bold.
 - **Cutive Mono** — everything else: body copy, navigation, toolbar and
   control text, Work mode labels, narrative section headings, dialogs,
-  tuning UI, and the glyph particles themselves. Falls back to the system
-  mono stack (`--font-mono` in `globals.css`).
+  tuning UI, conversation metadata (timestamps, speaker labels), source
+  chips, suggested prompts, and the glyph particles themselves. Falls back
+  to the system mono stack (`--font-mono` in `globals.css`).
 
 | Style | Spec |
 |---|---|
@@ -160,9 +166,10 @@ Two typefaces, both self-hosted (no remote font requests):
 | Caption/meta | 0.72–0.8rem, muted |
 | Wordmark | lowercase always: "joel hoke design", letter-spacing 0.08em |
 
-Rules: Cabin never becomes a body, control, or particle font; Cutive Mono
-is never removed; sentence case for prose, lowercase for the wordmark,
-uppercase only for eyebrow labels.
+Rules: Cabin never becomes a body, control, or particle font outside the
+conversation-copy exception above; Cutive Mono is never removed; sentence
+case for prose, lowercase for the wordmark, uppercase only for eyebrow
+labels.
 
 ### 3.4 Imagery & iconography
 

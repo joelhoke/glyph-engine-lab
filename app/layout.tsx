@@ -1,17 +1,27 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Cabin } from 'next/font/google'
 import ThemeReady from '../components/ThemeReady'
 import './globals.css'
 
-// Cabin Bold for primary display headings only (Vibe/Collaborate headings,
-// Work slide titles, protected case-study titles). next/font self-hosts the
-// font at build time — no runtime request to Google. Everything else keeps
-// the Cutive Mono stack.
+// Cabin 700 for primary display headings (Vibe/Collaborate headings, Work
+// slide titles, protected case-study titles); Cabin 400 for the collaborate
+// conversation copy (visitor messages, guide answers, composer text, preview
+// excerpts — the intentional exception to the Cutive Mono default, see
+// docs/style-guide.md §3.3). next/font self-hosts at build time — no runtime
+// request to Google. Everything else keeps the Cutive Mono stack.
 const cabin = Cabin({
-  weight: '700',
+  weight: ['400', '700'],
   subsets: ['latin'],
   variable: '--font-display',
 })
+
+// viewport-fit=cover lets the chat shell respect env(safe-area-inset-*)
+// instead of being letterboxed away from the notch/home indicator.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+}
 
 // Production origin. Used for metadataBase (resolves relative OG/icon URLs)
 // and the canonical link.

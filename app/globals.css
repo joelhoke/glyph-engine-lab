@@ -230,7 +230,10 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
 }
 .portfolio-shell {
   position: relative;
-  min-height: 100vh;
+  /* 100vh fallback, then dynamic viewport height so mobile browser-chrome
+     changes never clip the chat shell. */
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 .scene-root {
@@ -2557,31 +2560,8 @@ a.guide-source:focus-visible {
   background: var(--color-warm-strong);
 }
 
-.guide-share {
-  align-self: stretch;
-  border-top: 1px solid var(--color-border-subtle);
-  padding-top: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-
-.guide-share-consent {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  min-height: 44px;
-  font-size: 0.88rem;
-  color: var(--color-warm-strong);
-  cursor: pointer;
-}
-
-.guide-share-consent input {
-  width: 1.1rem;
-  height: 1.1rem;
-  accent-color: var(--color-warm);
-}
-
+/* The share control's own styles live with the chat view below (it renders
+   directly under the composer); these are the shared inner pieces. */
 .guide-share-note {
   margin: 0;
   font-size: 0.78rem;
@@ -2678,6 +2658,40 @@ a.guide-source:focus-visible {
   }
 }
 
+/* --- Collaborate layout scope (landing + chat) --- */
+
+/* Shared layout values for the collaborate mode only (Work/Vibe untouched):
+   a fluid horizontal gutter, the 40rem reading column, and nav/safe-area
+   clearances that reserve a non-overlapping band for the top nav. */
+.foreground-layer--collaborate {
+  --collab-gutter: clamp(1.25rem, 4vw, 4rem);
+  --collab-column: 40rem;
+  --collab-top-clearance: calc(env(safe-area-inset-top, 0px) + 6.5rem);
+  --collab-bottom-clearance: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+  padding: var(--collab-top-clearance) var(--collab-gutter) var(--collab-bottom-clearance);
+}
+
+/* The landing card scrolls instead of clipping when its content exceeds the
+   available height: the content column owns vertical scrolling, and the
+   card's auto margins center it only while there is room to spare. */
+.foreground-layer--collaborate .foreground-content:not(.foreground-content-chat) {
+  justify-content: flex-start;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.foreground-layer--collaborate .collaborate-experience {
+  flex: 0 0 auto;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+@media (max-width: 560px) {
+  .foreground-layer--collaborate {
+    --collab-top-clearance: calc(env(safe-area-inset-top, 0px) + 5.75rem);
+  }
+}
+
 /* --- Collaborate guide: landing preview card (conversation in memory) --- */
 
 .guide-preview {
@@ -2704,13 +2718,17 @@ a.guide-source:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  font-size: 0.84rem;
-  line-height: 1.6;
   color: var(--color-warm-text);
 }
 
+/* Preview excerpts take Cabin Regular — the intentional conversation-copy
+   exception to the mono default (see docs/style-guide.md §3.3). */
 .guide-preview-line {
   margin: 0;
+  font-family: var(--font-display), var(--font-mono);
+  font-weight: 400;
+  font-size: 1rem;
+  line-height: 1.6;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -2801,14 +2819,18 @@ a.guide-source:focus-visible {
 .chat-shell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 0.75rem;
+  gap: clamp(1.25rem, 2.5vh, 2rem);
   width: 100%;
   height: 100%;
+  min-width: 0;
   text-align: left;
   color: var(--color-text);
 }
 
 .chat-header {
+  width: min(100%, var(--collab-column, 40rem));
+  margin: 0 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 1rem;
@@ -2860,19 +2882,22 @@ a.guide-source:focus-visible {
   border-radius: 4px;
 }
 
-/* Independently scrolling transcript; its content stays in a narrow centered
-   column. */
+/* Independently scrolling transcript with extra breathing room; its content
+   stays in the narrow centered column and the grid row keeps it from ever
+   scrolling beneath the composer. */
 .chat-transcript {
   min-height: 0;
+  min-width: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
+  padding: 1.25rem 0.25rem;
   scrollbar-width: thin;
 }
 
 .chat-transcript > * {
-  width: min(100%, 40rem);
+  width: min(100%, var(--collab-column, 40rem));
   margin-left: auto;
   margin-right: auto;
 }
@@ -2906,25 +2931,42 @@ a.guide-source:focus-visible {
   align-items: flex-end;
 }
 
+/* Visitor bubble: metadata sits INSIDE the card above the message,
+   right-aligned; the message takes Cabin Regular (the conversation-copy
+   exception — docs/style-guide.md §3.3). */
 .chat-visitor-card {
-  margin: 0;
   max-width: 30rem;
-  font-size: 0.85rem;
-  line-height: 1.65;
-  color: var(--color-warm-strong);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
   background: var(--color-surface-warm);
   border: 1px solid var(--color-border-subtle);
   border-radius: 12px;
-  padding: 0.6rem 0.9rem;
+  padding: 0.875rem 1rem;
+}
+
+.chat-visitor-meta {
+  text-align: right;
+}
+
+.chat-visitor-text {
+  margin: 0;
+  font-family: var(--font-display), var(--font-mono);
+  font-weight: 400;
+  font-size: 1rem;
+  line-height: 1.65;
+  color: var(--color-warm-strong);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
 .chat-answer {
+  min-width: 0;
   background: var(--color-surface-warm-panel);
   border: 1px solid var(--color-border-subtle);
   border-radius: 12px;
-  padding: 0.9rem 1rem;
+  padding: 1rem 1.125rem;
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
@@ -2933,8 +2975,10 @@ a.guide-source:focus-visible {
 
 .chat-answer-text {
   margin: 0;
-  font-size: 0.9rem;
-  line-height: 1.75;
+  font-family: var(--font-display), var(--font-mono);
+  font-weight: 400;
+  font-size: 1rem;
+  line-height: 1.65;
   color: var(--color-warm-strong);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -2949,7 +2993,7 @@ a.guide-source:focus-visible {
   flex: 0 0 auto;
 }
 
-/* The <details> footer at the end of the transcript: share flow + email. */
+/* The <details> footer at the end of the transcript: direct-email actions. */
 .chat-details {
   border-top: 1px solid var(--color-border-subtle);
   padding: 0.25rem 0 0.75rem;
@@ -2984,11 +3028,6 @@ a.guide-source:focus-visible {
   padding-top: 0.4rem;
 }
 
-.chat-details .guide-share {
-  border-top: none;
-  padding-top: 0;
-}
-
 .chat-details .collaborate-contact {
   justify-content: flex-start;
 }
@@ -2999,11 +3038,12 @@ a.guide-source:focus-visible {
   text-align: left;
 }
 
-/* Fixed bottom area: the latest answer's rail above the composer, safe-area
-   aware. */
+/* Fixed bottom area: follow-up rail above the composer, the share control
+   below it — all in the same centered column, safe-area aware. */
 .chat-bottom {
-  width: min(100%, 40rem);
+  width: min(100%, var(--collab-column, 40rem));
   margin: 0 auto;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
@@ -3015,6 +3055,109 @@ a.guide-source:focus-visible {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.6rem;
+  min-width: 0;
+}
+
+/* The share control directly below the composer: a switch (purely local
+   toggle) plus a bounded, scrollable panel. */
+.guide-share {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.guide-share-switch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 44px;
+  width: fit-content;
+  cursor: pointer;
+}
+
+.guide-share-switch input {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2.5rem;
+  height: 1.4rem;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.guide-share-switch-track {
+  flex: 0 0 auto;
+  position: relative;
+  width: 2.5rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-input-bg);
+  transition: background 180ms ease, border-color 180ms ease;
+}
+
+.guide-share-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0.15rem;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background: var(--color-warm-text);
+  transform: translateY(-50%);
+  transition: transform 180ms ease, background 180ms ease;
+}
+
+.guide-share-switch input:checked + .guide-share-switch-track {
+  background: var(--color-warm);
+  border-color: var(--color-warm);
+}
+
+.guide-share-switch input:checked + .guide-share-switch-track::after {
+  transform: translate(1.1rem, -50%);
+  background: var(--color-on-warm);
+}
+
+.guide-share-switch input:focus-visible + .guide-share-switch-track {
+  outline: 2px solid var(--color-warm);
+  outline-offset: 2px;
+}
+
+.guide-share-switch input:disabled {
+  cursor: default;
+}
+
+.guide-share-switch input:disabled + .guide-share-switch-track {
+  opacity: 0.8;
+}
+
+.guide-share-switch:has(input:disabled) {
+  cursor: default;
+}
+
+.guide-share-switch-label {
+  font-size: 0.82rem;
+  letter-spacing: 0.03em;
+  color: var(--color-warm-strong);
+}
+
+/* Bounded, scrollable on short screens so composer + switch stay reachable. */
+.guide-share-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: 0;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 12px;
+  background: var(--color-surface-warm-panel);
+  padding: 0.8rem 1rem;
+  max-height: min(38vh, 15rem);
+  overflow-y: auto;
 }
 
 .chat-composer {
@@ -3034,9 +3177,12 @@ a.guide-source:focus-visible {
   outline-offset: 2px;
 }
 
+/* Typed composer content takes Cabin Regular at 1rem (≥16px — no iOS focus
+   zoom); the placeholder stays mono. */
 .chat-input {
-  font: inherit;
-  font-size: 0.88rem;
+  font-family: var(--font-display), var(--font-mono);
+  font-weight: 400;
+  font-size: 1rem;
   line-height: 1.6;
   flex: 1 1 auto;
   min-width: 0;
@@ -3095,6 +3241,71 @@ a.guide-source:focus-visible {
 
   .chat-visitor-card {
     max-width: 88%;
+  }
+
+  /* Follow-ups stay ONE horizontally scrollable row on mobile — never
+     wrapping into several lines. */
+  .chat-rail {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 0 -0.25rem;
+    padding: 0 0.25rem;
+  }
+
+  .chat-rail .guide-followups {
+    flex-wrap: nowrap;
+  }
+
+  .chat-rail .guide-followup {
+    flex: 0 0 auto;
+  }
+}
+
+/* Narrow phones: tighten the persistent nav without dropping below 44px
+   targets, and never let the nav list wrap. */
+@media (max-width: 420px) {
+  .experience-nav-list {
+    gap: 0.2rem;
+    padding: 0.25rem;
+    flex-wrap: nowrap;
+  }
+
+  .experience-nav-button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0.45rem 0.7rem;
+    font-size: 0.74rem;
+    white-space: nowrap;
+  }
+}
+
+/* Short landscape: shrink decorative gaps and the heading, keep the nav band
+   and a usable scrolling transcript. */
+@media (max-height: 480px) and (orientation: landscape) {
+  .foreground-layer--collaborate {
+    --collab-top-clearance: calc(env(safe-area-inset-top, 0px) + 4.5rem);
+  }
+
+  .chat-shell {
+    gap: 0.6rem;
+  }
+
+  .chat-header {
+    min-height: 40px;
+  }
+
+  .chat-heading {
+    font-size: 1.25rem;
+  }
+
+  .chat-transcript {
+    padding: 0.5rem 0.25rem;
+  }
+
+  .guide-share-panel {
+    max-height: 30vh;
   }
 }
 

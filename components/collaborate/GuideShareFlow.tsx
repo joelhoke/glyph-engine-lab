@@ -1,6 +1,14 @@
 'use client'
 
 import { useId, useState } from 'react'
+import {
+  COLLABORATE_GUIDE_SHARE_BUTTON,
+  COLLABORATE_GUIDE_SHARE_EMAIL_LABEL,
+  COLLABORATE_GUIDE_SHARE_ERROR,
+  COLLABORATE_GUIDE_SHARE_LABEL,
+  COLLABORATE_GUIDE_SHARE_NOTE,
+  COLLABORATE_GUIDE_SHARE_SENDING,
+} from '../../content/collaborate'
 import { GuideShareState } from './guideConversation'
 
 type GuideShareFlowProps = {
@@ -13,59 +21,68 @@ type GuideShareFlowProps = {
 }
 
 /**
- * The consented share flow: an unchecked opt-in checkbox, an optional reply
- * email, the submit, and the receipt / early-deletion note. Local form state
- * (consent, email) resets when the parent re-keys this component per
- * conversation generation.
+ * The consented share control, placed directly below the composer. A native
+ * checkbox styled as a switch: toggling it is purely local (NO network
+ * request). When on, it reveals the retention note, the optional reply
+ * email, and the explicit share button — only that button calls the share
+ * endpoint. After success the switch stays on and disabled with the receipt
+ * alongside. Turning the switch off preserves the typed email; all local
+ * state resets only when the parent re-keys this component per conversation
+ * generation (new conversation).
  */
 export default function GuideShareFlow({ share, onShare }: GuideShareFlowProps) {
-  const [consent, setConsent] = useState(false)
+  const [on, setOn] = useState(false)
   const [email, setEmail] = useState('')
   const emailId = useId()
 
+  const done = share.status === 'done'
+  const switchOn = done || on
+
   return (
     <div className="guide-share">
-      <label className="guide-share-consent">
+      <label className="guide-share-switch">
         <input
           type="checkbox"
-          checked={consent}
-          disabled={share.status === 'done'}
-          onChange={(event) => setConsent(event.target.checked)}
+          checked={switchOn}
+          disabled={done}
+          onChange={(event) => setOn(event.target.checked)}
         />
-        Share this conversation with Joel
+        <span className="guide-share-switch-track" aria-hidden="true" />
+        <span className="guide-share-switch-label">{COLLABORATE_GUIDE_SHARE_LABEL}</span>
       </label>
-      <p className="guide-share-note">
-        Shared transcripts are kept for 180 days, then deleted. You’ll get a receipt ID you can
-        quote to request earlier deletion.
-      </p>
-      {consent && share.status !== 'done' && (
-        <div className="guide-share-form">
+      {switchOn && !done && (
+        <div className="guide-share-panel">
+          <p className="guide-share-note">{COLLABORATE_GUIDE_SHARE_NOTE}</p>
           <label className="guide-share-email-label" htmlFor={emailId}>
-            Optional: your email, so Joel can reply
+            {COLLABORATE_GUIDE_SHARE_EMAIL_LABEL}
           </label>
-          <input
-            id={emailId}
-            className="guide-share-email"
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-          <button
-            type="button"
-            className="guide-share-button"
-            disabled={share.status === 'sending'}
-            onClick={() => onShare(email)}
-          >
-            {share.status === 'sending' ? 'Sharing…' : 'Share conversation'}
-          </button>
+          <div className="guide-share-form">
+            <input
+              id={emailId}
+              className="guide-share-email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+            <button
+              type="button"
+              className="guide-share-button"
+              disabled={share.status === 'sending'}
+              onClick={() => onShare(email)}
+            >
+              {share.status === 'sending'
+                ? COLLABORATE_GUIDE_SHARE_SENDING
+                : COLLABORATE_GUIDE_SHARE_BUTTON}
+            </button>
+          </div>
           {share.status === 'error' && (
             <p className="guide-share-error" role="status">
-              Sharing didn’t go through — try again, or use the email route below.
+              {COLLABORATE_GUIDE_SHARE_ERROR}
             </p>
           )}
         </div>
       )}
-      {share.status === 'done' && share.receiptId && (
+      {done && share.receiptId && (
         <p className="guide-share-receipt" role="status">
           Shared — thank you. Receipt ID:{' '}
           <span className="guide-share-receipt-id">{share.receiptId}</span> — save it and quote it
