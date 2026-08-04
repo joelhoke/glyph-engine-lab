@@ -11,3 +11,4 @@ out/
 tmp-verify/
 tmp-verify-*/
 tmp-evals/
+.dev.vars

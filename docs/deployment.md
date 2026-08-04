@@ -259,6 +259,24 @@ anything outside the pack is abstained and handed off to email.
    The 12-turn session limit itself is enforced in code
    (`COLLABORATE_MAX_VISITOR_TURNS` in `functions/lib/collaborateShared.ts`).
 
+### Local preview (no credentials needed)
+
+The full conversation loop runs locally against a mock model server:
+
+1. Flip `COLLABORATE_AI_GUIDE` to `true` in `content/collaborate.ts`
+   (uncommitted — the verify script asserts it stays `false` until launch).
+2. `npm run build` (wrangler serves the static export, not the Next dev server).
+3. `node scripts/dev/mock-collaborate-model.mjs` — serves both provider wire
+   formats on :8790 with canned, validation-passing answers. Test knobs in a
+   visitor message: `mock_fail_openai` (provider fallback), `mock_invalid`
+   (malformed output fallback), `mock_fail_all` (deterministic email handoff).
+4. `npx wrangler pages dev out --port 8788 --d1 COLLABORATE_DB=local-collaborate`
+   — `.dev.vars` (gitignored, dummy IDs + the mock URLs) points the adapters at
+   the mock via the `AIG_OPENAI_URL` / `AIG_DEEPSEEK_URL` overrides.
+5. First run only, to enable the share flow locally: apply
+   `migrations/0002_create_collaborate_shares.sql` to the local D1 sqlite under
+   `.wrangler/state/v3/d1/miniflare-D1DatabaseObject/`.
+
 ### Privacy and data handling
 
 - Conversations are **ephemeral by default**: held client-side, never sent to
