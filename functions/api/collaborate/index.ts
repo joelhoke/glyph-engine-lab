@@ -15,6 +15,7 @@
 import {
   COLLABORATE_FALLBACK_ANSWER,
   COLLABORATE_FALLBACK_FOLLOW_UPS,
+  COLLABORATE_FALLBACK_HEADING,
   COLLABORATE_MAX_BODY_BYTES,
   COLLABORATE_PROFILE_VERSION,
   CollaborateResponseBody,
@@ -96,6 +97,7 @@ export const onRequestPost: PagesFunction<CollaborateEnv> = async (context) => {
     // structured output) — deterministic email handoff, still a 200 so the
     // conversation UI can show it as an ordinary answer card.
     const body: CollaborateResponseBody = {
+      heading: COLLABORATE_FALLBACK_HEADING,
       answer: COLLABORATE_FALLBACK_ANSWER,
       sourceCards: [{ id: 'logistics-contact', label: getProfileEntry('logistics-contact')?.evidenceLabel ?? 'Contact' }],
       followUps: COLLABORATE_FALLBACK_FOLLOW_UPS,
@@ -107,6 +109,7 @@ export const onRequestPost: PagesFunction<CollaborateEnv> = async (context) => {
   }
 
   const body: CollaborateResponseBody = {
+    heading: result.answer.heading,
     answer: result.answer.answer,
     sourceCards: result.answer.sourceIds.map((id) => {
       const entry = getProfileEntry(id)

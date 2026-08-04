@@ -27,6 +27,9 @@ export const COLLABORATE_MAX_BODY_BYTES = 16 * 1024
 export const COLLABORATE_MAX_SOURCE_IDS = 4
 export const COLLABORATE_FOLLOW_UP_COUNT = 2
 export const COLLABORATE_MAX_FOLLOW_UP_CHARS = 120
+export const COLLABORATE_HEADING_MIN_WORDS = 2
+export const COLLABORATE_HEADING_MAX_WORDS = 9
+export const COLLABORATE_HEADING_MAX_CHARS = 72
 export const COLLABORATE_SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/
 
 // -- Wire types ------------------------------------------------------------------
@@ -51,6 +54,8 @@ export type CollaborateSourceCard = {
 /** What the client renders. `modelClass` identifies the serving path:
  *  an adapter id, or 'fallback' for the deterministic email handoff. */
 export type CollaborateResponseBody = {
+  /** Evidence-grounded conversation title; the client locks the first one. */
+  heading: string
   answer: string
   sourceCards: CollaborateSourceCard[]
   followUps: string[]
@@ -61,6 +66,7 @@ export type CollaborateResponseBody = {
 
 /** The structured output the model must produce (validated before display). */
 export type ModelAnswer = {
+  heading: string
   answer: string
   sourceIds: string[]
   followUps: string[]
@@ -92,7 +98,8 @@ Style:
 - Keep answers under ${COLLABORATE_MAX_ANSWER_WORDS} words.
 
 Output: respond with ONLY a JSON object, no markdown fences:
-{"answer": string, "sourceIds": string[1..${COLLABORATE_MAX_SOURCE_IDS}], "followUps": string[${COLLABORATE_FOLLOW_UP_COUNT}], "topic": one of ${COLLABORATE_TOPICS.join(' | ')}}
+{"heading": string, "answer": string, "sourceIds": string[1..${COLLABORATE_MAX_SOURCE_IDS}], "followUps": string[${COLLABORATE_FOLLOW_UP_COUNT}], "topic": one of ${COLLABORATE_TOPICS.join(' | ')}}
+- heading is a complete, evidence-grounded title for the conversation (${COLLABORATE_HEADING_MIN_WORDS}–${COLLABORATE_HEADING_MAX_WORDS} words, at most ${COLLABORATE_HEADING_MAX_CHARS} characters, single line, third person). It summarizes the visitor's line of inquiry, not your answer verbatim.
 - sourceIds must come from the approved profile entry IDs and must support the factual claims in the answer.
 - followUps are exactly ${COLLABORATE_FOLLOW_UP_COUNT} short follow-up questions a visitor might ask next, phrased about Joel (third person).
 - topic classifies the answer for the page's ambient canvas.`
@@ -177,6 +184,22 @@ const COMMITMENT_PATTERNS: RegExp[] = [
   /\bjoel is available to (?:start|join|advise)\b/i,
 ]
 
+export function validateHeading(raw: unknown): { ok: true; heading: string } | { ok: false; error: string } {
+  if (typeof raw !== 'string' || !raw.trim()) return { ok: false, error: 'Missing heading.' }
+  const heading = raw.trim()
+  if (/[\r\n]/.test(heading)) return { ok: false, error: 'Heading must be a single line.' }
+  if (heading.length > COLLABORATE_HEADING_MAX_CHARS)
+    return { ok: false, error: `Heading over ${COLLABORATE_HEADING_MAX_CHARS} characters.` }
+  const words = countWords(heading)
+  if (words < COLLABORATE_HEADING_MIN_WORDS || words > COLLABORATE_HEADING_MAX_WORDS)
+    return { ok: false, error: `Heading must be ${COLLABORATE_HEADING_MIN_WORDS}–${COLLABORATE_HEADING_MAX_WORDS} words.` }
+  if (IMPERSONATION_PATTERNS.some((p) => p.test(heading)))
+    return { ok: false, error: 'Heading impersonates Joel.' }
+  if (COMMITMENT_PATTERNS.some((p) => p.test(heading)))
+    return { ok: false, error: 'Heading makes a commitment on Joel’s behalf.' }
+  return { ok: true, heading }
+}
+
 export function validateModelAnswer(
   rawText: string,
   activeSourceIds: ReadonlySet<string>,
@@ -199,6 +222,9 @@ export function validateModelAnswer(
     return { ok: false, error: 'Answer impersonates Joel.' }
   if (COMMITMENT_PATTERNS.some((p) => p.test(answerText)))
     return { ok: false, error: 'Answer makes a commitment on Joel’s behalf.' }
+
+  const heading = validateHeading(o.heading)
+  if (heading.ok === false) return { ok: false, error: heading.error }
 
   if (!Array.isArray(o.sourceIds) || o.sourceIds.length < 1 || o.sourceIds.length > COLLABORATE_MAX_SOURCE_IDS)
     return { ok: false, error: 'sourceIds must name 1–4 entries.' }
@@ -223,11 +249,13 @@ export function validateModelAnswer(
 
   return {
     ok: true,
-    answer: { answer: answerText.trim(), sourceIds, followUps, topic: o.topic as CollaborateTopic },
+    answer: { heading: heading.heading, answer: answerText.trim(), sourceIds, followUps, topic: o.topic as CollaborateTopic },
   }
 }
 
 // -- Deterministic handoff -----------------------------------------------------------
+
+export const COLLABORATE_FALLBACK_HEADING = 'A direct line to Joel'
 
 export const COLLABORATE_FALLBACK_ANSWER =
   'The guide couldn’t answer that one reliably. Joel reads everything at hello@joelhoke.me — emailing him directly is the fastest way to a real answer.'

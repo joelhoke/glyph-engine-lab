@@ -35,13 +35,19 @@ const {
   COLLABORATE_MAX_SOURCE_IDS,
   COLLABORATE_FOLLOW_UP_COUNT,
   COLLABORATE_MAX_FOLLOW_UP_CHARS,
+  COLLABORATE_HEADING_MIN_WORDS,
+  COLLABORATE_HEADING_MAX_WORDS,
+  COLLABORATE_HEADING_MAX_CHARS,
+  COLLABORATE_FALLBACK_HEADING,
   COLLABORATE_FALLBACK_ANSWER,
   COLLABORATE_FALLBACK_FOLLOW_UPS,
   COLLABORATE_PROFILE_VERSION,
+  COLLABORATE_SYSTEM_PROMPT,
   ROUTING_POLICY,
   ROUTING_CATEGORIES,
   validateCollaborateRequest,
   countWords,
+  validateHeading,
   validateModelAnswer,
   classifyRoutingCategory,
   buildModelMessages,
@@ -70,6 +76,7 @@ const KNOWN_ID = 'msft-employee-experience'
 const KNOWN_ID_2 = 'msft-global-operations'
 
 const VALID_ANSWER = {
+  heading: 'Joel’s design work at Microsoft',
   answer: 'Joel designed the EX Toolkit, a shared design language and component library at Microsoft.',
   sourceIds: [KNOWN_ID],
   followUps: ['What did Joel design at Microsoft?', 'How does Joel use research?'],
@@ -86,6 +93,9 @@ assert(COLLABORATE_MAX_BODY_BYTES === 16384, 'max body bytes is 16KB')
 assert(COLLABORATE_MAX_SOURCE_IDS === 4, 'max source ids is 4')
 assert(COLLABORATE_FOLLOW_UP_COUNT === 2, 'follow-up count is 2')
 assert(COLLABORATE_MAX_FOLLOW_UP_CHARS === 120, 'max follow-up chars is 120')
+assert(COLLABORATE_HEADING_MIN_WORDS === 2, 'heading min words is 2')
+assert(COLLABORATE_HEADING_MAX_WORDS === 9, 'heading max words is 9')
+assert(COLLABORATE_HEADING_MAX_CHARS === 72, 'heading max chars is 72')
 
 // --- validateCollaborateRequest ---
 
@@ -176,6 +186,56 @@ assert(validateModelAnswer(variant({ followUps: ['x'.repeat(121), 'ok?'] }), ACT
 assert(validateModelAnswer(variant({ followUps: ['x'.repeat(120), 'ok?'] }), ACTIVE_IDS).ok === true, '120-char follow-up accepted')
 
 assert(validateModelAnswer(variant({ topic: 'nope' }), ACTIVE_IDS).ok === false, 'unknown topic rejected')
+
+// --- Heading gate (via validateModelAnswer) ---
+
+const LONG_HEADING_73 = ['aaaaaaaaaa', 'bbbbbbbb', 'cccccccc', 'dddddddd', 'eeeeeeee', 'ffffffff', 'gggggggg', 'hhhhhhhh'].join(' ')
+assert(LONG_HEADING_73.length === 73 && countWords(LONG_HEADING_73) === 8, '73-char fixture is 73 chars with a valid word count')
+
+const missingHeading = { ...VALID_ANSWER }
+delete missingHeading.heading
+assert(validateModelAnswer(JSON.stringify(missingHeading), ACTIVE_IDS).ok === false, 'missing heading rejected')
+assert(validateModelAnswer(variant({ heading: '' }), ACTIVE_IDS).ok === false, 'empty heading rejected')
+assert(validateModelAnswer(variant({ heading: '   ' }), ACTIVE_IDS).ok === false, 'whitespace-only heading rejected')
+assert(validateModelAnswer(variant({ heading: 'Leadership' }), ACTIVE_IDS).ok === false, '1-word heading rejected')
+assert(validateModelAnswer(variant({ heading: 'one two three four five six seven eight nine ten' }), ACTIVE_IDS).ok === false, '10-word heading rejected')
+assert(validateModelAnswer(variant({ heading: LONG_HEADING_73 }), ACTIVE_IDS).ok === false, '73-char heading rejected')
+assert(validateModelAnswer(variant({ heading: 'Joel’s work\nexplained' }), ACTIVE_IDS).ok === false, 'multiline heading rejected')
+assert(validateModelAnswer(variant({ heading: 'My work at Microsoft' }), ACTIVE_IDS).ok === false, 'impersonating heading rejected')
+assert(validateModelAnswer(variant({ heading: 'Joel will join you' }), ACTIVE_IDS).ok === false, 'commitment heading rejected')
+const longAnswerValidHeading = validateModelAnswer(variant({ answer: 'word '.repeat(221), heading: 'A perfectly valid heading' }), ACTIVE_IDS)
+assert(longAnswerValidHeading.ok === false && longAnswerValidHeading.error === 'Answer too long.', 'valid heading with 221-word answer still rejects on the answer first')
+
+const paddedHeading = validateModelAnswer(variant({ heading: '  Padded heading here  ' }), ACTIVE_IDS)
+assert(paddedHeading.ok === true && paddedHeading.answer.heading === 'Padded heading here', 'returned answer.heading is the trimmed string')
+
+// --- validateHeading unit cases ---
+
+assert(validateHeading(undefined).ok === false, 'validateHeading: missing rejected')
+assert(validateHeading(42).ok === false, 'validateHeading: non-string rejected')
+assert(validateHeading('').ok === false, 'validateHeading: empty rejected')
+assert(validateHeading('   ').ok === false, 'validateHeading: whitespace-only rejected')
+assert(validateHeading('Leadership').ok === false, 'validateHeading: 1 word rejected')
+assert(validateHeading('one two three four five six seven eight nine ten').ok === false, 'validateHeading: 10 words rejected')
+assert(validateHeading(LONG_HEADING_73).ok === false, 'validateHeading: 73 chars rejected')
+assert(validateHeading('Joel’s work\nexplained').ok === false, 'validateHeading: multiline rejected')
+assert(validateHeading('My work at Microsoft').ok === false, 'validateHeading: impersonation rejected')
+assert(validateHeading('Joel will join you').ok === false, 'validateHeading: commitment rejected')
+const twoWords = validateHeading('Design leadership')
+assert(twoWords.ok === true && twoWords.heading === 'Design leadership', 'validateHeading: exactly 2 words accepted')
+const nineWords = validateHeading('One two three four five six seven eight nine')
+assert(nineWords.ok === true && nineWords.heading === 'One two three four five six seven eight nine', 'validateHeading: exactly 9 words accepted')
+const exact72 = LONG_HEADING_73.slice(0, -1)
+assert(exact72.length === 72, '72-char fixture is exactly 72 chars')
+assert(validateHeading(exact72).ok === true, 'validateHeading: exactly 72 chars accepted')
+assert(validateHeading(COLLABORATE_FALLBACK_HEADING).ok === true, 'fallback heading passes its own validator')
+
+// --- System prompt + schema document the heading field ---
+
+assert(COLLABORATE_SYSTEM_PROMPT.includes('"heading"'), 'system prompt shows the heading key in the output shape')
+assert(/heading is a complete/.test(COLLABORATE_SYSTEM_PROMPT), 'system prompt documents the heading field')
+assert(MODEL_ANSWER_JSON_SCHEMA.required.includes('heading'), 'JSON schema requires heading')
+assert(MODEL_ANSWER_JSON_SCHEMA.properties.heading?.maxLength === 72, 'JSON schema caps heading at 72 chars')
 
 for (const bad of [
   'I led the design of Joel’s dashboard.',
@@ -382,6 +442,7 @@ async function handlerSuite() {
     const success = await handlerModule.onRequestPost({ request: jsonRequest(VALID_BODY), env: ENV })
     assert(success.status === 200, 'successful turn → 200')
     const body = await success.json()
+    assert(body.heading === VALID_ANSWER.heading, 'heading passed through from the model output')
     assert(body.answer === VALID_ANSWER.answer, 'answer text passed through')
     assert(Array.isArray(body.sourceCards) && body.sourceCards.length === 1, 'one source card per sourceId')
     const card = body.sourceCards && body.sourceCards[0]
@@ -400,6 +461,8 @@ async function handlerSuite() {
     assert(fallback.status === 200, 'total model failure still → 200 (conversation continues)')
     const fb = await fallback.json()
     assert(fb.modelClass === 'fallback', 'fallback modelClass')
+    assert(fb.heading === COLLABORATE_FALLBACK_HEADING, 'fallback heading is the deterministic heading')
+    assert(fb.heading === 'A direct line to Joel', 'fallback heading text matches the spec')
     assert(fb.topic === 'logistics', 'fallback topic is logistics')
     assert(fb.answer === COLLABORATE_FALLBACK_ANSWER, 'fallback answer is the deterministic handoff')
     assert(fb.answer.includes('hello@joelhoke.me'), 'fallback hands off to email')
