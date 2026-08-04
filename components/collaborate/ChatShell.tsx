@@ -7,7 +7,7 @@ import {
   COLLABORATE_GUIDE_COMPOSER_LABEL,
   COLLABORATE_GUIDE_COMPOSER_PLACEHOLDER,
   COLLABORATE_GUIDE_CONTACT,
-  COLLABORATE_GUIDE_DETAILS,
+  COLLABORATE_GUIDE_CONTACT_SUMMARY,
   COLLABORATE_GUIDE_NAME,
   COLLABORATE_GUIDE_PENDING_HEADING,
   COLLABORATE_GUIDE_SEND_LABEL,
@@ -71,15 +71,15 @@ function SourceChips({ turn }: { turn: GuideAssistantTurn }) {
 
 /**
  * The dedicated chat view: a header (back + generated heading), an
- * independently scrolling transcript, and a fixed bottom area (the latest
- * answer's source chips + follow-ups in a rail above the composer). Each
- * answer also keeps its own source chips attached — the rail mirrors only the
- * LATEST answer.
+ * independently scrolling transcript, and a fixed bottom area — the latest
+ * answer's follow-up pills in a rail above the composer, with the consented
+ * share control directly below it. Each answer keeps its own source chips
+ * attached (they never duplicate into the rail).
  *
  * Accessibility: turn timestamps are client-only presentation (never sent to
  * any endpoint or analytics); newly arrived answers are announced by a single
- * visually-hidden polite status node without moving focus; the share flow and
- * direct-email actions live in a native <details> footer.
+ * visually-hidden polite status node without moving focus; the direct-email
+ * actions live in a native <details> footer in the transcript.
  */
 export default function ChatShell({
   heading,
@@ -161,10 +161,12 @@ export default function ChatShell({
           {state.turns.map((turn, index) =>
             turn.role === 'user' ? (
               <li key={index} className="chat-turn chat-turn-visitor">
-                <p className="chat-turn-meta">
-                  {COLLABORATE_GUIDE_VISITOR_LABEL} | {formatTurnTime(turn.at)}
-                </p>
-                <p className="chat-visitor-card">{turn.content}</p>
+                <div className="chat-visitor-card">
+                  <p className="chat-turn-meta chat-visitor-meta">
+                    {COLLABORATE_GUIDE_VISITOR_LABEL} | {formatTurnTime(turn.at)}
+                  </p>
+                  <p className="chat-visitor-text">{turn.content}</p>
+                </div>
               </li>
             ) : (
               <li key={index} className="chat-turn">
@@ -212,33 +214,29 @@ export default function ChatShell({
         )}
         {latestAnswer && (
           <details className="chat-details">
-            <summary>{COLLABORATE_GUIDE_DETAILS}</summary>
+            <summary>{COLLABORATE_GUIDE_CONTACT_SUMMARY}</summary>
             <div className="chat-details-body">
-              <GuideShareFlow key={state.generation} share={state.share} onShare={onShare} />
               <ContactActions contact={COLLABORATE_GUIDE_CONTACT} />
             </div>
           </details>
         )}
       </div>
       <div className="chat-bottom">
-        {latestAnswer && (latestAnswer.sourceCards.length > 0 || latestAnswer.followUps.length > 0) && (
+        {latestAnswer && latestAnswer.followUps.length > 0 && !limitReached && (
           <div className="chat-rail">
-            <SourceChips turn={latestAnswer} />
-            {latestAnswer.followUps.length > 0 && !limitReached && (
-              <div className="guide-followups" role="group" aria-label="Follow-up questions">
-                {latestAnswer.followUps.map((question) => (
-                  <button
-                    key={question}
-                    type="button"
-                    className="guide-followup"
-                    disabled={pending}
-                    onClick={() => onSend(question)}
-                  >
-                    {question}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="guide-followups" role="group" aria-label="Follow-up questions">
+              {latestAnswer.followUps.map((question) => (
+                <button
+                  key={question}
+                  type="button"
+                  className="guide-followup"
+                  disabled={pending}
+                  onClick={() => onSend(question)}
+                >
+                  {question}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {!limitReached && (
@@ -267,6 +265,9 @@ export default function ChatShell({
               <SendIcon />
             </button>
           </form>
+        )}
+        {latestAnswer && (
+          <GuideShareFlow key={state.generation} share={state.share} onShare={onShare} />
         )}
       </div>
       <p className="visually-hidden" role="status">

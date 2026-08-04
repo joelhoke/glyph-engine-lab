@@ -1674,7 +1674,13 @@ export default function PortfolioExperience() {
         />
       )}
       <AnalyticsConsent onClient={(client) => (analyticsClientRef.current = client)} />
-      <main id="main-content" tabIndex={-1} className="foreground-layer">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className={`foreground-layer${
+          displayed === 'collaborate' ? ' foreground-layer--collaborate' : ''
+        }`}
+      >
         <ExperienceTransition phase={transitionPhase}>
           <div
             className={`foreground-content${

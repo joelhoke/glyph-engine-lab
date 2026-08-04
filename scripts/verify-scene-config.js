@@ -27,8 +27,11 @@ try {
 
 const {
   EXPERIENCE_SCENE_KEYS,
+  COLLABORATE_CHAT_HASH,
   formatExperienceHash,
   parseExperienceHash,
+  parseExperienceHashTarget,
+  shouldCanonicalizeCollaborateChat,
 } = require(path.join(tmpDir, 'experienceHash.js'))
 const { EXPERIENCE_SCENES, getSceneDescriptor, resolveScenePlayground } = require(path.join(tmpDir, 'sceneConfig.js'))
 const { resolvePlaygroundConfig } = require(path.join(tmpDir, 'playgroundTheme.js'))
@@ -108,6 +111,49 @@ assert(parseExperienceHash('#') === null, 'bare # resolves to null')
 assert(parseExperienceHash('#playground') === null, 'legacy #playground resolves to null')
 assert(parseExperienceHash('#portfolio') === null, 'legacy #portfolio resolves to null')
 assert(parseExperienceHash('#nope') === null, 'unknown hash resolves to null')
+
+// collaborate chat subview: `#collaborate/chat` parses as collaborate + chat
+{
+  const target = parseExperienceHashTarget(COLLABORATE_CHAT_HASH)
+  assert(
+    !!target && target.key === 'collaborate' && target.subview === 'chat' && target.storyId === null,
+    'parses #collaborate/chat as collaborate with the chat subview',
+  )
+  assert(
+    parseExperienceHash(COLLABORATE_CHAT_HASH) === 'collaborate',
+    'the backward-compatible wrapper resolves #collaborate/chat to the collaborate mode',
+  )
+}
+// unknown nested hashes degrade to the bare mode
+{
+  const unknown = parseExperienceHashTarget('#collaborate/nope')
+  assert(
+    !!unknown && unknown.key === 'collaborate' && unknown.subview === undefined,
+    'an unknown collaborate subview degrades to the bare collaborate mode',
+  )
+  const workUnknown = parseExperienceHashTarget('#work/nope')
+  assert(
+    !!workUnknown && workUnknown.key === 'work' && workUnknown.storyId === 'nope',
+    'unknown work story ids still parse as story ids (caller degrades them)',
+  )
+  const bare = parseExperienceHashTarget('#collaborate')
+  assert(!!bare && bare.subview === undefined, 'bare #collaborate carries no subview')
+}
+// canonicalization: the chat deep link is only meaningful with turns in memory
+assert(
+  shouldCanonicalizeCollaborateChat(parseExperienceHashTarget('#collaborate/chat'), false),
+  'a chat deep link with zero in-memory turns canonicalizes to the landing',
+)
+assert(
+  !shouldCanonicalizeCollaborateChat(parseExperienceHashTarget('#collaborate/chat'), true),
+  'a chat deep link with a live conversation stays on the chat',
+)
+assert(
+  !shouldCanonicalizeCollaborateChat(parseExperienceHashTarget('#collaborate'), false) &&
+    !shouldCanonicalizeCollaborateChat(parseExperienceHashTarget('#work'), false) &&
+    !shouldCanonicalizeCollaborateChat(null, false),
+  'non-chat targets never canonicalize',
+)
 
 // motion option lists match the documented mode/variant vocabulary
 assert(
