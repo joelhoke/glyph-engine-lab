@@ -8,6 +8,9 @@ import { ExperienceSceneKey } from './types'
 
 export const EXPERIENCE_SCENE_KEYS: ExperienceSceneKey[] = ['work', 'vibe', 'collaborate']
 
+/** The collaborate mode's nested chat subview hash. */
+export const COLLABORATE_CHAT_HASH = '#collaborate/chat'
+
 export function formatExperienceHash(key: ExperienceSceneKey): string {
   return `#${key}`
 }
@@ -28,13 +31,17 @@ export type ExperienceHashTarget = {
    *  Not validated here — callers resolve it against the slide list and
    *  treat unknown ids as a bare `#work`. */
   storyId: string | null
+  /** Nested subview within a mode. Only `chat` under `#collaborate/chat` is
+   *  recognized today; unknown nested segments degrade to the bare mode. */
+  subview?: 'chat'
 }
 
 /**
  * Parse a location hash into a mode plus an optional work story id
- * (`#work/<storyId>`). Bounds-safe: only the first path segment selects the
- * mode, only the second is carried as the story id, and anything else is
- * ignored. Returns null for empty or unrecognized hashes.
+ * (`#work/<storyId>`) or collaborate subview (`#collaborate/chat`).
+ * Bounds-safe: only the first path segment selects the mode, only the second
+ * is carried as the story id / subview, and anything else is ignored. Returns
+ * null for empty or unrecognized hashes.
  */
 export function parseExperienceHashTarget(hash: string): ExperienceHashTarget | null {
   const normalized = hash.trim().toLowerCase().replace(/^#/, '')
@@ -44,8 +51,27 @@ export function parseExperienceHashTarget(hash: string): ExperienceHashTarget | 
       return {
         key,
         storyId: key === 'work' && storySegment ? storySegment : null,
+        ...(key === 'collaborate' && storySegment === 'chat'
+          ? { subview: 'chat' as const }
+          : {}),
       }
     }
   }
   return null
+}
+
+/**
+ * Canonicalization guard for the collaborate chat subview: the chat deep link
+ * is only meaningful while a conversation exists in memory. A direct load or
+ * reload of `#collaborate/chat` (no turns — page memory is session-only)
+ * resolves to the bare `#collaborate` landing via history.replaceState in the
+ * shell; this pure decision keeps that rule testable.
+ */
+export function shouldCanonicalizeCollaborateChat(
+  target: ExperienceHashTarget | null,
+  hasConversationTurns: boolean,
+): boolean {
+  return (
+    !!target && target.key === 'collaborate' && target.subview === 'chat' && !hasConversationTurns
+  )
 }

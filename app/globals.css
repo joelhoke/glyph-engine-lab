@@ -1381,6 +1381,10 @@ button:focus-visible {
 
 .experience-transition {
   width: 100%;
+  /* Stretch to the foreground layer's full height: centered modes are
+     unaffected (foreground-content centers its children), and the
+     collaborate chat view gets the full-height grid it needs. */
+  align-self: stretch;
   display: flex;
   justify-content: center;
   transition: opacity 220ms ease, transform 220ms ease;
@@ -2673,6 +2677,427 @@ a.guide-source:focus-visible {
     flex: 1 1 auto;
   }
 }
+
+/* --- Collaborate guide: landing preview card (conversation in memory) --- */
+
+.guide-preview {
+  align-self: stretch;
+  text-align: left;
+  background: var(--color-surface-warm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.guide-preview-heading {
+  font-family: var(--font-display), var(--font-mono);
+  font-size: 1.15rem;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--color-warm-strong);
+}
+
+.guide-preview-exchange {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  color: var(--color-warm-text);
+}
+
+.guide-preview-line {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.guide-preview-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-warm-text);
+  opacity: 0.8;
+}
+
+.guide-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.guide-preview-resume {
+  font: inherit;
+  font-size: 0.85rem;
+  letter-spacing: 0.03em;
+  padding: 0.6rem 1.4rem;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--color-warm);
+  background: var(--color-warm);
+  color: var(--color-on-warm);
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.guide-preview-resume:hover,
+.guide-preview-resume:focus-visible {
+  background: var(--color-warm-strong);
+}
+
+.guide-preview-new {
+  font: inherit;
+  font-size: 0.82rem;
+  letter-spacing: 0.03em;
+  padding: 0.55rem 1.1rem;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-warm-text);
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+.guide-preview-new:hover,
+.guide-preview-new:focus-visible {
+  color: var(--color-warm-strong);
+  background: var(--color-input-bg);
+  border-color: var(--color-warm);
+}
+
+.guide-preview-confirm {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.guide-preview-confirm-prompt {
+  flex: 1 1 100%;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--color-warm-strong);
+}
+
+/* --- Collaborate guide: chat view (behind COLLABORATE_AI_GUIDE) --- */
+
+/* Full-height host: foreground-content stops centering and hands its whole
+   box to the chat grid. */
+.foreground-content-chat {
+  align-self: stretch;
+  justify-content: flex-start;
+  gap: 0;
+}
+
+.chat-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  width: 100%;
+  height: 100%;
+  text-align: left;
+  color: var(--color-text);
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-height: 44px;
+}
+
+.chat-back {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-panel);
+  color: var(--color-warm-text);
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+.chat-back svg {
+  width: 18px;
+  height: 18px;
+}
+
+.chat-back:hover,
+.chat-back:focus-visible {
+  color: var(--color-warm-strong);
+  border-color: var(--color-warm);
+}
+
+.chat-heading {
+  font-family: var(--font-display), var(--font-mono);
+  font-size: clamp(1.4rem, 3vw, 2.2rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: var(--color-warm-strong);
+  overflow-wrap: anywhere;
+}
+
+.chat-heading:focus {
+  outline: none;
+}
+
+.chat-heading:focus-visible {
+  outline: 2px solid var(--color-warm);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+/* Independently scrolling transcript; its content stays in a narrow centered
+   column. */
+.chat-transcript {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  scrollbar-width: thin;
+}
+
+.chat-transcript > * {
+  width: min(100%, 40rem);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.chat-turns {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 0.25rem;
+}
+
+.chat-turn {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
+}
+
+.chat-turn-meta {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-warm-text);
+  opacity: 0.8;
+}
+
+.chat-turn-visitor {
+  align-items: flex-end;
+}
+
+.chat-visitor-card {
+  margin: 0;
+  max-width: 30rem;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--color-warm-strong);
+  background: var(--color-surface-warm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 12px;
+  padding: 0.6rem 0.9rem;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.chat-answer {
+  background: var(--color-surface-warm-panel);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  backdrop-filter: blur(8px);
+}
+
+.chat-answer-text {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.75;
+  color: var(--color-warm-strong);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* Source chips carry a link icon inside the chip. */
+.guide-source {
+  gap: 0.35rem;
+}
+
+.guide-source svg {
+  flex: 0 0 auto;
+}
+
+/* The <details> footer at the end of the transcript: share flow + email. */
+.chat-details {
+  border-top: 1px solid var(--color-border-subtle);
+  padding: 0.25rem 0 0.75rem;
+}
+
+.chat-details summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-warm-text);
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.chat-details summary:hover {
+  color: var(--color-warm-strong);
+}
+
+.chat-details summary:focus-visible {
+  outline: 2px solid var(--color-warm);
+  outline-offset: 3px;
+}
+
+.chat-details-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding-top: 0.4rem;
+}
+
+.chat-details .guide-share {
+  border-top: none;
+  padding-top: 0;
+}
+
+.chat-details .collaborate-contact {
+  justify-content: flex-start;
+}
+
+.chat-details .collaborate-copy-feedback,
+.chat-details .collaborate-address {
+  align-self: flex-start;
+  text-align: left;
+}
+
+/* Fixed bottom area: the latest answer's rail above the composer, safe-area
+   aware. */
+.chat-bottom {
+  width: min(100%, 40rem);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.chat-rail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.chat-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  background: var(--color-surface-panel-strong);
+  border: 1px solid var(--color-input-border);
+  border-radius: 26px;
+  padding: 0.35rem 0.35rem 0.35rem 1.1rem;
+  backdrop-filter: blur(10px);
+}
+
+.chat-composer:focus-within {
+  border-color: var(--color-warm);
+  outline: 2px solid var(--color-warm);
+  outline-offset: 2px;
+}
+
+.chat-input {
+  font: inherit;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  flex: 1 1 auto;
+  min-width: 0;
+  resize: none;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  padding: 0.6rem 0;
+  max-height: 8rem;
+}
+
+.chat-input:focus {
+  outline: none;
+}
+
+.chat-input::placeholder {
+  font-family: var(--font-mono);
+  color: var(--color-warm-text);
+  opacity: 0.6;
+}
+
+.chat-send {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--color-warm);
+  background: var(--color-warm);
+  color: var(--color-on-warm);
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.chat-send svg {
+  width: 18px;
+  height: 18px;
+}
+
+.chat-send:hover:not(:disabled),
+.chat-send:focus-visible {
+  background: var(--color-warm-strong);
+}
+
+.chat-send:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+@media (max-width: 560px) {
+  .chat-turns {
+    padding: 0.15rem;
+  }
+
+  .chat-visitor-card {
+    max-width: 88%;
+  }
+}
+
 
 /* --- Vibe experience (M5) --- */
 
