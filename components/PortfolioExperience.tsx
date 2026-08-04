@@ -15,6 +15,7 @@ import { ExperienceMode, ExperienceSceneKey } from '../engine/types'
 import { EXPERIENCE_SCENES, LANDING_SOURCE_URL, resolveScenePlayground } from '../engine/sceneConfig'
 import { getWorkSlide, getWorkSlideId, resolveWorkSlideScene, WORK_SLIDES } from '../content/work'
 import {
+  COLLABORATE_AI_GUIDE,
   COLLABORATE_CONTACT,
   COLLABORATE_ENERGIZING_STATEMENT,
   COLLABORATE_HEADLINE,
@@ -24,7 +25,28 @@ import {
   getCollaborateStarter,
   resolveCollaborateScene,
 } from '../content/collaborate'
-import { formatExperienceHash, parseExperienceHashTarget } from '../engine/experienceHash'
+import {
+  COLLABORATE_CHAT_HASH,
+  formatExperienceHash,
+  parseExperienceHashTarget,
+  shouldCanonicalizeCollaborateChat,
+} from '../engine/experienceHash'
+import {
+  beginGuideShare,
+  beginTurn,
+  createGuideConversation,
+  failGuideShare,
+  failTurn,
+  GuideConversationDeps,
+  GuideConversationState,
+  guideMessagesForApi,
+  latestAssistantTurn,
+  parseGuideAnswer,
+  resetGuideConversation,
+  resolveGuideShare,
+  resolveTurn,
+  setGuideDraft,
+} from './collaborate/guideConversation'
 import {
   createDefaultDiagnosticsSnapshot,
   SceneDiagnosticsSnapshot,
@@ -249,6 +271,36 @@ export default function PortfolioExperience() {
   // Latest guide answer topic, reported up from CollaborateExperience so the
   // canvas morphs to the authored per-topic treatment (null = starter/baseline).
   const [collaborateGuideTopic, setCollaborateGuideTopic] = useState<CollaborateTopic | null>(null)
+
+  // Collaborate subview: the guide landing or the chat. Selecting Collaborate
+  // from another mode always opens the landing; the chat is reachable via
+  // #collaborate/chat (and canonicalized back to the landing when no
+  // conversation exists in memory).
+  const [collaborateView, setCollaborateView] = useState<'landing' | 'chat'>('landing')
+
+  // Guide conversation session (page-load memory only — NO browser storage).
+  // Owned here so it survives landing ↔ chat navigation. Created lazily in an
+  // effect so server-rendered markup never depends on the session id.
+  const [guideState, setGuideState] = useState<GuideConversationState | null>(null)
+  const guideStateRef = useRef<GuideConversationState | null>(null)
+  const guideDepsRef = useRef<GuideConversationDeps>({
+    now: () => Date.now(),
+    id: () =>
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `s-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`,
+  })
+  const chatHeadingRef = useRef<HTMLHeadingElement | null>(null)
+  useEffect(() => {
+    const initial = createGuideConversation(guideDepsRef.current)
+    guideStateRef.current = initial
+    setGuideState(initial)
+  }, [])
+
+  const applyGuideState = (next: GuideConversationState) => {
+    guideStateRef.current = next
+    setGuideState(next)
+  }
 
   // Sealed analytics client (Stage 5): no-op until the visitor opts in via
   // the consent UI; every track call is silent on failure.
@@ -793,6 +845,9 @@ export default function PortfolioExperience() {
     const doNavigate = () => {
       setSelected(key)
       setExperience(key)
+      // Selecting Collaborate from Work/Vibe ALWAYS opens the landing, even
+      // when a conversation exists in memory (the landing previews it).
+      if (key === 'collaborate') setCollaborateView('landing')
       if (typeof window !== 'undefined' && window.location.hash !== formatExperienceHash(key)) {
         // pushState (not location.hash assignment) so no hashchange event fires;
         // the listener below owns back/forward navigation only. Every state
@@ -815,7 +870,10 @@ export default function PortfolioExperience() {
   // Deep links: resolve the initial hash (skipping the intro) and keep the
   // mode in sync with back/forward navigation. `#work/<storyId>` deep links
   // also select that story's project slide; unknown story ids degrade to the
-  // bare work mode (slide untouched).
+  // bare work mode (slide untouched). `#collaborate/chat` deep links open the
+  // chat subview while a conversation exists in memory; without turns (e.g. a
+  // direct load or reload — page memory only) the hash canonicalizes to the
+  // bare `#collaborate` landing via replaceState.
   useEffect(() => {
     const applyHash = () => {
       const target = parseExperienceHashTarget(window.location.hash)
@@ -827,6 +885,15 @@ export default function PortfolioExperience() {
             (slide) => slide.kind === 'project' && slide.story.id === target.storyId,
           )
           if (index >= 0) setWorkSlideIndex(index)
+        }
+        if (target.key === 'collaborate') {
+          const hasTurns = (guideStateRef.current?.turns.length ?? 0) > 0
+          if (shouldCanonicalizeCollaborateChat(target, hasTurns)) {
+            window.history.replaceState(null, '', formatExperienceHash('collaborate'))
+            setCollaborateView('landing')
+          } else {
+            setCollaborateView(target.subview === 'chat' ? 'chat' : 'landing')
+          }
         }
       }
     }
@@ -875,17 +942,181 @@ export default function PortfolioExperience() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayed])
 
-  // Focus management + titles: move focus to the mode heading and set a
-  // meaningful document.title whenever the settled mode changes.
+  // Focus management: move focus to the mode heading whenever the settled
+  // mode (or collaborate subview) changes. The collaborate chat view focuses
+  // its own heading instead; returning to the landing refocuses the mode
+  // heading. Focus is never moved to individual guide answers.
+  useEffect(() => {
+    if (displayed === 'intro') return
+    if (displayed === 'collaborate' && collaborateView === 'chat') {
+      chatHeadingRef.current?.focus({ preventScroll: true })
+    } else {
+      modeHeadingRef.current?.focus({ preventScroll: true })
+    }
+  }, [displayed, collaborateView])
+
+  // Titles: a meaningful document.title for the settled mode. The collaborate
+  // chat view retitles from the locked conversation heading once the first
+  // answer arrives; the landing keeps the normal Collaborate title.
   useEffect(() => {
     if (displayed === 'intro') {
       document.title = BASE_DOCUMENT_TITLE
       return
     }
     const scene = EXPERIENCE_SCENES[displayed]
-    document.title = `${BASE_DOCUMENT_TITLE} — ${scene.copy.documentTitle}`
-    modeHeadingRef.current?.focus({ preventScroll: true })
-  }, [displayed])
+    const guideHeading =
+      displayed === 'collaborate' && collaborateView === 'chat' ? guideState?.heading : null
+    document.title = `${BASE_DOCUMENT_TITLE} — ${guideHeading ?? scene.copy.documentTitle}`
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayed, collaborateView, guideState?.heading])
+
+  // --- Guide conversation actions (chat view; controller is pure) -----------
+
+  const navigateToCollaborateChat = () => {
+    setCollaborateView('chat')
+    if (typeof window !== 'undefined' && window.location.hash !== COLLABORATE_CHAT_HASH) {
+      // pushState (not location.hash assignment) so no hashchange event fires;
+      // the listener above owns back/forward navigation only.
+      window.history.pushState(null, '', COLLABORATE_CHAT_HASH)
+    }
+  }
+
+  const navigateToCollaborateLanding = () => {
+    setCollaborateView('landing')
+    if (
+      typeof window !== 'undefined' &&
+      window.location.hash !== formatExperienceHash('collaborate')
+    ) {
+      window.history.pushState(null, '', formatExperienceHash('collaborate'))
+    }
+  }
+
+  /** Optimistically append the visitor message, navigate to the chat, and
+   *  send the full transcript. A starter id also applies its canvas glyph
+   *  treatment (existing behavior). */
+  const sendGuideMessage = (raw: string, starterId?: string) => {
+    const current = guideStateRef.current
+    if (!current) return
+    const begun = beginTurn(current, raw, guideDepsRef.current)
+    if (!begun.ok) return
+    applyGuideState(begun.state)
+    if (starterId) setCollaborateStarterId(starterId)
+    navigateToCollaborateChat()
+    void completeGuideTurn(begun.state)
+  }
+
+  /** The network half of a send. Every state resolution carries the turn's
+   *  generation, so a response arriving after a reset is rejected as stale
+   *  and never populates the new conversation. */
+  const completeGuideTurn = async (pendingState: GuideConversationState) => {
+    const generation = pendingState.generation
+    try {
+      const res = await fetch('/api/collaborate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Role + content only — never timestamps (guideMessagesForApi strips
+        // them) and never anything but the transcript and session id.
+        body: JSON.stringify({
+          sessionId: pendingState.sessionId,
+          messages: guideMessagesForApi(pendingState.turns),
+        }),
+      })
+      const data: unknown = await res.json().catch(() => null)
+      if (!res.ok) {
+        const failed = failTurn(
+          guideStateRef.current ?? pendingState,
+          generation,
+          res.status === 503 ? 'offline' : 'generic',
+        )
+        if (failed) applyGuideState(failed)
+        return
+      }
+      const payload = parseGuideAnswer(data)
+      const resolved = resolveTurn(
+        guideStateRef.current ?? pendingState,
+        generation,
+        payload,
+        guideDepsRef.current,
+      )
+      if (!resolved) return // stale: a reset replaced this conversation
+      applyGuideState(resolved.state)
+      setCollaborateGuideTopic(resolved.topic)
+      trackEvent({
+        name: 'collaborate_guide_answered',
+        params: { topic: resolved.topic, model_class: payload.modelClass },
+      })
+    } catch {
+      // Roll the optimistic visitor turn back so nothing is lost; the typed
+      // draft is restored and the error card offers retry + email.
+      const failed = failTurn(guideStateRef.current ?? pendingState, generation, 'generic')
+      if (failed) applyGuideState(failed)
+    }
+  }
+
+  const retryGuideMessage = () => {
+    const lastAttempt = guideStateRef.current?.lastAttempt
+    if (lastAttempt) sendGuideMessage(lastAttempt)
+  }
+
+  /** Confirmed "start new conversation": clears turns, heading, draft,
+   *  errors, share state, and the canvas starter/topic treatments, and bumps
+   *  the generation so any in-flight response is rejected as stale. */
+  const resetGuide = () => {
+    const current = guideStateRef.current
+    if (!current) return
+    applyGuideState(resetGuideConversation(current, guideDepsRef.current))
+    setCollaborateStarterId(null)
+    setCollaborateGuideTopic(null)
+  }
+
+  const handleGuideDraftChange = (draft: string) => {
+    const current = guideStateRef.current
+    if (current) applyGuideState(setGuideDraft(current, draft))
+  }
+
+  /** Consented share of the transcript. The reply email goes only to the
+   *  share endpoint — never to the guide endpoint or analytics. */
+  const shareGuideConversation = async (replyEmail: string) => {
+    const current = guideStateRef.current
+    if (!current) return
+    const generation = current.generation
+    const sending = beginGuideShare(current, generation)
+    if (!sending) return
+    applyGuideState(sending)
+    try {
+      const lastAssistant = latestAssistantTurn(current.turns)
+      const res = await fetch('/api/collaborate/share', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: guideMessagesForApi(current.turns),
+          consentVersion: 'v1',
+          ...(replyEmail.trim() ? { replyEmail: replyEmail.trim() } : {}),
+          ...(lastAssistant
+            ? {
+                modelRoute: {
+                  modelClass: lastAssistant.modelClass,
+                  profileVersion: lastAssistant.profileVersion,
+                },
+              }
+            : {}),
+        }),
+      })
+      const data: unknown = await res.json().catch(() => null)
+      const body = (typeof data === 'object' && data !== null ? data : {}) as Record<
+        string,
+        unknown
+      >
+      if (!res.ok || body.ok !== true || typeof body.receiptId !== 'string') {
+        throw new Error('share failed')
+      }
+      const next = resolveGuideShare(guideStateRef.current ?? current, generation, body.receiptId)
+      if (next) applyGuideState(next)
+    } catch {
+      const next = failGuideShare(guideStateRef.current ?? current, generation)
+      if (next) applyGuideState(next)
+    }
+  }
 
   const play = () => {
     const ctrl = controllerRef.current
@@ -1443,9 +1674,15 @@ export default function PortfolioExperience() {
         />
       )}
       <AnalyticsConsent onClient={(client) => (analyticsClientRef.current = client)} />
-      <main id="main-content" tabIndex={-1} className="foreground-layer" aria-live="polite">
+      <main id="main-content" tabIndex={-1} className="foreground-layer">
         <ExperienceTransition phase={transitionPhase}>
-          <div className="foreground-content">
+          <div
+            className={`foreground-content${
+              COLLABORATE_AI_GUIDE && displayed === 'collaborate' && collaborateView === 'chat'
+                ? ' foreground-content-chat'
+                : ''
+            }`}
+          >
             {displayed === 'intro' ? (
               <>
                 {/* Accessible landing heading: the visible mark is the canvas
@@ -1480,8 +1717,22 @@ export default function PortfolioExperience() {
                 selectedStarterId={collaborateStarterId}
                 onSelectStarter={setCollaborateStarterId}
                 headingRef={modeHeadingRef}
-                onGuideTopic={setCollaborateGuideTopic}
-                onTrackEvent={trackEvent}
+                guide={
+                  guideState
+                    ? {
+                        view: collaborateView,
+                        state: guideState,
+                        chatHeadingRef,
+                        onSend: sendGuideMessage,
+                        onRetry: retryGuideMessage,
+                        onReset: resetGuide,
+                        onShare: shareGuideConversation,
+                        onDraftChange: handleGuideDraftChange,
+                        onNavigateToChat: navigateToCollaborateChat,
+                        onNavigateToLanding: navigateToCollaborateLanding,
+                      }
+                    : undefined
+                }
               />
             ) : (
               <VibeExperience

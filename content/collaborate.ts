@@ -141,6 +141,37 @@ export const COLLABORATE_GUIDE_CONTACT: CollaborateContact = {
 export const COLLABORATE_GUIDE_DISCLOSURE =
   'AI guide to Joel — built from material he has reviewed.'
 
+// -- Chat view copy (behind COLLABORATE_AI_GUIDE) -------------------------------
+
+/** Shown as the chat heading until the first answer's generated title locks. */
+export const COLLABORATE_GUIDE_PENDING_HEADING = 'A conversation about Joel'
+
+/** Speaker labels on transcript turns. */
+export const COLLABORATE_GUIDE_VISITOR_LABEL = 'You'
+export const COLLABORATE_GUIDE_NAME = 'Joel’s Guide'
+
+/** Landing preview card (shown once a conversation exists in memory). */
+export const COLLABORATE_GUIDE_PREVIEW_LABEL = 'Conversation in progress'
+export const COLLABORATE_GUIDE_RESUME = 'Resume conversation'
+export const COLLABORATE_GUIDE_NEW = 'Start new conversation'
+export const COLLABORATE_GUIDE_NEW_CONFIRM_PROMPT =
+  'Start over? The current conversation will be cleared.'
+export const COLLABORATE_GUIDE_NEW_CONFIRM_YES = 'Yes, start new'
+export const COLLABORATE_GUIDE_NEW_CONFIRM_CANCEL = 'Keep this conversation'
+
+/** The <details> footer at the end of the transcript (share flow + email). */
+export const COLLABORATE_GUIDE_DETAILS = 'Conversation details'
+
+/** Chat chrome. */
+export const COLLABORATE_GUIDE_BACK_LABEL = 'Back to Collaborate'
+export const COLLABORATE_GUIDE_COMPOSER_LABEL = 'Message Joel’s guide'
+export const COLLABORATE_GUIDE_COMPOSER_PLACEHOLDER = 'Ask about Joel’s work…'
+export const COLLABORATE_GUIDE_SEND_LABEL = 'Send message'
+
+/** Announced (visually hidden, polite) when a guide answer arrives; focus is
+ *  NOT moved to the answer. */
+export const COLLABORATE_GUIDE_ANSWERED_ANNOUNCEMENT = 'Joel’s Guide answered'
+
 // -- Canvas topic treatments -----------------------------------------------------
 
 /** Topics the guide backend assigns to each answer; mirrored in

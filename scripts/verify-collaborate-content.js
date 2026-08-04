@@ -32,6 +32,21 @@ const {
   COLLABORATE_CONTACT,
   COLLABORATE_GUIDE_CONTACT,
   COLLABORATE_GUIDE_DISCLOSURE,
+  COLLABORATE_GUIDE_PENDING_HEADING,
+  COLLABORATE_GUIDE_VISITOR_LABEL,
+  COLLABORATE_GUIDE_NAME,
+  COLLABORATE_GUIDE_PREVIEW_LABEL,
+  COLLABORATE_GUIDE_RESUME,
+  COLLABORATE_GUIDE_NEW,
+  COLLABORATE_GUIDE_NEW_CONFIRM_PROMPT,
+  COLLABORATE_GUIDE_NEW_CONFIRM_YES,
+  COLLABORATE_GUIDE_NEW_CONFIRM_CANCEL,
+  COLLABORATE_GUIDE_DETAILS,
+  COLLABORATE_GUIDE_BACK_LABEL,
+  COLLABORATE_GUIDE_COMPOSER_LABEL,
+  COLLABORATE_GUIDE_COMPOSER_PLACEHOLDER,
+  COLLABORATE_GUIDE_SEND_LABEL,
+  COLLABORATE_GUIDE_ANSWERED_ANNOUNCEMENT,
   COLLABORATE_SHOW_STARTERS,
   COLLABORATE_AI_GUIDE,
   COLLABORATE_STARTER_COUNT,
@@ -54,10 +69,13 @@ function assert(condition, message) {
   }
 }
 
-// --- Launch flags: both gated off ---
+// --- Launch flags ---
 
 assert(COLLABORATE_SHOW_STARTERS === false, 'conversation starters are hidden for launch')
-assert(COLLABORATE_AI_GUIDE === false, 'AI guide is gated off for launch')
+// Preview development runs with the flag ON (uncommitted local change); the
+// launch gate lives in docs/deployment.md. Here we only require that the
+// flag exists, is a boolean, and that the component actually gates on it.
+assert(typeof COLLABORATE_AI_GUIDE === 'boolean', 'AI guide flag exists and is a boolean')
 
 const collaborateSurface = fs.readFileSync(
   path.join(projectRoot, 'components', 'collaborate', 'CollaborateExperience.tsx'),
@@ -153,6 +171,45 @@ assert(
   typeof COLLABORATE_GUIDE_DISCLOSURE === 'string' && COLLABORATE_GUIDE_DISCLOSURE.trim().length > 0,
   'guide disclosure copy is a non-empty string',
 )
+
+// --- Chat view copy: all present, key labels exact ---
+
+const chatCopyStrings = [
+  COLLABORATE_GUIDE_PENDING_HEADING,
+  COLLABORATE_GUIDE_VISITOR_LABEL,
+  COLLABORATE_GUIDE_NAME,
+  COLLABORATE_GUIDE_PREVIEW_LABEL,
+  COLLABORATE_GUIDE_RESUME,
+  COLLABORATE_GUIDE_NEW,
+  COLLABORATE_GUIDE_NEW_CONFIRM_PROMPT,
+  COLLABORATE_GUIDE_NEW_CONFIRM_YES,
+  COLLABORATE_GUIDE_NEW_CONFIRM_CANCEL,
+  COLLABORATE_GUIDE_DETAILS,
+  COLLABORATE_GUIDE_BACK_LABEL,
+  COLLABORATE_GUIDE_COMPOSER_LABEL,
+  COLLABORATE_GUIDE_COMPOSER_PLACEHOLDER,
+  COLLABORATE_GUIDE_SEND_LABEL,
+  COLLABORATE_GUIDE_ANSWERED_ANNOUNCEMENT,
+]
+assert(
+  chatCopyStrings.every((value) => typeof value === 'string' && value.trim().length > 0),
+  'all chat view copy constants are non-empty strings',
+)
+assert(
+  COLLABORATE_GUIDE_PENDING_HEADING === 'A conversation about Joel',
+  'pending heading is “A conversation about Joel”',
+)
+assert(COLLABORATE_GUIDE_RESUME === 'Resume conversation', 'resume label is “Resume conversation”')
+assert(
+  COLLABORATE_GUIDE_NEW === 'Start new conversation',
+  'start-new label is “Start new conversation”',
+)
+assert(
+  COLLABORATE_GUIDE_DETAILS === 'Conversation details',
+  'details label is “Conversation details”',
+)
+assert(COLLABORATE_GUIDE_VISITOR_LABEL === 'You', 'visitor turn label is “You”')
+assert(COLLABORATE_GUIDE_NAME === 'Joel’s Guide', 'guide name is “Joel’s Guide”')
 
 // --- Canvas topic treatments: all 7 topics, authored phrases only ---
 

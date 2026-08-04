@@ -5,16 +5,37 @@ import {
   COLLABORATE_AI_GUIDE,
   COLLABORATE_CONTACT,
   COLLABORATE_ENERGIZING_STATEMENT,
+  COLLABORATE_GUIDE_CONTACT,
+  COLLABORATE_GUIDE_DISCLOSURE,
   COLLABORATE_HEADLINE,
   COLLABORATE_SHOW_STARTERS,
   CONVERSATION_STARTERS,
-  CollaborateTopic,
   getCollaborateStarter,
 } from '../../content/collaborate'
-import { AnalyticsEvent } from '../../engine/analytics'
 import ConversationStarter from './ConversationStarter'
 import ContactActions from './ContactActions'
+import ChatShell from './ChatShell'
 import GuideExperience from './GuideExperience'
+import { GuideConversationState } from './guideConversation'
+
+/** Everything the guide (preview, behind COLLABORATE_AI_GUIDE) needs from the
+ *  shell: the two collaborate views and the controller-owned conversation
+ *  state + actions. Canvas starter/topic treatments and analytics stay in
+ *  PortfolioExperience. */
+export type CollaborateGuideProps = {
+  view: 'landing' | 'chat'
+  state: GuideConversationState
+  /** Focus target for the chat heading (entering/resuming the chat). */
+  chatHeadingRef: RefObject<HTMLHeadingElement | null>
+  /** Send a visitor message; a starter id also applies its canvas treatment. */
+  onSend: (content: string, starterId?: string) => void
+  onRetry: () => void
+  onReset: () => void
+  onShare: (replyEmail: string) => void
+  onDraftChange: (draft: string) => void
+  onNavigateToChat: () => void
+  onNavigateToLanding: () => void
+}
 
 type CollaborateExperienceProps = {
   /** Controlled starter selection (owned by PortfolioExperience so the same
@@ -23,16 +44,16 @@ type CollaborateExperienceProps = {
   onSelectStarter: (id: string) => void
   /** Mode-level focus target (owned by PortfolioExperience's focus management). */
   headingRef: RefObject<HTMLHeadingElement | null>
-  /** Guide mode only: reports the latest answer's canvas topic upward. */
-  onGuideTopic?: (topic: CollaborateTopic | null) => void
-  /** Guide mode only: consented, metadata-only analytics. */
-  onTrackEvent?: (event: AnalyticsEvent) => void
+  /** Guide mode only: view + conversation state + actions. Undefined until
+   *  the shell has created its session (pre-hydration). */
+  guide?: CollaborateGuideProps
 }
 
 /**
  * Conversation invitation surface. Two variants behind content flags:
  *
- * - COLLABORATE_AI_GUIDE on: the conversational AI guide (GuideExperience).
+ * - COLLABORATE_AI_GUIDE on: the conversational AI guide — a landing
+ *   (GuideExperience) and a chat view (ChatShell), switched by guide.view.
  * - Otherwise (production today): a headline, a statement about energizing
  *   collaboration, the scripted starters (gated by COLLABORATE_SHOW_STARTERS),
  *   and the two contact routes. Starter selection only announces its reply
@@ -44,15 +65,52 @@ export default function CollaborateExperience({
   selectedStarterId,
   onSelectStarter,
   headingRef,
-  onGuideTopic,
-  onTrackEvent,
+  guide,
 }: CollaborateExperienceProps) {
   if (COLLABORATE_AI_GUIDE) {
+    if (!guide) {
+      // Pre-session render (SSR / first paint): the static invitation only —
+      // no interactive controls that would depend on the session id.
+      return (
+        <section className="collaborate-experience collaborate-guide" aria-label="Collaborate">
+          <h2
+            ref={headingRef as RefObject<HTMLHeadingElement>}
+            tabIndex={-1}
+            className="collaborate-heading"
+          >
+            {COLLABORATE_HEADLINE}
+          </h2>
+          <p className="collaborate-statement">{COLLABORATE_ENERGIZING_STATEMENT}</p>
+          <p className="guide-disclosure">{COLLABORATE_GUIDE_DISCLOSURE}</p>
+          <ContactActions contact={COLLABORATE_GUIDE_CONTACT} />
+        </section>
+      )
+    }
+    if (guide.view === 'chat') {
+      return (
+        <ChatShell
+          heading={guide.state.heading}
+          state={guide.state}
+          headingRef={guide.chatHeadingRef}
+          onSend={(content) => guide.onSend(content)}
+          onRetry={guide.onRetry}
+          onDraftChange={guide.onDraftChange}
+          onShare={guide.onShare}
+          onBack={guide.onNavigateToLanding}
+        />
+      )
+    }
     return (
       <GuideExperience
         headingRef={headingRef}
-        onGuideTopic={onGuideTopic}
-        onTrackEvent={onTrackEvent}
+        state={guide.state}
+        onStartStarter={(starterId) => {
+          const starter = getCollaborateStarter(starterId)
+          if (starter) guide.onSend(starter.prompt, starter.id)
+        }}
+        onStartFreeform={(content) => guide.onSend(content)}
+        onResume={guide.onNavigateToChat}
+        onReset={guide.onReset}
       />
     )
   }

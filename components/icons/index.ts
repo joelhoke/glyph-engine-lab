@@ -1,2 +1,5 @@
 export { default as ShareIosExportIcon } from './ShareIosExportIcon'
 export { default as RefreshCcwAlt3Icon } from './RefreshCcwAlt3Icon'
+export { default as BackArrowIcon } from './BackArrowIcon'
+export { default as LinkIcon } from './LinkIcon'
+export { default as SendIcon } from './SendIcon'
