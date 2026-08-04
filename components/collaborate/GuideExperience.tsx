@@ -18,6 +18,7 @@ import {
   CONVERSATION_STARTERS,
 } from '../../content/collaborate'
 import ContactActions from './ContactActions'
+import BoundedScrollPanel from '../BoundedScrollPanel'
 import {
   GUIDE_MAX_MESSAGE_CHARS,
   GuideConversationState,
@@ -47,7 +48,8 @@ type GuideExperienceProps = {
  * conversation starters + freeform input (no conversation yet) or a preview
  * card for the in-memory conversation (resume, or start over behind an inline
  * confirm). Submitting from here never answers inline — it navigates to the
- * chat view. Contact routes stay visible in both states.
+ * chat view. Contact routes stay visible in both states. The bordered card
+ * is the fixed frame; everything inside it scrolls (BoundedScrollPanel).
  */
 export default function GuideExperience({
   headingRef,
@@ -74,7 +76,11 @@ export default function GuideExperience({
   }
 
   return (
-    <section className="collaborate-experience collaborate-guide" aria-label="Collaborate">
+    <BoundedScrollPanel
+      className="collaborate-experience collaborate-guide"
+      viewportClassName="collaborate-experience-viewport"
+      label="Collaborate"
+    >
       <h2
         ref={headingRef as RefObject<HTMLHeadingElement>}
         tabIndex={-1}
@@ -183,6 +189,6 @@ export default function GuideExperience({
         </>
       )}
       <ContactActions contact={COLLABORATE_GUIDE_CONTACT} />
-    </section>
+    </BoundedScrollPanel>
   )
 }

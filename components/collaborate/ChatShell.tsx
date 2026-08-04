@@ -7,14 +7,12 @@ import {
   COLLABORATE_GUIDE_COMPOSER_LABEL,
   COLLABORATE_GUIDE_COMPOSER_PLACEHOLDER,
   COLLABORATE_GUIDE_CONTACT,
-  COLLABORATE_GUIDE_CONTACT_SUMMARY,
   COLLABORATE_GUIDE_NAME,
   COLLABORATE_GUIDE_PENDING_HEADING,
   COLLABORATE_GUIDE_SEND_LABEL,
   COLLABORATE_GUIDE_VISITOR_LABEL,
 } from '../../content/collaborate'
 import { BackArrowIcon, LinkIcon, SendIcon } from '../icons'
-import ContactActions from './ContactActions'
 import GuideShareFlow from './GuideShareFlow'
 import {
   GUIDE_MAX_MESSAGE_CHARS,
@@ -78,8 +76,8 @@ function SourceChips({ turn }: { turn: GuideAssistantTurn }) {
  *
  * Accessibility: turn timestamps are client-only presentation (never sent to
  * any endpoint or analytics); newly arrived answers are announced by a single
- * visually-hidden polite status node without moving focus; the direct-email
- * actions live in a native <details> footer in the transcript.
+ * visually-hidden polite status node without moving focus; direct-email
+ * links remain in the genuine offline/error/session-limit states.
  */
 export default function ChatShell({
   heading,
@@ -209,16 +207,9 @@ export default function ChatShell({
         )}
         {limitReached && (
           <p className="guide-limit" role="status">
-            This conversation has reached its session limit — Joel is happy to continue by email.
+            This conversation has reached its session limit — Joel is happy to{' '}
+            <a href={COLLABORATE_GUIDE_CONTACT.mailtoUrl}>continue by email</a>.
           </p>
-        )}
-        {latestAnswer && (
-          <details className="chat-details">
-            <summary>{COLLABORATE_GUIDE_CONTACT_SUMMARY}</summary>
-            <div className="chat-details-body">
-              <ContactActions contact={COLLABORATE_GUIDE_CONTACT} />
-            </div>
-          </details>
         )}
       </div>
       <div className="chat-bottom">

@@ -159,9 +159,6 @@ export const COLLABORATE_GUIDE_NEW_CONFIRM_PROMPT =
 export const COLLABORATE_GUIDE_NEW_CONFIRM_YES = 'Yes, start new'
 export const COLLABORATE_GUIDE_NEW_CONFIRM_CANCEL = 'Keep this conversation'
 
-/** The <details> footer at the end of the transcript (direct-email actions). */
-export const COLLABORATE_GUIDE_CONTACT_SUMMARY = 'Contact Joel directly'
-
 /** The share control below the composer: a switch (toggling sends nothing),
  *  an explicit share button (the ONLY network call), and its states. */
 export const COLLABORATE_GUIDE_SHARE_LABEL = 'Share conversation with Joel'
