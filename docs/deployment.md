@@ -188,3 +188,136 @@ submissions are reviewed via the D1 dashboard or wrangler tooling.
   where `<unixnow>` is the current Unix time in seconds.
 - **Rollback**: the function deploys with the Pages deployment; D1 data is
   unaffected by Pages rollbacks.
+
+## Collaborate AI guide
+
+The Collaborate page can answer visitor questions with an AI guide built
+strictly from an approved knowledge pack (`functions/lib/collaborateProfile.ts`,
+12 reviewed entries). Everything the guide may say traces back to a pack entry;
+anything outside the pack is abstained and handed off to email.
+
+### Architecture
+
+- `POST /api/collaborate` (Pages Function, `functions/api/collaborate/index.ts`)
+  receives the bounded conversation (≤ 12 visitor turns, ≤ 800 chars per
+  message), classifies it into a routing category, and tries the category's
+  candidate models in the approved `ROUTING_POLICY` order
+  (`functions/lib/collaborateShared.ts`).
+- Both candidates are called through **Cloudflare AI Gateway** (authenticated
+  access, spend limits, metadata-only observability):
+  - **OpenAI gpt-5.6-luna** via the Responses API with `store: false` and a
+    strict `json_schema` response format.
+  - **DeepSeek V4 Pro** (hosted on Fireworks infrastructure) via Chat
+    Completions with `response_format: json_object`.
+- The approved knowledge pack is sent **whole** in the system prompt on every
+  turn — the corpus is small enough that embeddings/Vectorize would add
+  moving parts without buying anything. Revisit retrieval only when the pack
+  grows materially.
+- Answers are **non-streaming**: the server validates the complete structured
+  output (`validateModelAnswer` — JSON shape, 220-word cap, impersonation and
+  commitment gates, source IDs must be active pack entries) before anything is
+  shown. On timeout, provider error, rate limit, or invalid output the next
+  policy candidate is tried; if both fail, a deterministic **email handoff**
+  answer is returned (`modelClass: 'fallback'`) — no model involved.
+- `POST /api/collaborate/share` stores an explicitly consented transcript in
+  a **separate D1 database `jh-collaborate`** (binding `COLLABORATE_DB`,
+  separate from `jh-feedback`). Rows expire after **180 days** (Unix-second
+  timestamps, `expires_at = created_at + 180 * 24 * 60 * 60`). Expired rows
+  are deleted two ways: opportunistically on writes, and by the daily
+  scheduled cleanup Worker (`workers/collaborate-cleanup`, cron
+  `17 4 * * *`). The visitor receives a random **receipt ID** they can quote
+  to request early deletion. The optional reply email is never sent to a model.
+
+### One-time setup (Cloudflare dashboard)
+
+1. **D1 database**: `wrangler d1 create jh-collaborate`, then apply the schema
+   from the repo root: `wrangler d1 migrations apply jh-collaborate --remote`
+   (migration `migrations/0002_create_collaborate_shares.sql`).
+2. **Binding**: Pages project → Settings → Functions → D1 database bindings →
+   bind `jh-collaborate` as `COLLABORATE_DB` (production **and** preview). The
+   share endpoint fails closed with 503 if the binding is missing.
+3. **Cleanup Worker**: fill the `database_id` into
+   `workers/collaborate-cleanup/wrangler.toml` and `wrangler deploy` from that
+   directory (see its README).
+4. **AI Gateway**: create a gateway with **authenticated access** enabled
+   (Workers AI → AI Gateway → your gateway → settings → Authenticated
+   Gateway, then create an API token).
+5. **Env vars/secrets** (Pages project → Settings → Environment variables):
+   `CF_ACCOUNT_ID`, `AIG_GATEWAY_ID`, `AIG_TOKEN` (gateway auth token),
+   `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`. The Function fails closed with 503 if
+   the gateway config is missing.
+6. **Spend limit**: set a gateway spend limit (**$20/month initial**) as the
+   hard cost cap.
+7. **Log payloads off**: the code sends `cf-aig-collect-log-payload: false` on
+   every request — verify it in the gateway settings, because **raw prompts
+   and answers are logged by default** otherwise.
+8. **Rate-limit rule**: Cloudflare dashboard → Security → WAF → Rate limiting
+   rules → create a rule alongside the existing feedback rule:
+   - Expression: `http.request.uri.path eq "/api/collaborate"` and method `POST`.
+   - Limit: **30 requests per 10 minutes**, counted **per IP**.
+   - Action: **Block** (clients see 429).
+   The 12-turn session limit itself is enforced in code
+   (`COLLABORATE_MAX_VISITOR_TURNS` in `functions/lib/collaborateShared.ts`).
+
+### Privacy and data handling
+
+- Conversations are **ephemeral by default**: held client-side, never sent to
+  GA4, never written to logs. A transcript reaches the server only when the
+  visitor explicitly shares it.
+- Gateway logging is **metadata-only** (the payload header above); provider
+  calls carry no analytics identifiers.
+- **Before launch**, verify that Cloudflare's hosted DeepSeek route preserves
+  Fireworks' default zero-data-retention
+  (<https://docs.fireworks.ai/guides/security_compliance/data_handling>).
+  If it does not, remove `deepseek/deepseek-v4-pro` from `ROUTING_POLICY`.
+- OpenAI is eligible with disclosure: API content is not used for training but
+  may be retained up to 30 days for abuse monitoring unless a zero-retention
+  agreement applies (<https://openai.com/enterprise-privacy/>). The adapter
+  sends `store: false`.
+- Shared transcripts are stored for 180 days with a consent version
+  (`consent_version` column). **Early deletion** is a manual D1 delete by
+  receipt ID for now:
+  `wrangler d1 execute jh-collaborate --remote --command "DELETE FROM collaborate_shares WHERE id = '<receiptId>';"`
+
+### Evals and model bake-off
+
+`scripts/evals/run.js` scores each candidate model independently against the
+question sets (`scripts/evals/questions.json`, `scripts/evals/adversarial.json`)
+with hard gates (structured-output validity, voice, commitments, citations,
+abstention quality). Run it **monthly**, and on any model, prompt, profile, or
+price change:
+
+```
+node scripts/evals/run.js            # offline self-test, no keys needed
+node scripts/evals/run.js --live     # full bake-off via the gateway
+```
+
+The report and a proposed routing policy land in `tmp-evals/` (`report.md`,
+`routing-policy.proposed.json`). **Promotion is manual**: a human reviews the
+report and copies the approved policy into `ROUTING_POLICY` in
+`functions/lib/collaborateShared.ts`. Runtime routing is then automatic within
+the approved policy — per category, candidates are tried in policy order, and
+an empty array means no model serves that category (the deterministic email
+handoff does). Cost figures in the report use list prices for relative
+comparison; use actual gateway usage for economics — hosted rates differ from
+list prices.
+
+### Launch gates
+
+All of the following before the guide ships:
+
+- [ ] Full eval run shows **zero protected-detail leakage and zero invented
+  hard facts** (employers, dates, titles, metrics, locations, numbers).
+- [ ] Every returned source ID exists in the pack and supports the claims it
+  is cited for.
+- [ ] Third-person voice and correct abstention/email handoff in **every**
+  boundary test (compensation, equity, availability, personal details,
+  protected work, prompt injection, impersonation).
+- [ ] Valid structured output after **at most one provider fallback**.
+- [ ] **p95 latency < 8 s** and median accepted-answer **cost < $0.02**.
+- [ ] Full UI/accessibility pass: keyboard, screen reader, `aria-live`
+  announcements, focus restoration, 320px viewport, reduced motion, high
+  contrast, and a no-JS `mailto:` fallback.
+- [ ] Preview-tested with hiring managers, collaborators, and at least one
+  startup founder.
+- [ ] Flip the launch flag in `content/collaborate.ts`.
