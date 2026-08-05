@@ -89,7 +89,7 @@ export const MODEL_ANSWER_JSON_SCHEMA = {
     heading: { type: 'string', maxLength: 72 },
     answer: { type: 'string' },
     sourceIds: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 4 },
-    followUps: { type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 2 },
+    followUps: { type: 'array', items: { type: 'string', maxLength: 42 }, minItems: 2, maxItems: 2 },
     topic: { type: 'string', enum: [...COLLABORATE_TOPICS] },
   },
   required: ['heading', 'answer', 'sourceIds', 'followUps', 'topic'],

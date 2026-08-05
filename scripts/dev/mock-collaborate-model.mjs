@@ -33,8 +33,8 @@ function answerFor(text) {
         'Joel welcomes serious exploratory conversations about early-stage products, startups, advisory work, and new ventures — especially where the problem is still undefined and design can shape what the thing becomes. What the guide cannot do is speak to his availability, compensation, equity, or any commitment; those go straight to Joel at hello@joelhoke.me.',
       sourceIds: ['entrepreneurial-interest', 'entrepreneurial-boundaries'],
       followUps: [
-        'What kinds of early-stage problems interest Joel?',
-        'How might Joel contribute to a founding team?',
+        'What early-stage problems interest Joel?',
+        'How could Joel help a founding team?',
       ],
       topic: 'entrepreneurial-fit',
     }
@@ -46,8 +46,8 @@ function answerFor(text) {
         'Joel has led as a hands-on lead designer: owning UX and strategy while staying in the craft himself — developing architectural models and interactive prototypes, presenting at conference level, and aligning cross-functional teams around shared patterns rather than directing from a distance.',
       sourceIds: ['leadership-craft'],
       followUps: [
-        'How does Joel lead without losing the craft?',
-        'What has Joel shipped as a lead designer?',
+        'How does Joel stay hands-on?',
+        'What has Joel shipped recently?',
       ],
       topic: 'leadership',
     }
@@ -58,7 +58,7 @@ function answerFor(text) {
       answer:
         'The best way to reach Joel is email: hello@joelhoke.me. Anything the guide cannot answer — compensation, equity, availability, contractual questions, or anything time-sensitive — should go straight to him.',
       sourceIds: ['logistics-contact'],
-      followUps: ['Email Joel directly', 'What can the AI guide answer about Joel?'],
+      followUps: ['Email Joel directly', 'What can the guide answer?'],
       topic: 'logistics',
     }
   }
@@ -68,7 +68,7 @@ function answerFor(text) {
       'Joel is most energized by problems that are still a little undefined. As lead designer for Microsoft’s Global Operations work he designed two agent-integrated operational dashboards that synthesized information spread across 48+ Power BI dashboards, starting from workshops and qualitative research, then iterating architectural models and interactive prototypes with research and design together.',
     sourceIds: ['approach-ambiguity', 'msft-global-operations'],
     followUps: [
-      'How does Joel approach ambiguous product problems?',
+      'How does Joel handle ambiguity?',
       'Has Joel designed with AI?',
     ],
     topic: 'craft',

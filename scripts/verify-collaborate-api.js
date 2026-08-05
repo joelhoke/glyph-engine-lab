@@ -92,7 +92,7 @@ assert(COLLABORATE_MAX_ANSWER_WORDS === 220, 'max answer words is 220')
 assert(COLLABORATE_MAX_BODY_BYTES === 16384, 'max body bytes is 16KB')
 assert(COLLABORATE_MAX_SOURCE_IDS === 4, 'max source ids is 4')
 assert(COLLABORATE_FOLLOW_UP_COUNT === 2, 'follow-up count is 2')
-assert(COLLABORATE_MAX_FOLLOW_UP_CHARS === 120, 'max follow-up chars is 120')
+assert(COLLABORATE_MAX_FOLLOW_UP_CHARS === 42, 'max follow-up chars is 42')
 assert(COLLABORATE_HEADING_MIN_WORDS === 2, 'heading min words is 2')
 assert(COLLABORATE_HEADING_MAX_WORDS === 9, 'heading max words is 9')
 assert(COLLABORATE_HEADING_MAX_CHARS === 72, 'heading max chars is 72')
@@ -182,8 +182,11 @@ assert(validateModelAnswer(variant({ sourceIds: fourIds }), ACTIVE_IDS).ok === t
 
 assert(validateModelAnswer(variant({ followUps: ['Only one?'] }), ACTIVE_IDS).ok === false, '1 follow-up rejected')
 assert(validateModelAnswer(variant({ followUps: ['a?', 'b?', 'c?'] }), ACTIVE_IDS).ok === false, '3 follow-ups rejected')
-assert(validateModelAnswer(variant({ followUps: ['x'.repeat(121), 'ok?'] }), ACTIVE_IDS).ok === false, '121-char follow-up rejected')
-assert(validateModelAnswer(variant({ followUps: ['x'.repeat(120), 'ok?'] }), ACTIVE_IDS).ok === true, '120-char follow-up accepted')
+assert(validateModelAnswer(variant({ followUps: ['x'.repeat(43), 'ok?'] }), ACTIVE_IDS).ok === false, '43-char follow-up rejected')
+assert(validateModelAnswer(variant({ followUps: ['one two three four five six seven eight?', 'ok?'] }), ACTIVE_IDS).ok === false, '8-word follow-up rejected')
+assert(validateModelAnswer(variant({ followUps: ['one two three four five six seven?', 'ok?'] }), ACTIVE_IDS).ok === true, '7-word follow-up accepted')
+assert(validateModelAnswer(variant({ followUps: ['x'.repeat(42), 'ok?'] }), ACTIVE_IDS).ok === true, '42-char follow-up accepted')
+assert(COLLABORATE_FALLBACK_FOLLOW_UPS.every((f) => f.length <= 42 && countWords(f) <= 7), 'fallback follow-ups satisfy the suggestion contract')
 
 assert(validateModelAnswer(variant({ topic: 'nope' }), ACTIVE_IDS).ok === false, 'unknown topic rejected')
 
