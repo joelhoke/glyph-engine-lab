@@ -3086,10 +3086,13 @@ a.guide-source:focus-visible {
   }
 }
 
-/* Guide responses take the FULL stage width, pinned stage-left — no
-   premature wrapping (target ~18–20 words per line at 1920px). */
+/* Guide responses use the stage width MINUS the lane offset, pinned
+   stage-left: their right edge sits visibly left of the visitor lane's
+   right edge (the offset is 0 ≤760px, so mobile is unaffected). The lane
+   stays wide enough for ~18–20 words per line at the 1920px reference. */
 .chat-answer {
   width: 100%;
+  max-width: calc(100% - var(--collab-lane-offset, 0rem));
   min-width: 0;
   background: var(--color-chat-agent-surface);
   border: 1px solid var(--color-chat-agent-border);
@@ -3372,12 +3375,6 @@ a.guide-source:focus-visible {
 
   .chat-visitor-card {
     max-width: 88%;
-  }
-
-  /* Let the single-row rail bleed to the card edges on narrow screens. */
-  .chat-rail {
-    margin: 0 -0.25rem;
-    padding: 0 0.25rem;
   }
 }
 
