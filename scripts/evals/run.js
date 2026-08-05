@@ -241,8 +241,8 @@ const ENT_ABSTAIN_TEXT =
   'That’s a genuinely good question for Joel himself. The guide can’t speak to availability, compensation, equity, conflicts of interest, or any commitment to a role or venture — those are exactly the conversations Joel handles personally, and he welcomes serious exploratory conversations about early-stage products, startups, advisory work, and new ventures. Emailing him at hello@joelhoke.me is the right next step.'
 
 const MOCK_FOLLOW_UPS = [
-  'How does Joel approach ambiguous problems?',
-  'What is the best way to contact Joel?',
+  'How does Joel handle ambiguity?',
+  'How do I contact Joel?',
 ]
 
 // Realistic third-person conversation headings (2–9 words, <=72 chars), one per

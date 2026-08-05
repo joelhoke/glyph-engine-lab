@@ -26,7 +26,8 @@ export const COLLABORATE_MAX_ANSWER_WORDS = 220
 export const COLLABORATE_MAX_BODY_BYTES = 16 * 1024
 export const COLLABORATE_MAX_SOURCE_IDS = 4
 export const COLLABORATE_FOLLOW_UP_COUNT = 2
-export const COLLABORATE_MAX_FOLLOW_UP_CHARS = 120
+export const COLLABORATE_MAX_FOLLOW_UP_CHARS = 42
+export const COLLABORATE_MAX_FOLLOW_UP_WORDS = 7
 export const COLLABORATE_HEADING_MIN_WORDS = 2
 export const COLLABORATE_HEADING_MAX_WORDS = 9
 export const COLLABORATE_HEADING_MAX_CHARS = 72
@@ -101,7 +102,7 @@ Output: respond with ONLY a JSON object, no markdown fences:
 {"heading": string, "answer": string, "sourceIds": string[1..${COLLABORATE_MAX_SOURCE_IDS}], "followUps": string[${COLLABORATE_FOLLOW_UP_COUNT}], "topic": one of ${COLLABORATE_TOPICS.join(' | ')}}
 - heading is a complete, evidence-grounded title for the conversation (${COLLABORATE_HEADING_MIN_WORDS}–${COLLABORATE_HEADING_MAX_WORDS} words, at most ${COLLABORATE_HEADING_MAX_CHARS} characters, single line, third person). It summarizes the visitor's line of inquiry, not your answer verbatim.
 - sourceIds must come from the approved profile entry IDs and must support the factual claims in the answer.
-- followUps are exactly ${COLLABORATE_FOLLOW_UP_COUNT} short follow-up questions a visitor might ask next, phrased about Joel (third person).
+- followUps are exactly ${COLLABORATE_FOLLOW_UP_COUNT} short follow-up questions a visitor might ask next, phrased about Joel (third person). Each must be concise: at most ${COLLABORATE_MAX_FOLLOW_UP_WORDS} words and ${COLLABORATE_MAX_FOLLOW_UP_CHARS} characters.
 - topic classifies the answer for the page's ambient canvas.`
 
 export function buildModelMessages(
@@ -239,9 +240,13 @@ export function validateModelAnswer(
     return { ok: false, error: `followUps must contain exactly ${COLLABORATE_FOLLOW_UP_COUNT} items.` }
   const followUps: string[] = []
   for (const f of o.followUps) {
-    if (typeof f !== 'string' || !f.trim() || f.length > COLLABORATE_MAX_FOLLOW_UP_CHARS)
-      return { ok: false, error: 'Invalid follow-up.' }
-    followUps.push(f.trim())
+    if (typeof f !== 'string' || !f.trim()) return { ok: false, error: 'Invalid follow-up.' }
+    const followUp = f.trim()
+    if (followUp.length > COLLABORATE_MAX_FOLLOW_UP_CHARS)
+      return { ok: false, error: `Follow-up over ${COLLABORATE_MAX_FOLLOW_UP_CHARS} characters.` }
+    if (countWords(followUp) > COLLABORATE_MAX_FOLLOW_UP_WORDS)
+      return { ok: false, error: `Follow-up over ${COLLABORATE_MAX_FOLLOW_UP_WORDS} words.` }
+    followUps.push(followUp)
   }
 
   if (typeof o.topic !== 'string' || !COLLABORATE_TOPICS.includes(o.topic as CollaborateTopic))
@@ -262,7 +267,7 @@ export const COLLABORATE_FALLBACK_ANSWER =
 
 export const COLLABORATE_FALLBACK_FOLLOW_UPS = [
   'Email Joel directly',
-  'What can the AI guide answer about Joel?',
+  'What can the guide answer?',
 ]
 
 // -- Routing policy -------------------------------------------------------------------
