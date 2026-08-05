@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, KeyboardEvent, RefObject, useEffect, useId, useRef, useState } from 'react'
+import { BorderBeam } from 'border-beam'
 import {
   COLLABORATE_GUIDE_ANSWERED_ANNOUNCEMENT,
   COLLABORATE_GUIDE_BACK_LABEL,
@@ -90,8 +91,50 @@ export default function ChatShell({
   onBack,
 }: ChatShellProps) {
   const inputId = useId()
+  const beamId = useId().replace(/:/g, '-')
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const transcriptRef = useRef<HTMLDivElement | null>(null)
+  const shellRef = useRef<HTMLElement | null>(null)
+  const headerElRef = useRef<HTMLElement | null>(null)
+  const bottomRef = useRef<HTMLDivElement | null>(null)
+  // The BorderBeam is client-only (it measures and animates post-mount); the
+  // composer renders plain for the first paint, exactly like the vibe card.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Full-length scroll: the transcript scrolls beneath the header and bottom
+  // overlay layers. Measure both overlays and feed their heights to the
+  // transcript's scroll padding (--chat-top-h / --chat-bottom-h in
+  // globals.css) so the first/last turns always scroll fully clear — across
+  // heading wraps, rail appearance, composer auto-grow, and share-panel
+  // expansion.
+  useEffect(() => {
+    const shell = shellRef.current
+    if (!shell || typeof ResizeObserver === 'undefined') return
+    const update = () => {
+      const header = headerElRef.current
+      const bottom = bottomRef.current
+      if (header) {
+        shell.style.setProperty(
+          '--chat-top-h',
+          `${Math.ceil(header.getBoundingClientRect().height)}px`,
+        )
+      }
+      if (bottom) {
+        shell.style.setProperty(
+          '--chat-bottom-h',
+          `${Math.ceil(bottom.getBoundingClientRect().height)}px`,
+        )
+      }
+    }
+    update()
+    const observer = new ResizeObserver(update)
+    if (headerElRef.current) observer.observe(headerElRef.current)
+    if (bottomRef.current) observer.observe(bottomRef.current)
+    return () => observer.disconnect()
+  }, [])
 
   const pending = state.status === 'pending'
   const limitReached = isGuideLimitReached(state)
@@ -140,8 +183,8 @@ export default function ChatShell({
   }
 
   return (
-    <section className="chat-shell" aria-label="Conversation with Joel’s guide">
-      <header className="chat-header">
+    <section className="chat-shell" aria-label="Conversation with Joel’s guide" ref={shellRef}>
+      <header className="chat-header" ref={headerElRef}>
         <button
           type="button"
           className="chat-back"
@@ -212,7 +255,7 @@ export default function ChatShell({
           </p>
         )}
       </div>
-      <div className="chat-bottom">
+      <div className="chat-bottom" ref={bottomRef}>
         {latestAnswer && latestAnswer.followUps.length > 0 && !limitReached && (
           <div className="chat-rail">
             <div className="guide-followups" role="group" aria-label="Follow-up questions">
@@ -230,33 +273,52 @@ export default function ChatShell({
             </div>
           </div>
         )}
-        {!limitReached && (
-          <form className="chat-composer" onSubmit={handleSubmit}>
-            <label className="visually-hidden" htmlFor={inputId}>
-              {COLLABORATE_GUIDE_COMPOSER_LABEL}
-            </label>
-            <textarea
-              id={inputId}
-              ref={textareaRef}
-              className="chat-input"
-              value={state.draft}
-              maxLength={GUIDE_MAX_MESSAGE_CHARS}
-              rows={1}
-              disabled={pending}
-              placeholder={COLLABORATE_GUIDE_COMPOSER_PLACEHOLDER}
-              onChange={(event) => onDraftChange(event.target.value)}
-              onKeyDown={handleComposerKeyDown}
-            />
-            <button
-              type="submit"
-              className="chat-send"
-              disabled={pending || !state.draft.trim()}
-              aria-label={COLLABORATE_GUIDE_SEND_LABEL}
-            >
-              <SendIcon />
-            </button>
-          </form>
-        )}
+        {!limitReached &&
+          (() => {
+            const composer = (
+              <form className="chat-composer" onSubmit={handleSubmit}>
+                <label className="visually-hidden" htmlFor={inputId}>
+                  {COLLABORATE_GUIDE_COMPOSER_LABEL}
+                </label>
+                <textarea
+                  id={inputId}
+                  ref={textareaRef}
+                  className="chat-input"
+                  value={state.draft}
+                  maxLength={GUIDE_MAX_MESSAGE_CHARS}
+                  rows={1}
+                  disabled={pending}
+                  placeholder={COLLABORATE_GUIDE_COMPOSER_PLACEHOLDER}
+                  onChange={(event) => onDraftChange(event.target.value)}
+                  onKeyDown={handleComposerKeyDown}
+                />
+                <button
+                  type="submit"
+                  className="chat-send"
+                  disabled={pending || !state.draft.trim()}
+                  aria-label={COLLABORATE_GUIDE_SEND_LABEL}
+                >
+                  <SendIcon />
+                </button>
+              </form>
+            )
+            return mounted ? (
+              <BorderBeam
+                size="md"
+                colorVariant="colorful"
+                staticColors
+                hueRange={0}
+                theme="auto"
+                strength={0.45}
+                className="chat-composer-beam"
+                id={beamId}
+              >
+                {composer}
+              </BorderBeam>
+            ) : (
+              composer
+            )
+          })()}
         {latestAnswer && (
           <GuideShareFlow key={state.generation} share={state.share} onShare={onShare} />
         )}

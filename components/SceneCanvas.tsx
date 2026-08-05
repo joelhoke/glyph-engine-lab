@@ -564,6 +564,14 @@ function SceneCanvasInternal(
   // are rare, so they patch both the mirror and React state directly.
   const patchDiagnostics = (patch: Partial<SceneDiagnostics>) => {
     Object.assign(diagnosticsRef.current, patch)
+    // Debug-mode browser hook (dev ?debug=true only): automated interaction
+    // tests read the live mirror (pointer state, impulse count, painted
+    // counts) from here. Never populated in production builds.
+    if (tuningModeRef.current && typeof window !== 'undefined') {
+      ;(
+        window as unknown as { __JH_SCENE_DIAGNOSTICS__?: SceneDiagnostics }
+      ).__JH_SCENE_DIAGNOSTICS__ = diagnosticsRef.current
+    }
     setDiagnostics((prev) => ({ ...prev, ...patch }))
   }
 
@@ -1430,7 +1438,14 @@ function SceneCanvasInternal(
   })
 
   const pushPaintStatus = () => {
-    onPaintStatusChangeRef.current?.(getPaintStatus())
+    const status = getPaintStatus()
+    // Debug-mode browser hook (dev ?debug=true only): lets automated
+    // interaction tests observe committed paint strokes without poking React
+    // internals. Never populated in production builds.
+    if (tuningModeRef.current && typeof window !== 'undefined') {
+      ;(window as unknown as { __JH_PAINT_STATUS__?: PaintStatus }).__JH_PAINT_STATUS__ = status
+    }
+    onPaintStatusChangeRef.current?.(status)
   }
 
   const patchPaintDiagnostics = () => {
