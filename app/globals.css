@@ -106,10 +106,13 @@
     --color-on-warm: #ffffff;
 
     /* Chat color hierarchy (collaborate guide): neutral agent surfaces for
-       guide-provided content, warm-accent user surfaces for visitor content. */
+       guide-provided content, warm-accent user surfaces for visitor content.
+       The visitor surface is a high-alpha pale warm tint (paired with the
+       card's backdrop blur) so the animated canvas never bleeds through the
+       text — the raw 12% warm tint was illegible over dense glyph areas. */
     --color-chat-agent-surface: rgba(255, 255, 255, 0.94);
     --color-chat-agent-border: rgba(16, 24, 38, 0.10);
-    --color-chat-user-surface: rgba(138, 63, 26, 0.12);
+    --color-chat-user-surface: rgba(250, 231, 218, 0.92);
     --color-chat-user-border: rgba(138, 63, 26, 0.34);
 
     /* Translucent surfaces. */
@@ -272,8 +275,14 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   padding: 4rem 2rem;
   pointer-events: none;
 }
+/* Shared hit-testing contract: the foreground layer, the transition wrapper,
+   and this content column are all structural — they stretch over the canvas
+   but must never intercept pointer input. Pointer events are re-enabled only
+   on the surfaces that genuinely own interaction (buttons, links, cards,
+   bounded scroll panels, composers, toolbars); every empty or decorative gap
+   falls through to the full-viewport canvas beneath. */
 .foreground-content {
-  pointer-events: auto;
+  pointer-events: none;
   width: min(100%, 960px);
   display: flex;
   flex-direction: column;
@@ -291,13 +300,15 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   justify-items: center;
 }
 
-.primary-actions.options-hidden {
+.primary-actions.options-hidden,
+.primary-actions.options-hidden .primary-action-button {
   opacity: 0;
   pointer-events: none;
   user-select: none;
 }
 
-.primary-actions.options-inert {
+.primary-actions.options-inert,
+.primary-actions.options-inert .primary-action-button {
   pointer-events: none;
   user-select: none;
 }
@@ -329,6 +340,9 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   width: 100%;
 }
 .primary-action-button {
+  /* Re-enabled over the pointer-transparent foreground column; the grid gaps
+     and decorative beams around the buttons still fall through to the canvas. */
+  pointer-events: auto;
   width: 100%;
   min-height: 60px;
   padding: 1.25rem 2rem;
@@ -338,7 +352,9 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   font-weight: 600;
   letter-spacing: 0.02em;
   transition: background 180ms ease, border-color 180ms ease, transform 180ms ease;
-  border-radius: 16px;
+  /* Fully rounded pill, matching the site's other buttons (follow-ups, share
+     toggle, nav) — was a 16px rounded rectangle. */
+  border-radius: 999px;
   cursor: pointer;
 }
 .primary-action-button:hover,
@@ -1508,6 +1524,10 @@ button:focus-visible {
    inner viewport (BoundedScrollPanel) scrolls the slide content. */
 .work-experience {
   position: relative;
+  /* Interactive surface over the pointer-transparent foreground column: the
+     card owns its gestures (bounded scrolling, buttons, links); the layout
+     gaps around it fall through to the canvas. */
+  pointer-events: auto;
   width: min(100%, 40rem);
   text-align: left;
   color: var(--color-text);
@@ -2162,6 +2182,9 @@ button:focus-visible {
 /* Fixed outer frame (BoundedScrollPanel): the border/background stay
    stationary while the inner viewport scrolls the invitation content. */
 .collaborate-experience {
+  /* Interactive surface over the pointer-transparent foreground column (same
+     contract as the Work card). */
+  pointer-events: auto;
   width: min(100%, 44rem);
   text-align: center;
   color: var(--color-text);
@@ -2918,13 +2941,15 @@ a.guide-source:focus-visible {
   gap: 0;
 }
 
+/* Full-length scroll: the transcript spans the shell's entire height while
+   the header (back + title, with the top nav above it) and the bottom cluster
+   (suggested prompts, composer, share toggle) float as overlay layers. The
+   transcript's scroll padding — fed by the measured overlay heights
+   (--chat-top-h / --chat-bottom-h, written by ChatShell's ResizeObserver) —
+   keeps the first and last turns fully scrollable clear of both overlays,
+   with one response line height (1rem/1.65) of extra clearance at the end. */
 .chat-shell {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  /* Intentional 8px separation: the transcript begins immediately below the
-     heading and ends immediately above the rail (8px padding inside the
-     scroll region on each end gives 16px total). */
-  gap: 0.5rem;
+  position: relative;
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -2932,7 +2957,26 @@ a.guide-source:focus-visible {
   color: var(--color-text);
 }
 
+/* Chat hit-testing: the shell grid is a structural (pointer-transparent)
+   wrapper, so only the genuinely interactive regions own pointer input — the
+   back button, the bounded transcript scroller, and the bottom cluster (rail,
+   composer, share). Everything between them (header text, turn gaps, the
+   space around the stage) falls through to the canvas. */
+.chat-back,
+.chat-transcript,
+.chat-rail,
+.chat-composer,
+.guide-share {
+  pointer-events: auto;
+}
+
 .chat-header {
+  /* Overlay layer above the full-length transcript (see .chat-shell). */
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
   width: min(100%, var(--collab-chat-stage));
   margin: 0 auto;
   min-width: 0;
@@ -2994,19 +3038,56 @@ a.guide-source:focus-visible {
   border-radius: 4px;
 }
 
-/* Independently scrolling transcript with extra breathing room; the grid row
-   keeps it from ever scrolling beneath the composer, and overscroll
-   containment keeps end-of-scroll swipes from chaining into the page. */
+/* Full-length scroller beneath the overlay chrome (see .chat-shell): it
+   spans the shell's full height; turns scroll under the header and the
+   bottom cluster. The top/bottom scroll padding clears the measured
+   overlays, reserving one full response line height (1rem/1.65) below the
+   final card — border and source chips included — so the pinned/auto-
+   scrolled end position leaves clear space before the prompt rail instead
+   of a clipped edge against the animated background. scroll-padding matches
+   so programmatic scroll-into-view lands in the same fully visible
+   position. */
 .chat-transcript {
-  min-height: 0;
+  position: absolute;
+  inset: 0;
+  /* Bounded to the chat stage like the header and the bottom cluster: the
+     panel owns exactly its visible region (scrollbar included) while the
+     flanking margins stay fall-through canvas. */
+  width: min(100%, var(--collab-chat-stage));
+  margin: 0 auto;
   min-width: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
-  padding: 0.5rem 0.25rem;
+  padding: calc(var(--chat-top-h, 3.5rem) + 0.5rem) 0.25rem
+    calc(var(--chat-bottom-h, 7rem) + 1.65rem);
+  scroll-padding-top: calc(var(--chat-top-h, 3.5rem) + 0.5rem);
+  scroll-padding-bottom: calc(var(--chat-bottom-h, 7rem) + 1.65rem);
   scrollbar-width: thin;
+  /* No solid bars: turns fade out as they scroll beneath the floating header
+     and the bottom cluster, so the overlay chrome always reads clean while
+     the scroll really does run the full height underneath it. The top fade
+     holds fully transparent through the title's own band before ramping in,
+     so the heading never sits on half-visible text. At the pinned rest
+     positions the first/last turns sit entirely in the clear band. */
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--chat-top-h, 3.5rem) * 0.5),
+    black calc(var(--chat-top-h, 3.5rem) + 0.5rem),
+    black calc(100% - var(--chat-bottom-h, 7rem) - 1.65rem),
+    transparent calc(100% - var(--chat-bottom-h, 7rem))
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--chat-top-h, 3.5rem) * 0.5),
+    black calc(var(--chat-top-h, 3.5rem) + 0.5rem),
+    black calc(100% - var(--chat-bottom-h, 7rem) - 1.65rem),
+    transparent calc(100% - var(--chat-bottom-h, 7rem))
+  );
 }
 
 .chat-transcript > * {
@@ -3048,10 +3129,13 @@ a.guide-source:focus-visible {
 /* Visitor bubble: metadata sits INSIDE the card above the message,
    right-aligned; the message takes Cabin Regular (the conversation-copy
    exception — docs/style-guide.md §3.3). Short messages stay content-sized;
-   longer ones expand toward the full stage width, always pinned right. */
+   longer ones expand toward the lane width, always pinned right. The lane
+   mirrors the guide lane: the card stops one lane-offset short of the
+   stage's left edge, so even a long message keeps the same margin the
+   guide cards keep on the right. */
 .chat-visitor-card {
   width: fit-content;
-  max-width: 100%;
+  max-width: calc(100% - var(--collab-lane-offset, 0rem));
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -3059,6 +3143,8 @@ a.guide-source:focus-visible {
   background: var(--color-chat-user-surface);
   border: 1px solid var(--color-chat-user-border);
   border-radius: 12px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   padding: 0.875rem 1rem;
 }
 
@@ -3102,6 +3188,7 @@ a.guide-source:focus-visible {
   flex-direction: column;
   gap: 0.7rem;
   backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .chat-answer-text {
@@ -3126,8 +3213,14 @@ a.guide-source:focus-visible {
 
 /* Fixed bottom area spanning the ENTIRE stage: the composer's left edge is
    the guide lane's left edge, its right edge the visitor lane's right edge;
-   the follow-up rail and share control inherit those same outer margins. */
+   the follow-up rail and share control inherit those same outer margins.
+   Overlay layer above the full-length transcript (see .chat-shell). */
 .chat-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
   width: min(100%, var(--collab-chat-stage));
   margin: 0 auto;
   min-width: 0;
@@ -3269,6 +3362,14 @@ a.guide-source:focus-visible {
   border-radius: 26px;
   padding: 0.35rem 0.35rem 0.35rem 1.1rem;
   backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* BorderBeam wrapper around the composer (same treatment as the vibe
+   invitation card): the wrapper is layout-transparent, the beam tracks the
+   composer's pill radius. */
+.chat-composer-beam {
+  border-radius: 26px;
 }
 
 .chat-composer:focus-within {
