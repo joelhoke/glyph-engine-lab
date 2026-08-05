@@ -5,6 +5,9 @@ import { ExperienceSceneKey } from '../engine/types'
 type ExperienceNavProps = {
   active: ExperienceSceneKey | null
   onSelect: (key: ExperienceSceneKey) => void
+  /** Extra classes for the nav element (e.g. the mobile chat-active state
+   *  that hides the nav to reclaim vertical space). */
+  className?: string
 }
 
 const NAV_ITEMS: { key: ExperienceSceneKey; label: string }[] = [
@@ -18,9 +21,12 @@ const NAV_ITEMS: { key: ExperienceSceneKey; label: string }[] = [
  * has been exited; buttons are natively keyboard reachable and the active
  * mode is exposed via aria-current.
  */
-export default function ExperienceNav({ active, onSelect }: ExperienceNavProps) {
+export default function ExperienceNav({ active, onSelect, className }: ExperienceNavProps) {
   return (
-    <nav className="experience-nav" aria-label="Experience">
+    <nav
+      className={`experience-nav${className ? ` ${className}` : ''}`}
+      aria-label="Experience"
+    >
       <ul className="experience-nav-list">
         {NAV_ITEMS.map((item) => (
           <li key={item.key}>
