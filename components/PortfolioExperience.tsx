@@ -1624,6 +1624,11 @@ export default function PortfolioExperience() {
       ? { state: 'error', message: uploadError }
       : null
 
+  // The collaborate chat shell is on screen (guide flag on, chat subview):
+  // on mobile this hides the persistent nav to reclaim vertical space.
+  const collaborateChatActive =
+    COLLABORATE_AI_GUIDE && displayed === 'collaborate' && collaborateView === 'chat'
+
   return (
     <div className="portfolio-shell">
       {/* Static branded layer behind the canvas: visible only while the
@@ -1671,6 +1676,7 @@ export default function PortfolioExperience() {
         <ExperienceNav
           active={displayed === 'intro' ? null : displayed}
           onSelect={navigateTo}
+          className={collaborateChatActive ? 'experience-nav--chat-active' : undefined}
         />
       )}
       <AnalyticsConsent onClient={(client) => (analyticsClientRef.current = client)} />
@@ -1679,14 +1685,12 @@ export default function PortfolioExperience() {
         tabIndex={-1}
         className={`foreground-layer${
           displayed === 'collaborate' ? ' foreground-layer--collaborate' : ''
-        }`}
+        }${collaborateChatActive ? ' foreground-layer--chat' : ''}`}
       >
         <ExperienceTransition phase={transitionPhase}>
           <div
             className={`foreground-content${
-              COLLABORATE_AI_GUIDE && displayed === 'collaborate' && collaborateView === 'chat'
-                ? ' foreground-content-chat'
-                : ''
+              collaborateChatActive ? ' foreground-content-chat' : ''
             }`}
           >
             {displayed === 'intro' ? (
