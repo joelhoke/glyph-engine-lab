@@ -315,6 +315,7 @@ export const WORK_STORIES: WorkStory[] = [
     sourceUrl: '/assets/work/Stocks.png',
     sourceKind: 'raster',
     colorMode: 'source-colors',
+    glyphText: 'Employee Compensation and Benefits ',
   },
 ]
 
