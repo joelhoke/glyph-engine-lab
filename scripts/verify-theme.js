@@ -297,7 +297,7 @@ for (const token of [
   '--color-warm: #8a3f1a',
   '--color-chat-agent-surface: rgba(255, 255, 255, 0.94)',
   '--color-chat-agent-border: rgba(16, 24, 38, 0.10)',
-  '--color-chat-user-surface: rgba(138, 63, 26, 0.12)',
+  '--color-chat-user-surface: rgba(250, 231, 218, 0.92)',
   '--color-chat-user-border: rgba(138, 63, 26, 0.34)',
 ]) {
   assert(lightBlock.includes(token), `light override carries exact token "${token}"`)
