@@ -21,8 +21,6 @@ export type WorkStoryLink = {
   url: string
   /** Visible, descriptive link label (never "click here"). */
   label: string
-  /** Optional inline icon/thumbnail shown before the link label. */
-  iconSrc?: string
 }
 
 /**
@@ -217,56 +215,6 @@ export const WORK_STORIES: WorkStory[] = [
     behavior: { particleRepel: 0.3 },
   },
   {
-    id: 'microsoft-global-compensation',
-    title: 'Microsoft Global Compensation',
-    thesis:
-      'Fortune 500 companies like Microsoft provide expansive pay packages composed of cash, stock and employee benefits. These comprehensive packages can lead to confusion around how much exactly they’re taking home as well as benefits going completely unused. A platform that clarifies those questions and connects employees to their benefits ensures employees get the most out of their compensation which reinforces employee satisfaction and reduces the likelihood of employee benefits going unused.',
-    role: 'Lead Designer',
-    context:
-      'Microsoft · cross-functional team across design, product management, research, and engineering · 2021',
-    outcome:
-      'A first party platform that continues to be used to communicate employee compensation and benefits that helps a business like Microsoft ensure employees are reminded the value of their package in an ever changing and competitive market.',
-    links: [
-      {
-        label: 'Helping Microsoft employees understand their value',
-        url: 'https://www.microsoft.com/insidetrack/blog/helping-microsoft-employees-understand-their-value-with-the-total-rewards-portal/',
-        iconSrc: '/assets/work/Stocks.png',
-      },
-    ],
-    access: 'public',
-    mark: MICROSOFT_BRAND_MARK,
-    details: [
-      {
-        heading: 'The challenge',
-        paragraphs: [
-          'Moving from a 3rd party platform to a 1st party platform comes with a variety of challenges. What started as a simple lift and shift re-skin in addition to my primary workload became a full redesign. And a 6-month engagement expanded to closer to 12. Creating something new while aligning to established user expectations is a fine line to walk. There was clear need to better surface the total value of benefits and communicating stock awards, especially the ambiguity of their value over the long term.',
-        ],
-      },
-      {
-        heading: 'The approach',
-        paragraphs: [
-          'Start with the user and go where their needs dictate. An introductory research study to understand how employees used the 3rd party tool surfaced some clear needs for additional clarity, as the portal that was in place did the job of communicating the headlines: cash, stock, benefits. But once users started to scratch below the surface things started to fall apart. This led to follow up studies, where we tested design prototypes and got clarification around some of the key gaps between the 3rd party tool and employees’ understanding of their compensation and value.',
-        ],
-      },
-      {
-        heading: 'My contributions',
-        items: [
-          'Platform redesign',
-          'Coordination across PM, research and engineering',
-          'Scope expansion in service of the business and employee needs',
-        ],
-      },
-      {
-        heading: 'The outcome',
-        paragraphs: [
-          'A first party platform that continues to be used to communicate employee compensation and benefits that helps a business like Microsoft ensure employees are reminded the value of their package in an ever changing and competitive market.',
-        ],
-      },
-    ],
-    media: [],
-    sourceUrl: '/assets/work/story-02.svg',
-  },
-  {
     id: 'microsoft-employee-experience',
     title: 'Microsoft Employee Experience',
     role: 'Junior to Senior Designer',
@@ -316,6 +264,57 @@ export const WORK_STORIES: WorkStory[] = [
         'This work supported an employee platform deployed globally at Microsoft, established practices shared with other product teams and external customers, and contributed to the broader evolution from fragmented employee tools toward a centralized Viva experience. Microsoft later reported usage above 97% among employees across the Viva suite.',
       ] },
     ],
+  },
+  {
+    id: 'microsoft-global-compensation',
+    title: 'Microsoft Global Compensation',
+    thesis:
+      'Fortune 500 companies like Microsoft provide expansive pay packages composed of cash, stock and employee benefits. These comprehensive packages can lead to confusion around how much exactly they’re taking home as well as benefits going completely unused. A platform that clarifies those questions and connects employees to their benefits ensures employees get the most out of their compensation which reinforces employee satisfaction and reduces the likelihood of employee benefits going unused.',
+    role: 'Lead Designer',
+    context:
+      'Microsoft · cross-functional team across design, product management, research, and engineering · 2021',
+    outcome:
+      'A first party platform that continues to be used to communicate employee compensation and benefits that helps a business like Microsoft ensure employees are reminded the value of their package in an ever changing and competitive market.',
+    links: [
+      {
+        label: 'Helping Microsoft employees understand their value',
+        url: 'https://www.microsoft.com/insidetrack/blog/helping-microsoft-employees-understand-their-value-with-the-total-rewards-portal/',
+      },
+    ],
+    access: 'public',
+    mark: MICROSOFT_BRAND_MARK,
+    details: [
+      {
+        heading: 'The challenge',
+        paragraphs: [
+          'Moving from a 3rd party platform to a 1st party platform comes with a variety of challenges. What started as a simple lift and shift re-skin in addition to my primary workload became a full redesign. And a 6-month engagement expanded to closer to 12. Creating something new while aligning to established user expectations is a fine line to walk. There was clear need to better surface the total value of benefits and communicating stock awards, especially the ambiguity of their value over the long term.',
+        ],
+      },
+      {
+        heading: 'The approach',
+        paragraphs: [
+          'Start with the user and go where their needs dictate. An introductory research study to understand how employees used the 3rd party tool surfaced some clear needs for additional clarity, as the portal that was in place did the job of communicating the headlines: cash, stock, benefits. But once users started to scratch below the surface things started to fall apart. This led to follow up studies, where we tested design prototypes and got clarification around some of the key gaps between the 3rd party tool and employees’ understanding of their compensation and value.',
+        ],
+      },
+      {
+        heading: 'My contributions',
+        items: [
+          'Platform redesign',
+          'Coordination across PM, research and engineering',
+          'Scope expansion in service of the business and employee needs',
+        ],
+      },
+      {
+        heading: 'The outcome',
+        paragraphs: [
+          'A first party platform that continues to be used to communicate employee compensation and benefits that helps a business like Microsoft ensure employees are reminded the value of their package in an ever changing and competitive market.',
+        ],
+      },
+    ],
+    media: [],
+    sourceUrl: '/assets/work/Stocks.png',
+    sourceKind: 'raster',
+    colorMode: 'source-colors',
   },
 ]
 

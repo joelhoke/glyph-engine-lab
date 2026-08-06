@@ -1652,15 +1652,6 @@ button:focus-visible {
   border-color: var(--color-accent-strong);
 }
 
-.work-story-link-icon {
-  display: inline-block;
-  width: 1em;
-  height: 1em;
-  margin-right: 0.35em;
-  vertical-align: middle;
-  object-fit: contain;
-}
-
 .work-controls {
   display: flex;
   align-items: center;

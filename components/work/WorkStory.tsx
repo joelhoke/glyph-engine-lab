@@ -84,14 +84,6 @@ export default function WorkStoryView({ story, headingRef, onTrackEvent }: WorkS
               rel="noopener noreferrer"
               onClick={() => trackOutbound(link.url)}
             >
-              {link.iconSrc && (
-                <img
-                  src={link.iconSrc}
-                  alt=""
-                  className="work-story-link-icon"
-                  aria-hidden="true"
-                />
-              )}
               {link.label}
               <span aria-hidden="true"> ↗</span>
             </a>
