@@ -8,6 +8,8 @@ import WorkExperience from './work/WorkExperience'
 import CollaborateExperience from './collaborate/CollaborateExperience'
 import VibeExperience, { VibeSurfaceStatus } from './vibe/VibeExperience'
 import VibeToolbar from './vibe/VibeToolbar'
+import SonificationOverlay from './vibe/SonificationOverlay'
+import { useSonification } from './vibe/useSonification'
 import PrimaryActions, { ExperienceKey, PRIMARY_ACTION_COUNT } from './PrimaryActions'
 import TuningPanel from './tuning/TuningPanel'
 import AnalyticsConsent from './AnalyticsConsent'
@@ -91,6 +93,7 @@ import {
   clonePaintSnapshot,
   createEmptyPaintSnapshot,
 } from '../engine/paint'
+import { clampPondConfig, POND_DEFAULTS, PondConfig } from '../engine/pondConfig'
 import {
   VibeHistory,
   VibeStateSnapshot,
@@ -674,6 +677,30 @@ export default function PortfolioExperience() {
   const [sceneDiagnostics, setSceneDiagnostics] = useState<SceneDiagnosticsSnapshot>(() =>
     createDefaultDiagnosticsSnapshot(),
   )
+
+  // Private Pond experiment (debug-only, session-only): never enters
+  // PlaygroundConfig, presets, unified history, URL sharing, analytics, or
+  // uploaded-source state — the config lives only in this component state.
+  const [pondConfig, setPondConfig] = useState<PondConfig>({ ...POND_DEFAULTS })
+  const handlePondChange = (next: PondConfig) => {
+    setPondConfig(clampPondConfig(next))
+  }
+
+  // Visual Sonification experiment (debug-only, session-only): the scanner
+  // reads the live canvas and plays a tonal score. It never enters
+  // PlaygroundConfig, presets, unified history, URL sharing, analytics, or
+  // uploaded-source state — and no AudioContext exists until the visitor
+  // presses Play in dev ?debug=true mode.
+  const sonification = useSonification({
+    enabled: tuningMode && displayed === 'vibe',
+    sceneCanvasRef,
+    qualityTier: (sceneDiagnostics.qualityTier >= 0 && sceneDiagnostics.qualityTier <= 3
+      ? sceneDiagnostics.qualityTier
+      : 0) as QualityTier,
+    backgroundColor1: playgroundConfig.backgroundColor1,
+    backgroundColor2: playgroundConfig.backgroundColor2,
+    ambient: playgroundConfig.ambient,
+  })
 
   const controllerRef = useRef<SequenceController>({
     startTime: 0,
@@ -1317,6 +1344,8 @@ export default function PortfolioExperience() {
   // URL the session still references is released.
   const handleResetPlaygroundConfig = () => {
     vibeTouchedRef.current = false
+    // The sonification scanner stops on reset; the visitor presses Play again.
+    sonification.stop()
     // Reset restores the CURRENT themed default (feature/light-dark) and —
     // by clearing the touched flag — resumes following the system theme.
     const defaultConfig = resolveVibeDefault(themeRef.current)
@@ -1665,6 +1694,7 @@ export default function PortfolioExperience() {
         onQualityTierChange={(from, to) =>
           trackEvent({ name: 'tier_transition', params: { from_tier: from, to_tier: to } })
         }
+        pond={tuningMode && displayed === 'vibe' ? pondConfig : undefined}
         onDiagnosticsUpdate={(snapshot) => {
           setSceneDiagnostics(snapshot)
           if (snapshot.targetCount !== diagnostics.targetCount) {
@@ -1862,6 +1892,24 @@ export default function PortfolioExperience() {
           onReset={handleResetPlaygroundConfig}
           onClearPaint={handleClearPaint}
           canvasRef={sceneCanvasRef}
+          debugMode={tuningMode}
+          pond={pondConfig}
+          onPondChange={handlePondChange}
+          sound={{
+            config: sonification.config,
+            playback: sonification.playback,
+            error: sonification.error,
+          }}
+          onSoundConfigChange={sonification.updateConfig}
+          onSoundPlay={sonification.play}
+          onSoundPause={sonification.pause}
+        />
+      )}
+      {tuningMode && displayed === 'vibe' && (
+        <SonificationOverlay
+          active={sonification.playback === 'playing' || sonification.playback === 'paused'}
+          getSweepPosition={sonification.getSweepPosition}
+          getActiveDirection={sonification.getActiveDirection}
         />
       )}
       {tuningMode && (

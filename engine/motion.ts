@@ -21,6 +21,17 @@
  * frame-loop path allocates objects or arrays, and every variant is a pure,
  * deterministic function of its inputs — a fixed time always yields the same
  * finite output, which is what scripts/verify-motion.js asserts.
+ *
+ * Registry contract for new entries (CREATURE_DEFINITIONS):
+ * - build the topology ONCE into typed arrays (u/v/aux/phase), never per frame;
+ * - compute targets allocation-free into caller-owned buffers;
+ * - clamp every numeric input the compute path reads;
+ * - declare locomotion capability when the creature has a determinate resting
+ *   forward direction in its generated local space, so the pond body can
+ *   rotate the local targets by (body heading - resting forward) — creatures
+ *   without it still swim, but drift translation-only (never rotated);
+ * - add deterministic verification for the entry (scripts/verify-motion.js,
+ *   plus scripts/verify-pond.js for locomotion).
  */
 
 import { CustomCreatureForm, CustomCreatureParams, ParametricVariant } from './motionConfig'
@@ -173,6 +184,26 @@ export type CreatureDefinition = {
     outX: Float32Array,
     outY: Float32Array,
   ) => void
+  /**
+   * Locomotion capability (pond swimming): the creature has a determinate
+   * facing and can be rigidly driven by an external body. `forward` is the
+   * resting forward direction (unit vector) in the creature's generated
+   * local space, and `anchorX`/`anchorY` are the local point that maps onto
+   * the body position. Creatures without this field still drift with the
+   * body (translation-only) but are never rotated.
+   */
+  locomotion?: CreatureLocomotion
+}
+
+/** Locomotion metadata for body-driven creatures (see CreatureDefinition). */
+export type CreatureLocomotion = {
+  /** Resting forward direction in generated local space (unit vector). */
+  forwardX: number
+  forwardY: number
+  /** Local-space anchor that maps onto the body position: the fraction of the
+   *  viewport the creature is generated around (0.5 = viewport center). */
+  anchorX: number
+  anchorY: number
 }
 
 // ---------------------------------------------------------------------------
@@ -666,9 +697,40 @@ function computeCustom(
 // ---------------------------------------------------------------------------
 
 export const CREATURE_DEFINITIONS: Record<ParametricVariant, CreatureDefinition> = {
-  original: { variant: 'original', label: 'Original', buildTopology: buildOriginalTopology, compute: computeOriginal },
-  jelly: { variant: 'jelly', label: 'Jelly', buildTopology: buildJellyTopology, compute: computeJelly },
-  ray: { variant: 'ray', label: 'Ray', buildTopology: buildRayTopology, compute: computeRay },
+  // The fish is generated head-left (spine s=0 at the head), so its resting
+  // forward direction points -X and its anchor is the viewport center.
+  original: {
+    variant: 'original',
+    label: 'Original',
+    buildTopology: buildOriginalTopology,
+    compute: computeOriginal,
+    locomotion: { forwardX: -1, forwardY: 0, anchorX: 0.5, anchorY: 0.5 },
+  },
+  // The jelly is generated bell-up: the dome apex sits above the rim
+  // (rimY = 0.42 * height) and the tendrils trail downward, so its resting
+  // forward direction points -Y and its anchor is the bell's rim center.
+  jelly: {
+    variant: 'jelly',
+    label: 'Jelly',
+    buildTopology: buildJellyTopology,
+    compute: computeJelly,
+    locomotion: { forwardX: 0, forwardY: -1, anchorX: 0.5, anchorY: 0.42 },
+  },
+  // The ray is generated as a wide span mirrored along X, so it swims
+  // perpendicular to the span (along Y). Its chord profile is mirror-
+  // symmetric about the X axis, so the Y sign is a convention: head-up (-Y),
+  // matching the jelly. Its anchor is the viewport center the sheet is
+  // generated around.
+  ray: {
+    variant: 'ray',
+    label: 'Ray',
+    buildTopology: buildRayTopology,
+    compute: computeRay,
+    locomotion: { forwardX: 0, forwardY: -1, anchorX: 0.5, anchorY: 0.5 },
+  },
+  // Custom stays drift-only: its orientation is a runtime knob (form: school
+  // = head-left fish, bell = head-up jelly, wing/grid = symmetric sheets), so
+  // no single resting forward direction exists to declare.
   custom: { variant: 'custom', label: 'Custom', buildTopology: buildCustomTopology, compute: computeCustom },
 }
 

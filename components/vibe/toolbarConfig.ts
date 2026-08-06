@@ -5,6 +5,12 @@ export type VibeToolCategory =
   | 'paint'
   | 'motion'
   | 'ambient'
+  /** Debug-only (dev ?debug=true): the Private Pond experiment. The toolbar
+   *  filters this category out unless its debugMode prop is set. */
+  | 'pond'
+  /** Debug-only (dev ?debug=true): the Visual Sonification experiment. The
+   *  toolbar filters this category out unless its debugMode prop is set. */
+  | 'sound'
 
 export type VibeUtilityAction = 'undo' | 'redo' | 'refresh' | 'share'
 
@@ -29,7 +35,14 @@ export const VIBE_TOOLBAR_CATEGORIES: CategoryConfig[] = [
   { id: 'paint', label: 'Paint', icon: '/toolbar/Paint-icon.svg', disabled: false },
   { id: 'motion', label: 'Motion Effects', icon: '/toolbar/MotionEffects-icon.png', disabled: false },
   { id: 'ambient', label: 'Ambient', icon: '/toolbar/Ambient-icon.svg', disabled: false },
+  { id: 'pond', label: 'Pond', icon: '/toolbar/Pond-icon.svg', disabled: false },
+  { id: 'sound', label: 'Sound', icon: '/toolbar/Sound-icon.svg', disabled: false },
 ]
+
+/** Debug-only categories (dev ?debug=true experiments): filtered out of the
+ *  toolbar entirely — never merely disabled, never rendered — unless
+ *  VibeToolbar's debugMode prop is set. */
+export const DEBUG_ONLY_CATEGORIES: ReadonlySet<VibeToolCategory> = new Set(['pond', 'sound'])
 
 export const VIBE_TOOLBAR_UTILITIES: UtilityConfig[] = [
   { id: 'undo', label: 'Undo', icon: '/toolbar/undo-icon.svg' },

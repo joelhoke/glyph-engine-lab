@@ -1,13 +1,17 @@
 'use client'
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { BorderBeam } from 'border-beam'
 import { PlaygroundConfig } from '../../engine/playgroundConfig'
 import { PaintStatus, PaintToolConfig } from '../../engine/paint'
+import { PondConfig } from '../../engine/pondConfig'
+import { SonificationConfig } from '../../engine/sonificationConfig'
+import type { SonificationPlaybackState } from '../../engine/sonificationEngine'
 import { VibePreset } from '../../content/vibe'
 import { SceneCanvasHandle } from '../SceneCanvas'
 import {
   CategoryConfig,
+  DEBUG_ONLY_CATEGORIES,
   UtilityConfig,
   VIBE_TOOLBAR_CATEGORIES,
   VIBE_TOOLBAR_UTILITIES,
@@ -19,6 +23,8 @@ import ColorStylesPanel from './ColorStylesPanel'
 import PaintPanel from './PaintPanel'
 import MotionEffectsPanel from './MotionEffectsPanel'
 import AmbientPanel from './AmbientPanel'
+import PondPanel from './PondPanel'
+import SoundPanel from './SoundPanel'
 
 export type VibeToolbarProps = {
   open: boolean
@@ -47,6 +53,23 @@ export type VibeToolbarProps = {
   onClearPaint: () => void
   /** Scene canvas handle for the share PNG export. */
   canvasRef: React.RefObject<SceneCanvasHandle>
+  /** Dev ?debug=true: reveals debug-only categories (DEBUG_ONLY_CATEGORIES —
+   *  e.g. Visual Sonification). Production visitors never see them — the
+   *  category is not rendered at all. */
+  debugMode?: boolean
+  /** Session-only Private Pond experiment config (debug-only); never enters
+   *  history/presets/sharing. */
+  pond?: PondConfig
+  onPondChange?: (next: PondConfig) => void
+  /** Session-only Visual Sonification experiment state (debug-only). */
+  sound?: {
+    config: SonificationConfig
+    playback: SonificationPlaybackState
+    error: string | null
+  }
+  onSoundConfigChange?: (next: SonificationConfig) => void
+  onSoundPlay?: () => void
+  onSoundPause?: () => void
   id?: string
 }
 
@@ -82,6 +105,13 @@ export default function VibeToolbar({
   onReset,
   onClearPaint,
   canvasRef,
+  debugMode = false,
+  pond,
+  onPondChange,
+  sound,
+  onSoundConfigChange,
+  onSoundPlay,
+  onSoundPause,
   id: externalId,
 }: VibeToolbarProps) {
   const generatedId = useId().replace(/:/g, '-')
@@ -102,6 +132,14 @@ export default function VibeToolbar({
   const utilityButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const shareFeedbackTimeoutRef = useRef<number | null>(null)
 
+  // Debug-only categories (DEBUG_ONLY_CATEGORIES — Visual Sonification) are
+  // filtered out entirely unless the dev ?debug=true mode is on — never
+  // merely disabled, never rendered.
+  const visibleCategories = useMemo(
+    () => VIBE_TOOLBAR_CATEGORIES.filter((category) => !DEBUG_ONLY_CATEGORIES.has(category.id) || debugMode),
+    [debugMode],
+  )
+
   useEffect(() => {
     setMounted(true)
     return () => {
@@ -116,13 +154,13 @@ export default function VibeToolbar({
     // available category button.
     setSelectedTool(null)
     if (!open) return
-    const firstIndex = VIBE_TOOLBAR_CATEGORIES.findIndex((c) => !c.disabled)
+    const firstIndex = visibleCategories.findIndex((c) => !c.disabled)
     if (firstIndex >= 0) {
       setCategoryFocusIndex(firstIndex)
-      const firstId = VIBE_TOOLBAR_CATEGORIES[firstIndex].id
+      const firstId = visibleCategories[firstIndex].id
       categoryButtonRefs.current[firstId]?.focus()
     }
-  }, [open])
+  }, [open, visibleCategories])
 
   const activeCategoryButton = selectedTool ? categoryButtonRefs.current[selectedTool] : null
 
@@ -223,7 +261,7 @@ export default function VibeToolbar({
     refs[ids[nextIndex]]?.focus()
   }
 
-  const enabledCategoryIds = VIBE_TOOLBAR_CATEGORIES.filter((c) => !c.disabled).map((c) => c.id)
+  const enabledCategoryIds = visibleCategories.filter((c) => !c.disabled).map((c) => c.id)
   const utilityIds = VIBE_TOOLBAR_UTILITIES.map((u) => u.id)
 
   const renderCategoryButton = (category: CategoryConfig) => {
@@ -434,6 +472,19 @@ export default function VibeToolbar({
           {selectedTool === 'ambient' && (
             <AmbientPanel config={config.ambient} onChange={onChange} />
           )}
+          {selectedTool === 'pond' && pond && onPondChange && (
+            <PondPanel pond={pond} onPondChange={onPondChange} />
+          )}
+          {selectedTool === 'sound' && sound && onSoundConfigChange && (
+            <SoundPanel
+              config={sound.config}
+              playback={sound.playback}
+              error={sound.error}
+              onPlay={onSoundPlay ?? (() => {})}
+              onPause={onSoundPause ?? (() => {})}
+              onConfigChange={onSoundConfigChange}
+            />
+          )}
         </div>
       </div>
     )
@@ -457,7 +508,7 @@ export default function VibeToolbar({
         )
       }
     >
-      {VIBE_TOOLBAR_CATEGORIES.map(renderCategoryButton)}
+      {visibleCategories.map(renderCategoryButton)}
     </div>
   )
 
@@ -516,6 +567,10 @@ function getPanelLabel(tool: NonNullable<VibeToolbarTool>): string {
       return 'Motion Effects'
     case 'ambient':
       return 'Ambient'
+    case 'pond':
+      return 'Pond'
+    case 'sound':
+      return 'Sound'
     default:
       return tool
   }

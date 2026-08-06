@@ -93,10 +93,36 @@ import {
   buildMotionBaseField,
   computeCreatureTargets,
   computeOrganicTargets,
+  CREATURE_DEFINITIONS,
+  CreatureLocomotion,
   CreatureTopology,
   MotionBaseField,
   MotionWaveParams,
 } from '../engine/motion'
+import { clampPondConfig, PondConfig } from '../engine/pondConfig'
+import {
+  applyRipple,
+  createPondBody,
+  normalizeAfterResize,
+  PondBody,
+  PondPointer,
+  pondStaticPose,
+  stepPondBody,
+} from '../engine/pondBody'
+import {
+  applyPondTransform,
+  copyBaseIntoPondBuffers,
+  resolvePondTransform,
+} from '../engine/pondTransform'
+import { applyPondBoundary } from '../engine/pondBoundaries'
+import {
+  createPondFormationTracker,
+  ensurePondFormationCapacity,
+  PondFormationTracker,
+  recordPondWallImpacts,
+  resetPondFormationTracker,
+  resolvePondFormationBounce,
+} from '../engine/pondFormation'
 import {
   appendInterpolatedPoints,
   buildTargetSpatialIndex,
@@ -293,6 +319,10 @@ type SceneCanvasProps = {
   qualityTierOverride?: QualityTier | null
   /** Fired when the adaptive controller actually changes tier (auto or override). */
   onQualityTierChange?: (from: QualityTier, to: QualityTier) => void
+  /** Debug-only "Private Pond" experiment: a single swimming body carries any
+   *  glyph source (drift for all; creatures with locomotion metadata also
+   *  rotate). Undefined/disabled = byte-identical scene. */
+  pond?: PondConfig
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -345,6 +375,7 @@ function SceneCanvasInternal(
     onDiagnosticsUpdate,
     qualityTierOverride = null,
     onQualityTierChange,
+    pond,
   }: SceneCanvasProps,
   ref: React.ForwardedRef<SceneCanvasHandle>,
 ) {
@@ -464,6 +495,20 @@ function SceneCanvasInternal(
   const motionLastNowRef = useRef(0)
   const lastMotionComputeRef = useRef(0)
   const motionDirtyRef = useRef(true)
+  // Private Pond experiment (debug-only): session config mirror, the single
+  // swimming body, and the bounds it was last normalized against. A null
+  // config/body means the pond path never runs and the scene is untouched.
+  const pondConfigRef = useRef<PondConfig | null>(pond ? clampPondConfig(pond) : null)
+  const pondBodyRef = useRef<PondBody | null>(null)
+  const pondBoundsRef = useRef({ width: 0, height: 0 })
+  // Tracks the last routed enabled state so an enable/disable transition is
+  // detected exactly once (starts false even if the prop arrives enabled, so
+  // the initial enable still routes the field).
+  const pondEnabledRef = useRef(false)
+  // Formation-level bounce: per-wall unique wall-contact windows that
+  // reflect the body inward past a threshold (engine/pondFormation). Created
+  // lazily on the first pond-enabled frame; null = no accumulation ever runs.
+  const pondFormationRef = useRef<PondFormationTracker | null>(null)
   // Ambient layer (Stage 2): a separate typed-array agent pool for the
   // weather/matrix overlay, created/destroyed when ambient.mode changes. The
   // offscreen canvas gives matrix its trail fade without dimming the scene;
@@ -664,6 +709,53 @@ function SceneCanvasInternal(
     if (effectiveGlyphSizeRef.current !== prevSize) scheduleSvgTargetRebuild()
   }, [glyphSizePt, glyphFont, experience])
   useEffect(() => { qualityTierOverrideRef.current = qualityTierOverride }, [qualityTierOverride])
+  // Pond config mirror: clamped, session-only. Disabling drops the body so a
+  // later re-enable starts fresh from the centered deterministic pose. An
+  // enable/disable transition re-routes the target field: Motion Off aliases
+  // the immutable base arrays (which the pond must never mutate), so the
+  // active arrays move to the motion buffers while the pond is on and return
+  // to the exact no-pond aliasing when it turns off. Procedural modes already
+  // render through the motion buffers — a dirty flag forces one recompute
+  // with the new transform state. Value-only changes need no re-routing: the
+  // frame path reads the clamped config from the ref.
+  useEffect(() => {
+    const prev = pondConfigRef.current
+    pondConfigRef.current = pond ? clampPondConfig(pond) : null
+    const next = pondConfigRef.current
+    const enabled = next?.enabled === true
+    if (!enabled) {
+      pondBodyRef.current = null
+      pondBoundsRef.current = { width: 0, height: 0 }
+    }
+    // Formation tracker: enable/disable transitions and formation-settings
+    // changes restart wall-contact accumulation from a clean slate.
+    const formationChanged =
+      prev?.formationContactThresholdPercent !== next?.formationContactThresholdPercent ||
+      prev?.formationImpactWindowMs !== next?.formationImpactWindowMs ||
+      prev?.formationBounceRestitution !== next?.formationBounceRestitution ||
+      prev?.formationMinInwardSpeedRatio !== next?.formationMinInwardSpeedRatio ||
+      prev?.formationBounceCooldownMs !== next?.formationBounceCooldownMs ||
+      prev?.formationAngularImpulseStrength !== next?.formationAngularImpulseStrength ||
+      prev?.formationSpinHalfLifeMs !== next?.formationSpinHalfLifeMs ||
+      prev?.formationMaxAngularSpeed !== next?.formationMaxAngularSpeed
+    if (pondFormationRef.current && (enabled !== pondEnabledRef.current || formationChanged)) {
+      resetPondFormationTracker(pondFormationRef.current)
+    }
+    // Settings changes preserve the field orientation (spinAngle untouched)
+    // but immediately clamp the angular velocity to a lowered max spin.
+    const pondBody = pondBodyRef.current
+    if (formationChanged && pondBody && next) {
+      const maxSpin = next.formationMaxAngularSpeed
+      pondBody.angularVelocity = Math.min(maxSpin, Math.max(-maxSpin, pondBody.angularVelocity))
+    }
+    if (enabled === pondEnabledRef.current) return
+    pondEnabledRef.current = enabled
+    if (motionConfigRef.current.mode === 'off') {
+      applyMotionField()
+    } else {
+      motionDirtyRef.current = true
+    }
+  }, [pond])
   useEffect(() => { onQualityTierChangeRef.current = onQualityTierChange }, [onQualityTierChange])
   // Debug tier override (dev tuning UI): force a tier or return to Auto.
   useEffect(() => {
@@ -762,6 +854,8 @@ function SceneCanvasInternal(
             (prevMotion.custom.form !== nextMotion.custom.form ||
               prevMotion.custom.symmetry !== nextMotion.custom.symmetry))))
     if (structuralChange) {
+      // A rebuilt motion field restarts pond formation accumulation.
+      if (pondFormationRef.current) resetPondFormationTracker(pondFormationRef.current)
       applyMotionField()
     } else if (nextMotion.mode !== 'off') {
       motionDirtyRef.current = true
@@ -1266,6 +1360,25 @@ function SceneCanvasInternal(
       activeSourceColorsRef.current = baseColorsRef.current
       activeCountRef.current = count
       motionDirtyRef.current = true
+    } else if (getPondConfig()) {
+      // Motion Off + pond: the base field must stay immutable, so the active
+      // targets route through the motion buffers — each pond frame re-copies
+      // the base field and applies the drift transform there (see
+      // computeMotionFrame).
+      const count = baseCountRef.current
+      ensureMotionBuffers(count)
+      copyBaseIntoPondBuffers(
+        baseTargetsXRef.current,
+        baseTargetsYRef.current,
+        motionBuffersXRef.current,
+        motionBuffersYRef.current,
+        count,
+      )
+      activeTargetsXRef.current = motionBuffersXRef.current
+      activeTargetsYRef.current = motionBuffersYRef.current
+      activeSourceColorsRef.current = baseColorsRef.current
+      activeCountRef.current = count
+      motionDirtyRef.current = true
     } else {
       // Motion Off: the active arrays alias the base field directly — no
       // per-frame procedural work of any kind.
@@ -1345,6 +1458,7 @@ function SceneCanvasInternal(
 
     if (budget.glyphCap !== previous.glyphCap) {
       applyTierSubsample()
+      if (pondFormationRef.current) resetPondFormationTracker(pondFormationRef.current)
       applyMotionField()
     }
     // Creature budgets may tighten even when the glyph cap is unchanged.
@@ -1355,6 +1469,7 @@ function SceneCanvasInternal(
     ) {
       motionQualityRef.current = nextQuality
       if (motionConfigRef.current.mode === 'parametric-creature') {
+        if (pondFormationRef.current) resetPondFormationTracker(pondFormationRef.current)
         applyMotionField()
       } else {
         motionDirtyRef.current = true
@@ -2140,6 +2255,8 @@ function SceneCanvasInternal(
         })
       }
       qualityRebuildPendingRef.current = true
+      // A rebuilt source field restarts pond formation accumulation.
+      if (pondFormationRef.current) resetPondFormationTracker(pondFormationRef.current)
       applyMotionField()
       return
     }
@@ -2228,8 +2345,10 @@ function SceneCanvasInternal(
     }
     // Population, assignment, paint replay, counts, and renderOnce all run in
     // the required order inside applyMotionField. The quality controller
-    // ignores the evaluation window this rebuild lands in.
+    // ignores the evaluation window this rebuild lands in. A rebuilt source
+    // field restarts pond formation accumulation.
     qualityRebuildPendingRef.current = true
+    if (pondFormationRef.current) resetPondFormationTracker(pondFormationRef.current)
     applyMotionField()
   }
 
@@ -2279,6 +2398,16 @@ function SceneCanvasInternal(
     // The adaptive quality controller ignores the window this resize lands in.
     qualityResizePendingRef.current = true
     const { width: W, height: H } = getViewportSize()
+    // Private Pond: re-fit the swimming body to the new bounds (position
+    // scales with the viewport, then hard containment) before the rebuild.
+    // Wall-contact accumulation restarts against the new bounds.
+    const pondBody = pondBodyRef.current
+    if (pondBody) {
+      const prevBounds = pondBoundsRef.current
+      normalizeAfterResize(pondBody, prevBounds.width, prevBounds.height, W, H)
+      pondBoundsRef.current = { width: W, height: H }
+    }
+    if (pondFormationRef.current) resetPondFormationTracker(pondFormationRef.current)
     // Breakpoint crossings change the effective size (mobile cap); refresh
     // the font/line-height/sampling refs before the field rebuilds below.
     applyEffectiveGlyphSize()
@@ -2436,13 +2565,81 @@ function SceneCanvasInternal(
     paintedColors: undefined as Uint32Array | undefined,
   })
 
+  // Private Pond: active with an enabled config for ANY glyph source — text,
+  // uploads, presets, organic-flow, motion-off, or a parametric creature.
+  // Everything downstream reads this single cheap check, so an
+  // undefined/disabled pond config leaves the scene byte-identical.
+  const getPondConfig = (): PondConfig | null => {
+    const config = pondConfigRef.current
+    return config && config.enabled ? config : null
+  }
+
+  // Locomotion metadata (declared by parametric creatures with a determinate
+  // facing) adds the body's heading to the rotation (heading - resting
+  // forward + spin); every other source rotates by the impact-driven spin
+  // alone — heading never twists text, torque does.
+  const getPondLocomotion = (): CreatureLocomotion | null => {
+    const config = motionConfigRef.current
+    if (config.mode !== 'parametric-creature') return null
+    return CREATURE_DEFINITIONS[config.variant].locomotion ?? null
+  }
+
+  // Lazily create the single body (centered, seeded wander phase) and step it
+  // on the quality-capped motion update cadence, in any motion mode. dt
+  // derives from the time since the last target compute so body and targets
+  // advance together.
+  const stepPond = (config: PondConfig, restingHeading: number, dt: number) => {
+    const { width, height } = getViewportSize()
+    if (width <= 0 || height <= 0) return
+    if (!pondBodyRef.current) {
+      pondBodyRef.current = createPondBody(width, height, restingHeading)
+      pondBoundsRef.current = { width, height }
+    }
+    const pointerState = pointerRef.current
+    const velocity = pointerVelocityRef.current
+    const pointer: PondPointer = {
+      x: pointerState.x,
+      y: pointerState.y,
+      active: pointerState.active,
+      vx: velocity.vx,
+      vy: velocity.vy,
+    }
+    stepPondBody(
+      pondBodyRef.current,
+      {
+        config,
+        width,
+        height,
+        pointer,
+        // A paint gesture freezes body integration with the procedural clock.
+        frozen: activeStrokeRef.current !== null,
+      },
+      dt,
+    )
+  }
+
+  // Lazily create (and size) the formation-bounce tracker for the current
+  // glyph population. Steady-state is allocation-free; the stamp storage
+  // only grows when the population does.
+  const ensurePondFormation = (particleCount: number): PondFormationTracker => {
+    if (!pondFormationRef.current) {
+      pondFormationRef.current = createPondFormationTracker(particleCount)
+    }
+    const tracker = pondFormationRef.current
+    ensurePondFormationCapacity(tracker, particleCount)
+    return tracker
+  }
+
   // Advance procedural motion time (frozen during paint gestures) and
   // recompute target positions at the effective update rate while rendering
   // continues at full requestAnimationFrame cadence. Reduced-motion users get
   // a deterministic static pose, recomputed only when parameters change.
   const updateMotionTargets = (now: number) => {
     const mode = motionConfigRef.current.mode
-    if (mode === 'off') return
+    const pond = getPondConfig()
+    // Motion Off does no per-frame procedural work — unless the pond is
+    // active, in which case the body still swims and drifts the field.
+    if (mode === 'off' && !pond) return
     if (reducedMotionRef.current) {
       if (motionDirtyRef.current) {
         computeMotionFrame(MOTION_REDUCED_POSE_TIME)
@@ -2470,14 +2667,56 @@ function SceneCanvasInternal(
     }
     const rate = motionQualityRef.current.effectiveUpdateRate || 30
     if (motionDirtyRef.current || now - lastMotionComputeRef.current >= 1000 / rate) {
+      // Private Pond: advance the swimming body on the same quality-capped
+      // cadence as the target math, in every motion mode, then transform the
+      // targets below. Every source reads the body position and spin;
+      // locomotion metadata adds the heading to the rotation.
+      if (pond) {
+        const locomotion = getPondLocomotion()
+        const restingHeading = locomotion
+          ? Math.atan2(locomotion.forwardY, locomotion.forwardX)
+          : 0
+        const pondDt = Math.min(0.1, Math.max(0, (now - lastMotionComputeRef.current) / 1000))
+        stepPond(pond, restingHeading, lastMotionComputeRef.current > 0 ? pondDt : 0)
+      }
       computeMotionFrame(motionTimeRef.current)
       lastMotionComputeRef.current = now
       motionDirtyRef.current = false
     }
   }
 
+  // Private Pond: transform the freshly computed targets by the body pose
+  // (engine/pondTransform). Every source translates with the body and spins
+  // by the impact-driven angular velocity; locomotion-capable creatures also
+  // add (heading - resting forward) around their declared anchor. One bounded
+  // in-place pass over the targets; no allocation, no glyph-count change.
+  // Under reduced motion the body never integrates: the centered static pose
+  // is a fixed deterministic transform (the identity for sources anchored at
+  // the viewport center).
+  const transformPondTargets = (pond: PondConfig | null, count: number) => {
+    if (!pond) return
+    const locomotion = getPondLocomotion()
+    const { width, height } = getViewportSize()
+    const body = pondBodyRef.current
+    const pose =
+      reducedMotionRef.current || !body
+        ? pondStaticPose(
+            width,
+            height,
+            locomotion ? Math.atan2(locomotion.forwardY, locomotion.forwardX) : 0,
+          )
+        : body
+    applyPondTransform(
+      motionBuffersXRef.current,
+      motionBuffersYRef.current,
+      count,
+      resolvePondTransform(locomotion, pose, width, height),
+    )
+  }
+
   const computeMotionFrame = (time: number) => {
     const config = motionConfigRef.current
+    const pond = getPondConfig()
     const { width, height } = getViewportSize()
     const params: MotionWaveParams = {
       time,
@@ -2496,6 +2735,7 @@ function SceneCanvasInternal(
         motionBuffersXRef.current,
         motionBuffersYRef.current,
       )
+      transformPondTargets(pond, motionFieldRef.current.count)
     } else if (config.mode === 'parametric-creature' && creatureTopologyRef.current) {
       computeCreatureTargets(
         creatureTopologyRef.current,
@@ -2503,6 +2743,20 @@ function SceneCanvasInternal(
         motionBuffersXRef.current,
         motionBuffersYRef.current,
       )
+      transformPondTargets(pond, creatureTopologyRef.current.count)
+    } else if (config.mode === 'off' && pond) {
+      // Motion Off + pond: the immutable base field is copied into the
+      // motion buffers (routed active by applyMotionField) and drifted —
+      // the base arrays are never mutated.
+      const count = Math.min(baseCountRef.current, motionBuffersXRef.current.length)
+      copyBaseIntoPondBuffers(
+        baseTargetsXRef.current,
+        baseTargetsYRef.current,
+        motionBuffersXRef.current,
+        motionBuffersYRef.current,
+        count,
+      )
+      transformPondTargets(pond, count)
     }
   }
 
@@ -2601,6 +2855,15 @@ function SceneCanvasInternal(
     const behavior = unassignedBehaviorRef.current
     const reducedMotion = reducedMotionRef.current
     const sceneTime = reducedMotion ? sceneStartRef.current : now
+    // Private Pond: hard viewport boundaries for every visible glyph. One
+    // cheap gate per frame — a disabled/absent pond config skips the pass
+    // entirely, leaving the scene byte-identical. The formation tracker
+    // exists only while the pond is enabled; accumulation is suppressed (and
+    // reset) under reduced motion and during paint gestures, while the
+    // per-glyph rebounds continue.
+    const pondBoundaries = getPondConfig()
+    const pondFormation = pondBoundaries ? ensurePondFormation(particles.length) : null
+    const formationSuppressed = reducedMotion || activeStrokeRef.current !== null
     let visibleCount = 0
     let hiddenCount = 0
 
@@ -2642,6 +2905,20 @@ function SceneCanvasInternal(
       } else {
         simulateParticle(p)
       }
+      // Hard pond boundaries: clamp the glyph center into the canvas and
+      // rebound outward-moving velocity off the edges. Reduced-motion's zero
+      // velocity never reflects, so the same call only contains. Hidden
+      // unassigned glyphs skip this (not visible); the transformed targets
+      // stay unchanged — the springs deform and recover after impact. Actual
+      // outward impacts feed the formation tracker (engine/pondFormation)
+      // with the clamped contact position and the incoming velocity captured
+      // BEFORE the rebound — the torque accumulators need pre-impact speeds.
+      const incomingVx = p.vx
+      const incomingVy = p.vy
+      const impactMask = pondBoundaries ? applyPondBoundary(p, W, H, pondBoundaries) : 0
+      if (impactMask !== 0 && pondFormation && !formationSuppressed) {
+        recordPondWallImpacts(pondFormation, i, impactMask, p.x, p.y, incomingVx, incomingVy, now)
+      }
       const homeDist = Math.sqrt((p.x - p.tx) ** 2 + (p.y - p.ty) ** 2)
       colorContext.particleIndex = i
       colorContext.targetIndex = targetIndex
@@ -2650,6 +2927,26 @@ function SceneCanvasInternal(
       ctx.fillStyle = formatRgba(color, alpha)
       ctx.fillText(p.char, p.x, p.y)
       visibleCount += 1
+    }
+
+    // Formation-level bounce: past the unique-contact threshold on a wall,
+    // the shared body reflects inward and the whole formation changes course.
+    // The dirty flag starts the turn on the next motion compute.
+    if (pondBoundaries && pondFormation) {
+      if (formationSuppressed) {
+        resetPondFormationTracker(pondFormation)
+      } else {
+        const bouncedWalls = resolvePondFormationBounce(
+          pondFormation,
+          pondBodyRef.current,
+          visibleCount,
+          pondBoundaries,
+          now,
+          W,
+          H,
+        )
+        if (bouncedWalls !== 0) motionDirtyRef.current = true
+      }
     }
 
     // Per-frame counts live in refs; React sees them via the throttled push.
@@ -3322,6 +3619,13 @@ function SceneCanvasInternal(
         clickImpulseRadiusRef.current,
         clickImpulseForceRef.current * ambientConfigRef.current.interactionStrength,
       )
+    }
+    // Private Pond: the same tap kicks the swimming body outward from the
+    // click point, in addition to the glyph impulse above.
+    const pond = getPondConfig()
+    const pondBody = pondBodyRef.current
+    if (pond && pondBody) {
+      applyRipple(pondBody, state.x, state.y, pond.rippleStrength)
     }
     patchDiagnostics({
       impulseCount: diagnosticsRef.current.impulseCount + 1,
