@@ -269,12 +269,12 @@ export const WORK_STORIES: WorkStory[] = [
     id: 'microsoft-global-compensation',
     title: 'Microsoft Global Compensation',
     thesis:
-      'Fortune 500 companies like Microsoft provide expansive pay packages composed of cash, stock and employee benefits. These comprehensive packages can lead to confusion around how much exactly they’re taking home as well as benefits going completely unused. A platform that clarifies those questions and connects employees to their benefits ensures employees get the most out of their compensation which reinforces employee satisfaction and reduces the likelihood of employee benefits going unused.',
+      'Fortune 500 companies like Microsoft offer complex compensation packages spanning cash, stock, and benefits. A platform that clearly explains total compensation and connects employees to available benefits helps them maximize their earnings, improve satisfaction, and reduce unused benefits.',
     role: 'Lead Designer',
     context:
       'Microsoft · cross-functional team across design, product management, research, and engineering · 2021',
     outcome:
-      'A first party platform that continues to be used to communicate employee compensation and benefits that helps a business like Microsoft ensure employees are reminded the value of their package in an ever changing and competitive market.',
+      'I drove the design of a first-party platform that Microsoft continues to use to communicate compensation and benefits, helping employees understand the full value of their package in an increasingly competitive market.',
     links: [
       {
         label: 'Helping Microsoft employees understand their value',
@@ -307,7 +307,7 @@ export const WORK_STORIES: WorkStory[] = [
       {
         heading: 'The outcome',
         paragraphs: [
-          'A first party platform that continues to be used to communicate employee compensation and benefits that helps a business like Microsoft ensure employees are reminded the value of their package in an ever changing and competitive market.',
+          'I drove the design of a first-party platform that Microsoft continues to use to communicate compensation and benefits, helping employees understand the full value of their package in an increasingly competitive market.',
         ],
       },
     ],
