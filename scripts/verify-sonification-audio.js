@@ -69,6 +69,8 @@ function createStubContext() {
     oscillators: [],
     gains: [],
     bufferSources: [],
+    captureDestinations: [],
+    compressors: [],
     suspendCalls: 0,
     resumeCalls: 0,
     closeCalls: 0,
@@ -96,15 +98,20 @@ function createStubContext() {
       return gain
     },
     createDynamicsCompressor() {
-      return {
+      const compressor = {
         threshold: createParam(),
         knee: createParam(),
         ratio: createParam(),
         attack: createParam(),
         release: createParam(),
-        connect() {},
+        connectCalls: [],
+        connect(target) {
+          this.connectCalls.push(target)
+        },
         disconnect() {},
       }
+      ctx.compressors.push(compressor)
+      return compressor
     },
     createBiquadFilter() {
       return { type: 'lowpass', frequency: createParam(350), Q: createParam(1), connect() {}, disconnect() {} }
@@ -130,6 +137,26 @@ function createStubContext() {
       }
       ctx.bufferSources.push(source)
       return source
+    },
+    createMediaStreamDestination() {
+      const dest = {
+        stream: {
+          id: `capture-stream-${ctx.captureDestinations.length + 1}`,
+          getAudioTracks() {
+            return [{ kind: 'audio', stop() {} }]
+          },
+        },
+        connectCalls: [],
+        disconnected: false,
+        connect(target) {
+          this.connectCalls.push(target)
+        },
+        disconnect() {
+          this.disconnected = true
+        },
+      }
+      ctx.captureDestinations.push(dest)
+      return dest
     },
     suspend() {
       ctx.suspendCalls += 1
@@ -169,6 +196,7 @@ function createRig(engineOptions = {}) {
   const options = {
     createContext: () => {
       const ctx = engineOptions.unsupported ? null : createStubContext()
+      if (ctx && engineOptions.noCapture) delete ctx.createMediaStreamDestination
       if (ctx) rig.contexts.push(ctx)
       return ctx
     },
@@ -368,6 +396,80 @@ const CONFIG = { direction: 'left-to-right', sweepDuration: 4, volume: 35 }
   )
   assert(engine.getState() === 'idle', 'dispose returns to idle')
   assert(engine.getDiagnostics().contextState === 'none', 'no context remains after dispose')
+}
+
+// (10) capture stream: none before Play, single reusable destination after
+{
+  const { engine, rig } = createRig()
+  engine.setConfig(CONFIG)
+  assert(engine.getCaptureStream() === null, 'no capture stream before any context exists')
+  assert(rig.contexts.length === 0, 'asking for the capture stream creates no AudioContext')
+  engine.play()
+  const ctx = rig.contexts[0]
+  const streamA = engine.getCaptureStream()
+  const streamB = engine.getCaptureStream()
+  assert(streamA !== null, 'capture stream is available after Play')
+  assert(streamA === streamB && ctx.captureDestinations.length === 1, 'one reusable capture destination per context')
+  // Routing: the capture tap hangs off the compressor (post master gain +
+  // limiter), so the recorded mix equals the audible mix.
+  const compressor = ctx.compressors[0]
+  assert(
+    compressor.connectCalls.includes(ctx.destination) &&
+      compressor.connectCalls.includes(ctx.captureDestinations[0]),
+    'capture destination connects AFTER the limiter (recorded == audible)',
+  )
+  engine.dispose()
+  assert(ctx.captureDestinations[0].disconnected, 'dispose disconnects the capture destination')
+}
+
+// (11) capture unavailable: beginCapture fails cleanly and restores state
+{
+  const { engine } = createRig({ noCapture: true })
+  engine.setConfig(CONFIG)
+  const session = engine.beginCapture()
+  assert(session === null, 'beginCapture returns null when capture is unavailable')
+  assert(engine.getState() === 'idle', 'state is restored after a failed beginCapture')
+  engine.dispose()
+}
+
+// (12) beginCapture/finish: playback-mode snapshot and restore
+{
+  // From idle: starts a fresh playing sweep, finish returns to idle.
+  const { engine, rig } = createRig()
+  engine.setConfig(CONFIG)
+  const session = engine.beginCapture()
+  assert(session !== null && session.stream, 'beginCapture from idle returns a capture session')
+  assert(rig.contexts.length === 1, 'beginCapture is the gesture that creates the context')
+  assert(engine.getState() === 'playing', 'beginCapture plays through the speakers')
+  rig.pump(0.4)
+  assert(rig.scheduledSteps[0] === 0, 'capture sweep starts from step zero')
+  session.finish()
+  assert(engine.getState() === 'idle', 'finish after idle-capture restores idle')
+  session.finish() // idempotent
+  assert(engine.getState() === 'idle', 'finish is idempotent')
+
+  // From paused: finish re-pauses.
+  engine.play()
+  engine.pause()
+  const session2 = engine.beginCapture()
+  assert(engine.getState() === 'playing', 'beginCapture from paused plays')
+  session2.finish()
+  assert(engine.getState() === 'paused', 'finish after paused-capture restores paused')
+
+  // From playing: finish leaves playback running.
+  const ctx = rig.contexts[0]
+  const resumeCalls = ctx.resumeCalls
+  engine.play()
+  const session3 = engine.beginCapture()
+  assert(engine.getState() === 'playing', 'beginCapture from playing keeps playing')
+  session3.finish()
+  assert(
+    engine.getState() === 'playing' && ctx.resumeCalls >= resumeCalls,
+    'finish after playing-capture leaves playback running',
+  )
+  assert(rig.contexts.length === 1, 'capture cycles never create a second context')
+  assert(ctx.captureDestinations.length === 1, 'capture cycles reuse the single destination')
+  engine.dispose()
 }
 
 if (failures > 0) {

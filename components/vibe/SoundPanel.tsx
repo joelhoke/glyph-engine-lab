@@ -22,6 +22,8 @@ export type SoundPanelProps = {
   onPause: () => void
   /** Session-only sonification config; never enters history/presets/sharing. */
   onConfigChange: (next: SonificationConfig) => void
+  /** Disabled while a clip recording owns the sonification transport. */
+  transportDisabled?: boolean
 }
 
 const PLAYBACK_LABELS: Record<SonificationPlaybackState, string> = {
@@ -38,6 +40,7 @@ export default function SoundPanel({
   onPlay,
   onPause,
   onConfigChange,
+  transportDisabled = false,
 }: SoundPanelProps) {
   const stableId = useId().replace(/:/g, '-')
   const directionId = `sound-direction-${stableId}`
@@ -55,6 +58,7 @@ export default function SoundPanel({
           className="vibe-sound-play"
           aria-label={playing ? 'Pause sound' : 'Play sound'}
           aria-pressed={playing}
+          disabled={transportDisabled}
           onClick={playing ? onPause : onPlay}
         >
           {playing ? 'Pause' : 'Play'}

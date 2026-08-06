@@ -38,6 +38,7 @@ import {
 } from '../../engine/sonificationConfig'
 import {
   createSonificationEngine,
+  SonificationCaptureSession,
   SonificationEngine,
   SonificationEngineDiagnostics,
   SonificationPlaybackState,
@@ -75,6 +76,11 @@ export type SonificationControls = {
   getSweepPosition: () => number | null
   /** Direction of the CURRENT sweep (changes apply on the next sweep). */
   getActiveDirection: () => SonificationDirection
+  /** Clip recording: idempotent — snapshots the playback mode, applies the
+   *  current config, starts a fresh sweep from step zero through the
+   *  speakers, and returns the capture stream + finish() (restores the prior
+   *  mode). Null when audio or capture can't start. */
+  beginCapture: () => SonificationCaptureSession | null
   getDiagnostics: () => SonificationEngineDiagnostics | null
 }
 
@@ -95,6 +101,7 @@ export function useSonification({
   const activeDirectionRef = useRef<SonificationDirection>(config.direction)
   const sceneParamsRef = useRef({ qualityTier, backgroundColor1, backgroundColor2, ambient })
   const engineRef = useRef<SonificationEngine | null>(null)
+  const captureSessionRef = useRef<SonificationCaptureSession | null>(null)
   const gridRef = useRef<SonificationGrid | null>(null)
   const scoreRef = useRef<SonificationScore | null>(null)
   const stagingCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -248,6 +255,26 @@ export function useSonification({
     })
   }, [])
 
+  // Clip recording entry point: the Record button's user gesture is what
+  // allows the (single, lazy) AudioContext to be created here. Idempotent —
+  // a second call while capturing returns the same session.
+  const beginCapture = useCallback((): SonificationCaptureSession | null => {
+    if (captureSessionRef.current) return captureSessionRef.current
+    const engine = ensureEngine()
+    engine.setConfig(configRef.current)
+    const session = engine.beginCapture()
+    if (!session) return null
+    captureSessionRef.current = {
+      stream: session.stream,
+      finish: () => {
+        captureSessionRef.current = null
+        session.finish()
+      },
+    }
+    return captureSessionRef.current
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Hidden tab suspends the audio context (the audio clock freezes, so the
   // sweep resumes exactly where it paused when the tab returns).
   useEffect(() => {
@@ -257,9 +284,13 @@ export function useSonification({
   }, [])
 
   // Leaving Vibe (or turning debug off) stops playback entirely — the
-  // visitor presses Play again after returning.
+  // visitor presses Play again after returning. Any capture session in
+  // flight is dropped (the clip hook cancels the recording on its own).
   useEffect(() => {
-    if (!enabled) engineRef.current?.stop()
+    if (!enabled) {
+      captureSessionRef.current = null
+      engineRef.current?.stop()
+    }
   }, [enabled])
 
   // Unmount cleanup: close the context and release the graph.
@@ -288,6 +319,7 @@ export function useSonification({
     updateConfig,
     getSweepPosition,
     getActiveDirection,
+    beginCapture,
     getDiagnostics,
   }
 }

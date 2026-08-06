@@ -25,6 +25,7 @@ import MotionEffectsPanel from './MotionEffectsPanel'
 import AmbientPanel from './AmbientPanel'
 import PondPanel from './PondPanel'
 import SoundPanel from './SoundPanel'
+import type { ClipRecorderControls } from './useClipRecorder'
 
 export type VibeToolbarProps = {
   open: boolean
@@ -70,6 +71,10 @@ export type VibeToolbarProps = {
   onSoundConfigChange?: (next: SonificationConfig) => void
   onSoundPlay?: () => void
   onSoundPause?: () => void
+  /** Clip recording state + actions (15-second canvas+soundtrack export).
+   *  Session-only; the blob never leaves the browser without an explicit
+   *  share/download. */
+  clip?: ClipRecorderControls
   id?: string
 }
 
@@ -112,22 +117,28 @@ export default function VibeToolbar({
   onSoundConfigChange,
   onSoundPlay,
   onSoundPause,
+  clip,
   id: externalId,
 }: VibeToolbarProps) {
   const generatedId = useId().replace(/:/g, '-')
   const stableId = externalId ?? generatedId
   const panelId = `vibe-toolbar-panel-${stableId}`
+  const shareChooserId = `vibe-share-chooser-${stableId}`
   const [mounted, setMounted] = useState(false)
   // No popout on activation: the toolbar opens with every category closed.
   const [selectedTool, setSelectedTool] = useState<VibeToolbarTool>(null)
   const [pointerLeft, setPointerLeft] = useState<number | null>(null)
   const [shareFeedback, setShareFeedback] = useState<string | null>(null)
+  // Nonmodal share chooser (image vs 15-second clip).
+  const [shareChooserOpen, setShareChooserOpen] = useState(false)
   // Roving tabindex: the button that owns Tab focus within each row.
   const [categoryFocusIndex, setCategoryFocusIndex] = useState(0)
   const [utilityFocusIndex, setUtilityFocusIndex] = useState(0)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const capsuleRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const shareChooserRef = useRef<HTMLDivElement>(null)
+  const shareImageButtonRef = useRef<HTMLButtonElement>(null)
   const categoryButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const utilityButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const shareFeedbackTimeoutRef = useRef<number | null>(null)
@@ -226,6 +237,42 @@ export default function VibeToolbar({
     activeCategoryButton?.focus()
   }
 
+  // Recording (or finalizing) a clip locks the actions that would interrupt
+  // it: Reset, a duplicate Share, and the debug Sound transport.
+  const clipRecordingActive = clip?.phase === 'recording' || clip?.phase === 'processing'
+
+  const closeShareChooser = () => {
+    setShareChooserOpen(false)
+    utilityButtonRefs.current.share?.focus()
+  }
+
+  // Nonmodal share chooser: opening focuses "Share image"; Escape and
+  // outside-click close and restore focus to the Share utility button.
+  useEffect(() => {
+    if (!shareChooserOpen) return
+    shareImageButtonRef.current?.focus()
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if ((event as unknown as { isComposing?: boolean }).isComposing) return
+      event.preventDefault()
+      event.stopPropagation()
+      closeShareChooser()
+    }
+    const handlePointerDown = (event: MouseEvent | PointerEvent) => {
+      const target = event.target as Node | null
+      if (shareChooserRef.current?.contains(target as Node)) return
+      if (utilityButtonRefs.current.share?.contains(target as Node)) return
+      setShareChooserOpen(false)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('pointerdown', handlePointerDown)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shareChooserOpen])
+
   const handleCategoryClick = (category: CategoryConfig) => {
     if (category.disabled) return
     if (selectedTool === category.id) {
@@ -318,8 +365,7 @@ export default function VibeToolbar({
 
   // Share the rendered field: native share sheet with a PNG first (ported
   // from the old dock), falling back to a PNG download. Creates no history.
-  const handleShare = async () => {
-    if (typeof window === 'undefined') return
+  const handleShare = async () => {    if (typeof window === 'undefined') return
     const canvas = canvasRef.current?.getCanvas()
     if (!canvas) {
       flashShareFeedback('Canvas is not ready')
@@ -365,6 +411,55 @@ export default function VibeToolbar({
     }
   }
 
+  // Share utility: with clip support the button opens the nonmodal chooser
+  // (image vs 15-second clip); the PNG path itself is unchanged.
+  const handleShareClick = () => {
+    if (!clip) {
+      handleShare()
+      return
+    }
+    if (shareChooserOpen) {
+      closeShareChooser()
+    } else {
+      setShareChooserOpen(true)
+    }
+  }
+
+  // Clip export from the preview: native share ONLY from this button's fresh
+  // transient activation; otherwise download. The preview is retained after
+  // a canceled/failed share and released after a successful one.
+  const downloadClip = () => {
+    if (!clip?.preview) return
+    const url = URL.createObjectURL(clip.preview.blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = clip.preview.filename
+    link.click()
+    URL.revokeObjectURL(url)
+    flashShareFeedback('Clip downloaded')
+  }
+
+  const handleShareClip = async () => {
+    if (!clip?.preview) return
+    const file = new File([clip.preview.blob], clip.preview.filename, {
+      type: clip.preview.mimeType,
+    })
+    const shareData = { files: [file] }
+    if (navigator.canShare?.(shareData)) {
+      try {
+        await navigator.share(shareData)
+        clip.releasePreview()
+      } catch (err) {
+        // AbortError = visitor canceled: keep the preview, stay silent.
+        if ((err as Error)?.name !== 'AbortError') {
+          downloadClip()
+        }
+      }
+    } else {
+      downloadClip()
+    }
+  }
+
   const renderUtilityButton = (utility: UtilityConfig) => {
     let disabled = false
     let label = utility.label
@@ -382,17 +477,20 @@ export default function VibeToolbar({
         onClick = onRedo
         break
       case 'refresh':
+        disabled = clipRecordingActive
         label = 'Reset to the default vibe'
         onClick = onReset
         break
       case 'share':
       default:
+        disabled = clipRecordingActive
         label = shareFeedback ?? 'Share'
-        onClick = handleShare
+        onClick = handleShareClick
         break
     }
 
     const rovingIndex = utilityIds.indexOf(utility.id)
+    const isShare = utility.id === 'share' && clip
     return (
       <button
         key={utility.id}
@@ -404,6 +502,8 @@ export default function VibeToolbar({
         tabIndex={disabled ? -1 : rovingIndex === utilityFocusIndex ? 0 : -1}
         aria-label={label}
         title={label}
+        aria-expanded={isShare ? shareChooserOpen : undefined}
+        aria-controls={isShare && shareChooserOpen ? shareChooserId : undefined}
         className="vibe-toolbar-utility"
         onClick={onClick}
         onFocus={() => {
@@ -483,6 +583,7 @@ export default function VibeToolbar({
               onPlay={onSoundPlay ?? (() => {})}
               onPause={onSoundPause ?? (() => {})}
               onConfigChange={onSoundConfigChange}
+              transportDisabled={clipRecordingActive}
             />
           )}
         </div>
@@ -514,7 +615,95 @@ export default function VibeToolbar({
 
   return (
     <div ref={toolbarRef} className="vibe-toolbar" id={`vibe-toolbar-${stableId}`}>
+      {/* Restrained live status: recording started/paused/resumed/ready/
+          canceled/failed — never countdown ticks. */}
+      {clip && (
+        <div className="visually-hidden" role="status">
+          {clip.announcement ?? ''}
+        </div>
+      )}
       {renderPanel()}
+      {clip && shareChooserOpen && (
+        <div
+          ref={shareChooserRef}
+          id={shareChooserId}
+          className="vibe-share-chooser"
+          role="group"
+          aria-label="Share options"
+        >
+          <button
+            ref={shareImageButtonRef}
+            type="button"
+            className="vibe-share-choice"
+            onClick={() => {
+              closeShareChooser()
+              handleShare()
+            }}
+          >
+            Share image
+          </button>
+          <button
+            type="button"
+            className="vibe-share-choice"
+            disabled={!clip.supported}
+            onClick={() => {
+              setShareChooserOpen(false)
+              clip.start()
+            }}
+          >
+            Record {Math.round(clip.durationMs / 1000)}-second clip
+          </button>
+          {!clip.supported && clip.unsupportedReason && (
+            <p className="vibe-share-chooser-note">{clip.unsupportedReason}</p>
+          )}
+        </div>
+      )}
+      {clip && clipRecordingActive && (
+        <div className="vibe-clip-status" role="group" aria-label="Clip recording">
+          <span className="vibe-clip-countdown" aria-hidden="true">
+            {formatClipCountdown(clip.remainingMs)}
+          </span>
+          <button
+            type="button"
+            className="vibe-clip-cancel"
+            disabled={clip.phase === 'processing'}
+            onClick={clip.cancel}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+      {clip && clip.phase === 'error' && clip.error && (
+        <p className="vibe-clip-error" role="alert">
+          {clip.error}
+        </p>
+      )}
+      {clip && clip.phase === 'ready' && clip.preview && (
+        <div className="vibe-clip-preview" role="group" aria-label="Clip preview">
+          {/* Non-autoplaying preview: the default post-record state. */}
+          <video
+            className="vibe-clip-preview-video"
+            src={clip.preview.url}
+            controls
+            playsInline
+            preload="metadata"
+          />
+          <div className="vibe-clip-preview-actions">
+            <button type="button" className="vibe-clip-action" onClick={handleShareClip}>
+              Share clip
+            </button>
+            <button type="button" className="vibe-clip-action" onClick={downloadClip}>
+              Download
+            </button>
+            <button type="button" className="vibe-clip-action" onClick={clip.retake}>
+              Retake
+            </button>
+            <button type="button" className="vibe-clip-action" onClick={clip.closePreview}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
       <div className="vibe-toolbar-capsule-wrapper">
         {mounted ? (
           <BorderBeam
@@ -553,8 +742,16 @@ export default function VibeToolbar({
   )
 }
 
-function getPanelLabel(tool: NonNullable<VibeToolbarTool>): string {
-  switch (tool) {
+/** Active-time countdown chip text, mm:ss (aria-hidden — the live region
+ *  carries the restrained announcements instead of every tick). */
+function formatClipCountdown(remainingMs: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000))
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
+function getPanelLabel(tool: NonNullable<VibeToolbarTool>): string {  switch (tool) {
     case 'upload':
       return 'Upload'
     case 'text':

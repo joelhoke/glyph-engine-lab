@@ -199,6 +199,142 @@ assert(
 )
 assert(!/onClose=/.test(parentSource), 'PortfolioExperience no longer passes onClose')
 
+// --- share chooser: nonmodal, accessible, PNG retained --------------------------------
+
+assert(
+  toolbarSource.includes('vibe-share-chooser') &&
+    toolbarSource.includes('Share image') &&
+    /Record \{Math\.round\(clip\.durationMs \/ 1000\)\}-second clip/.test(toolbarSource),
+  'share opens a chooser with "Share image" and "Record N-second clip"',
+)
+assert(
+  toolbarSource.includes('shareImageButtonRef.current?.focus()'),
+  'opening the chooser focuses "Share image"',
+)
+assert(
+  /aria-expanded=\{isShare \? shareChooserOpen : undefined\}/.test(toolbarSource) &&
+    /aria-controls=\{isShare && shareChooserOpen \? shareChooserId : undefined\}/.test(toolbarSource),
+  'the Share utility carries aria-expanded/aria-controls for the chooser',
+)
+assert(
+  /handleKeyDown[\s\S]*?Escape[\s\S]*?closeShareChooser/.test(toolbarSource) &&
+    toolbarSource.includes('closeShareChooser'),
+  'Escape closes the chooser and restores focus to the Share button',
+)
+assert(
+  /utilityButtonRefs\.current\.share\?\.focus\(\)/.test(toolbarSource),
+  'closing the chooser returns focus to the Share utility button',
+)
+assert(
+  toolbarSource.includes('handleShareClick') && toolbarSource.includes('handleShare()'),
+  'the PNG export path is retained behind the chooser',
+)
+
+// --- clip recording states ----------------------------------------------------------------
+
+assert(
+  toolbarSource.includes('vibe-clip-countdown') &&
+    toolbarSource.includes('formatClipCountdown') &&
+    toolbarSource.includes('vibe-clip-cancel'),
+  'recording shows a countdown chip with Cancel',
+)
+assert(
+  /aria-hidden="true"[\s\S]{0,120}formatClipCountdown|formatClipCountdown[\s\S]{0,200}aria-hidden/.test(toolbarSource) ||
+    toolbarSource.includes('className="vibe-clip-countdown" aria-hidden="true"'),
+  'the countdown is aria-hidden (no per-tick announcements)',
+)
+assert(
+  toolbarSource.includes('role="status"') && toolbarSource.includes('clip.announcement'),
+  'a restrained live-status region carries recording announcements',
+)
+assert(
+  /disabled = clipRecordingActive/.test(toolbarSource),
+  'Reset and duplicate Share disable while recording',
+)
+assert(
+  toolbarSource.includes('transportDisabled={clipRecordingActive}'),
+  'the debug Sound transport disables while recording',
+)
+
+// --- clip preview + share/download fallback -------------------------------------------------
+
+assert(
+  toolbarSource.includes('vibe-clip-preview-video') &&
+    toolbarSource.includes('playsInline') &&
+    toolbarSource.includes('controls') &&
+    !/autoPlay/.test(toolbarSource),
+  'the preview is a non-autoplaying <video controls playsInline>',
+)
+for (const action of ['Share clip', 'Download', 'Retake', 'Close']) {
+  assert(toolbarSource.includes(action), `preview exposes "${action}"`)
+}
+assert(
+  /handleShareClip[\s\S]*?navigator\.canShare[\s\S]*?navigator\.share/.test(toolbarSource),
+  'clip share tries the native sheet from the completed-state button',
+)
+assert(
+  /catch \(err\)[\s\S]*?AbortError[\s\S]*?downloadClip\(\)/.test(toolbarSource) ||
+    /else \{\s*downloadClip\(\)/.test(toolbarSource),
+  'clip share falls back to download when sharing is unsupported or fails',
+)
+assert(
+  toolbarSource.includes('clip.releasePreview()'),
+  'a successful clip share releases the preview',
+)
+
+// --- clip capture pipeline (hook) ------------------------------------------------------------
+
+const clipHookSource = fs.readFileSync(
+  path.join(projectRoot, 'components', 'vibe', 'useClipRecorder.ts'),
+  'utf8',
+)
+assert(
+  clipHookSource.includes('canvas.captureStream(30)'),
+  'the clip captures ONLY the canvas via captureStream(30) (DOM chrome can never appear)',
+)
+assert(
+  clipHookSource.includes(".getAudioTracks()[0]?.clone()"),
+  'a CLONED audio track is recorded (the original keeps feeding the speakers)',
+)
+assert(
+  clipHookSource.includes('beginCapture()') &&
+    clipHookSource.includes('CLIP_AUDIO_FAILURE_MESSAGE'),
+  'a missing audio capture stream fails visibly instead of exporting silent video',
+)
+assert(
+  clipHookSource.includes('URL.createObjectURL') && clipHookSource.includes('URL.revokeObjectURL'),
+  'preview object URLs are created and revoked through the recorder core',
+)
+assert(
+  clipHookSource.includes('createClipRecorder') &&
+    clipHookSource.includes('getCanvasSize'),
+  'the pure recorder core runs with a canvas backing-size guard',
+)
+assert(
+  clipHookSource.includes('prefers-reduced-motion') && clipHookSource.includes('requestFrame'),
+  'reduced-motion recordings request deterministic frames for a static canvas',
+)
+
+// --- parent wiring (clip) ---------------------------------------------------------------------
+
+assert(
+  parentSource.includes('clip={clipRecorder}'),
+  'PortfolioExperience passes the clip recorder controls to the toolbar',
+)
+assert(
+  parentSource.includes('useClipRecorder({') &&
+    parentSource.includes('beginCapture: sonification.beginCapture'),
+  'PortfolioExperience wires sonification beginCapture into the clip recorder',
+)
+assert(
+  parentSource.includes("enabled: displayed === 'vibe'"),
+  'the sonification hook is enabled throughout Vibe Mode (production clip recording)',
+)
+assert(
+  parentSource.includes('clipTestMs'),
+  'the dev-only ?clipTestMs= test hook is wired',
+)
+
 if (failures > 0) {
   console.error(`\n${failures} verification(s) failed.`)
   process.exit(1)

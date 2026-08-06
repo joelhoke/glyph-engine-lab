@@ -10,6 +10,7 @@ import VibeExperience, { VibeSurfaceStatus } from './vibe/VibeExperience'
 import VibeToolbar from './vibe/VibeToolbar'
 import SonificationOverlay from './vibe/SonificationOverlay'
 import { useSonification } from './vibe/useSonification'
+import { useClipRecorder } from './vibe/useClipRecorder'
 import PrimaryActions, { ExperienceKey, PRIMARY_ACTION_COUNT } from './PrimaryActions'
 import TuningPanel from './tuning/TuningPanel'
 import AnalyticsConsent from './AnalyticsConsent'
@@ -94,6 +95,7 @@ import {
   createEmptyPaintSnapshot,
 } from '../engine/paint'
 import { clampPondConfig, POND_DEFAULTS, PondConfig } from '../engine/pondConfig'
+import { CLIP_DURATION_DEFAULT_MS } from '../engine/clipRecorder'
 import {
   VibeHistory,
   VibeStateSnapshot,
@@ -686,13 +688,14 @@ export default function PortfolioExperience() {
     setPondConfig(clampPondConfig(next))
   }
 
-  // Visual Sonification experiment (debug-only, session-only): the scanner
-  // reads the live canvas and plays a tonal score. It never enters
-  // PlaygroundConfig, presets, unified history, URL sharing, analytics, or
-  // uploaded-source state — and no AudioContext exists until the visitor
-  // presses Play in dev ?debug=true mode.
+  // Visual Sonification experiment (session-only): the scanner reads the
+  // live canvas and plays a tonal score. It never enters PlaygroundConfig,
+  // presets, unified history, URL sharing, analytics, or uploaded-source
+  // state. Enabled throughout Vibe Mode so production clip recording can
+  // drive it — the Sound panel and scan-line overlay stay debug-only, and
+  // no AudioContext exists until a user gesture (debug Play, or Record clip).
   const sonification = useSonification({
-    enabled: tuningMode && displayed === 'vibe',
+    enabled: displayed === 'vibe',
     sceneCanvasRef,
     qualityTier: (sceneDiagnostics.qualityTier >= 0 && sceneDiagnostics.qualityTier <= 3
       ? sceneDiagnostics.qualityTier
@@ -700,6 +703,26 @@ export default function PortfolioExperience() {
     backgroundColor1: playgroundConfig.backgroundColor1,
     backgroundColor2: playgroundConfig.backgroundColor2,
     ambient: playgroundConfig.ambient,
+  })
+
+  // 15-second vibe clips: canvas captureStream + sonification soundtrack.
+  // The dev-only ?clipTestMs= query param shortens the active-time target
+  // for automated verification (clamped 500–15000ms); production is 15s.
+  const clipDurationMs = useMemo(() => {
+    if (process.env.NODE_ENV !== 'development' || typeof window === 'undefined') {
+      return CLIP_DURATION_DEFAULT_MS
+    }
+    const raw = new URLSearchParams(window.location.search).get('clipTestMs')
+    const parsed = raw ? Number(raw) : NaN
+    return Number.isFinite(parsed)
+      ? Math.min(CLIP_DURATION_DEFAULT_MS, Math.max(500, parsed))
+      : CLIP_DURATION_DEFAULT_MS
+  }, [])
+  const clipRecorder = useClipRecorder({
+    enabled: displayed === 'vibe',
+    sceneCanvasRef,
+    beginCapture: sonification.beginCapture,
+    durationMs: clipDurationMs,
   })
 
   const controllerRef = useRef<SequenceController>({
@@ -1903,6 +1926,7 @@ export default function PortfolioExperience() {
           onSoundConfigChange={sonification.updateConfig}
           onSoundPlay={sonification.play}
           onSoundPause={sonification.pause}
+          clip={clipRecorder}
         />
       )}
       {tuningMode && displayed === 'vibe' && (

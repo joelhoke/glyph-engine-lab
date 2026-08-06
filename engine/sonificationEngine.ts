@@ -101,9 +101,25 @@ export type SonificationAudioContextLike = {
     sampleRate: number,
   ) => SonificationBufferLike
   createBufferSource: () => SonificationBufferSourceLike
+  /** Optional: MediaStreamAudioDestinationNode factory for clip capture.
+   *  Absent = sonification capture unavailable. */
+  createMediaStreamDestination?: () => SonificationCaptureDestinationLike
   suspend: () => void | Promise<void>
   resume: () => void | Promise<void>
   close: () => void | Promise<void>
+}
+
+/** Minimal MediaStreamAudioDestinationNode shape. The stream is opaque to
+ *  the engine; the host hands it to MediaRecorder. */
+export type SonificationCaptureDestinationLike = NodeLike & {
+  stream: unknown
+}
+
+/** A capture session returned by beginCapture(): the recordable stream plus
+ *  an idempotent finish() that restores the pre-capture playback mode. */
+export type SonificationCaptureSession = {
+  stream: unknown
+  finish: () => void
 }
 
 // --- Public types -------------------------------------------------------------
@@ -161,6 +177,15 @@ export type SonificationEngine = {
   getState: () => SonificationPlaybackState
   /** Audio-clock sweep position 0..1 (playback direction), null when idle. */
   getSweepPosition: () => number | null
+  /** The single reusable capture stream (tapped after master gain + limiter,
+   *  so the recording equals the audible mix). Null until a context exists,
+   *  or when the context can't create a MediaStream destination. */
+  getCaptureStream: () => unknown | null
+  /** Clip recording: snapshots the current playback mode, starts a FRESH
+   *  sweep from step zero (playing through the speakers), and returns the
+   *  capture stream + an idempotent finish() restoring the prior mode.
+   *  Null when playback or the capture stream can't start. */
+  beginCapture: () => SonificationCaptureSession | null
   reportAnalysisMs: (ms: number) => void
   getDiagnostics: () => SonificationEngineDiagnostics
 }
@@ -228,6 +253,9 @@ export function createSonificationEngine(
   let noiseFilter: SonificationBiquadLike | null = null
   let noiseSource: SonificationBufferSourceLike | null = null
   let pulseTexture: SonificationPulseTexture | null = null
+  /** Single reusable capture tap (after master gain + limiter). */
+  let captureDest: SonificationCaptureDestinationLike | null = null
+  let captureUnavailable = false
   type Voice = {
     osc: SonificationOscillatorLike
     filter: SonificationBiquadLike
@@ -268,6 +296,21 @@ export function createSonificationEngine(
     master.gain.value = volumeToGain(config?.volume ?? 35)
     master.connect(compressor)
     masterGain = master
+
+    // Clip capture: ONE reusable MediaStream destination tapped after the
+    // limiter, so the recorded mix is exactly the audible mix.
+    if (context.createMediaStreamDestination) {
+      try {
+        captureDest = context.createMediaStreamDestination()
+        compressor.connect(captureDest)
+        captureUnavailable = false
+      } catch {
+        captureDest = null
+        captureUnavailable = true
+      }
+    } else {
+      captureUnavailable = true
+    }
 
     // Drone: root + fifth sines through a soft lowpass.
     const dFilter = context.createBiquadFilter()
@@ -604,6 +647,11 @@ export function createSonificationEngine(
         noiseSource?.disconnect()
       } catch {}
       try {
+        captureDest?.disconnect()
+      } catch {}
+      captureDest = null
+      captureUnavailable = false
+      try {
         ctx.close()
       } catch {}
     }
@@ -621,6 +669,47 @@ export function createSonificationEngine(
     setState('idle')
   }
 
+  const getCaptureStream = (): unknown | null => {
+    if (!ctx || captureUnavailable || !captureDest) return null
+    return captureDest.stream
+  }
+
+  const restorePlaybackMode = (prior: SonificationPlaybackState) => {
+    if (prior === 'playing') return // capture left playback running
+    if (prior === 'paused') {
+      pause()
+      return
+    }
+    // idle/error: end playback entirely.
+    stop()
+  }
+
+  const beginCapture = (): SonificationCaptureSession | null => {
+    const prior = state
+    // Fresh sweep from step zero: stop() resets the scan position, play()
+    // (re)creates/resumes the single context and starts from step 0.
+    if (state === 'playing' || state === 'paused') stop()
+    play()
+    if (state !== 'playing') {
+      restorePlaybackMode(prior)
+      return null
+    }
+    const stream = getCaptureStream()
+    if (!stream) {
+      restorePlaybackMode(prior)
+      return null
+    }
+    let finished = false
+    return {
+      stream,
+      finish: () => {
+        if (finished) return
+        finished = true
+        restorePlaybackMode(prior)
+      },
+    }
+  }
+
   return {
     play,
     pause,
@@ -635,6 +724,8 @@ export function createSonificationEngine(
       if (elapsed <= 0) return 0
       return (elapsed % sweepDuration) / sweepDuration
     },
+    getCaptureStream,
+    beginCapture,
     reportAnalysisMs: (ms: number) => {
       if (Number.isFinite(ms) && ms >= 0) analysisMs = ms
     },
