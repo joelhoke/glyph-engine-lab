@@ -1652,6 +1652,15 @@ button:focus-visible {
   border-color: var(--color-accent-strong);
 }
 
+.work-story-link-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.35em;
+  vertical-align: middle;
+  object-fit: contain;
+}
+
 .work-controls {
   display: flex;
   align-items: center;
@@ -4391,6 +4400,174 @@ a.guide-source:focus-visible {
   outline-offset: 2px;
 }
 
+/* Pond panel (debug-only Private Pond experiment) */
+
+.vibe-pond-panel {
+  width: min(360px, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.vibe-pond-creature-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.vibe-pond-hint {
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--color-text-faint);
+  margin: 0;
+}
+
+.vibe-pond-use-fish {
+  align-self: flex-start;
+  font: inherit;
+  font-size: 0.76rem;
+  color: inherit;
+  background: var(--color-input-bg);
+  border: 1px solid var(--color-input-border);
+  border-radius: 8px;
+  padding: 0.4rem 0.85rem;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.vibe-pond-use-fish:hover:not(:disabled),
+.vibe-pond-use-fish:focus-visible {
+  background: var(--color-hover);
+}
+
+.vibe-pond-use-fish:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Sound panel (debug-only Visual Sonification experiment) */
+
+.vibe-sound-panel {
+  width: min(360px, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.vibe-sound-transport {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.vibe-sound-play {
+  font: inherit;
+  font-size: 0.8rem;
+  color: inherit;
+  background: var(--color-input-bg);
+  border: 1px solid var(--color-input-border);
+  border-radius: 8px;
+  padding: 0.45rem 1.1rem;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.vibe-sound-play:hover:not(:disabled),
+.vibe-sound-play:focus-visible {
+  background: var(--color-hover);
+}
+
+.vibe-sound-play:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.vibe-sound-state {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+
+.vibe-sound-error {
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--color-text-faint);
+  margin: 0;
+}
+
+.vibe-sound-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.vibe-sound-field-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+
+.vibe-sound-select {
+  font: inherit;
+  font-size: 0.8rem;
+  color: inherit;
+  background: var(--color-surface-panel);
+  border: 1px solid var(--color-input-border);
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+}
+
+.vibe-sound-select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Sonification scan line (debug-only): pointer-transparent overlay — the
+   canvas sampler never reads its own marker. */
+
+.sonification-scan-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.sonification-scanline {
+  position: absolute;
+  opacity: 0;
+  background: currentColor;
+  box-shadow: 0 0 12px 2px currentColor;
+  transition: opacity 200ms ease;
+}
+
+.sonification-scanline[data-axis='x'] {
+  top: 0;
+  bottom: 0;
+  width: 2px;
+}
+
+.sonification-scanline[data-axis='y'] {
+  left: 0;
+  right: 0;
+  height: 2px;
+}
+
+/* Reduced motion: the moving line becomes a discrete band highlight that
+   steps once per scan step. */
+.sonification-scanline-stepped[data-axis='x'] {
+  width: calc(100% / 24);
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  box-shadow: none;
+}
+
+.sonification-scanline-stepped[data-axis='y'] {
+  height: calc(100% / 24);
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  box-shadow: none;
+}
+
 @media (max-width: 640px) {
   .vibe-toolbar {
     bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
@@ -4454,7 +4631,9 @@ a.guide-source:focus-visible {
   .vibe-color-styles-panel,
   .vibe-paint-panel,
   .vibe-motion-effects-panel,
-  .vibe-ambient-panel {
+  .vibe-ambient-panel,
+  .vibe-pond-panel,
+  .vibe-sound-panel {
     width: 100%;
     max-height: calc(70vh - 7rem);
     overflow: auto;
