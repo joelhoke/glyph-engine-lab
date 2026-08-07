@@ -93,8 +93,6 @@ import {
   buildMotionBaseField,
   computeCreatureTargets,
   computeOrganicTargets,
-  CREATURE_DEFINITIONS,
-  CreatureLocomotion,
   CreatureTopology,
   MotionBaseField,
   MotionWaveParams,
@@ -320,8 +318,8 @@ type SceneCanvasProps = {
   /** Fired when the adaptive controller actually changes tier (auto or override). */
   onQualityTierChange?: (from: QualityTier, to: QualityTier) => void
   /** Debug-only "Private Pond" experiment: a single swimming body carries any
-   *  glyph source (drift for all; creatures with locomotion metadata also
-   *  rotate). Undefined/disabled = byte-identical scene. */
+   *  glyph source (drift + impact spin for all; creatures keep a fixed
+   *  upright orientation). Undefined/disabled = byte-identical scene. */
   pond?: PondConfig
 }
 
@@ -2574,25 +2572,15 @@ function SceneCanvasInternal(
     return config && config.enabled ? config : null
   }
 
-  // Locomotion metadata (declared by parametric creatures with a determinate
-  // facing) adds the body's heading to the rotation (heading - resting
-  // forward + spin); every other source rotates by the impact-driven spin
-  // alone — heading never twists text, torque does.
-  const getPondLocomotion = (): CreatureLocomotion | null => {
-    const config = motionConfigRef.current
-    if (config.mode !== 'parametric-creature') return null
-    return CREATURE_DEFINITIONS[config.variant].locomotion ?? null
-  }
-
-  // Lazily create the single body (centered, seeded wander phase) and step it
-  // on the quality-capped motion update cadence, in any motion mode. dt
-  // derives from the time since the last target compute so body and targets
-  // advance together.
-  const stepPond = (config: PondConfig, restingHeading: number, dt: number) => {
+  // Lazily create the single body (centered, seeded wander phase, cruising +X
+  // initially) and step it on the quality-capped motion update cadence, in
+  // any motion mode. dt derives from the time since the last target compute
+  // so body and targets advance together.
+  const stepPond = (config: PondConfig, dt: number) => {
     const { width, height } = getViewportSize()
     if (width <= 0 || height <= 0) return
     if (!pondBodyRef.current) {
-      pondBodyRef.current = createPondBody(width, height, restingHeading)
+      pondBodyRef.current = createPondBody(width, height, 0)
       pondBoundsRef.current = { width, height }
     }
     const pointerState = pointerRef.current
@@ -2669,15 +2657,10 @@ function SceneCanvasInternal(
     if (motionDirtyRef.current || now - lastMotionComputeRef.current >= 1000 / rate) {
       // Private Pond: advance the swimming body on the same quality-capped
       // cadence as the target math, in every motion mode, then transform the
-      // targets below. Every source reads the body position and spin;
-      // locomotion metadata adds the heading to the rotation.
+      // targets below. Every source reads the body position and spin.
       if (pond) {
-        const locomotion = getPondLocomotion()
-        const restingHeading = locomotion
-          ? Math.atan2(locomotion.forwardY, locomotion.forwardX)
-          : 0
         const pondDt = Math.min(0.1, Math.max(0, (now - lastMotionComputeRef.current) / 1000))
-        stepPond(pond, restingHeading, lastMotionComputeRef.current > 0 ? pondDt : 0)
+        stepPond(pond, lastMotionComputeRef.current > 0 ? pondDt : 0)
       }
       computeMotionFrame(motionTimeRef.current)
       lastMotionComputeRef.current = now
@@ -2687,30 +2670,22 @@ function SceneCanvasInternal(
 
   // Private Pond: transform the freshly computed targets by the body pose
   // (engine/pondTransform). Every source translates with the body and spins
-  // by the impact-driven angular velocity; locomotion-capable creatures also
-  // add (heading - resting forward) around their declared anchor. One bounded
-  // in-place pass over the targets; no allocation, no glyph-count change.
-  // Under reduced motion the body never integrates: the centered static pose
-  // is a fixed deterministic transform (the identity for sources anchored at
-  // the viewport center).
+  // by the impact-driven angular velocity around the viewport center —
+  // creatures keep their fixed upright orientation (no facing flip). One
+  // bounded in-place pass over the targets; no allocation, no glyph-count
+  // change. Under reduced motion the body never integrates: the centered
+  // static pose is the identity transform.
   const transformPondTargets = (pond: PondConfig | null, count: number) => {
     if (!pond) return
-    const locomotion = getPondLocomotion()
     const { width, height } = getViewportSize()
     const body = pondBodyRef.current
     const pose =
-      reducedMotionRef.current || !body
-        ? pondStaticPose(
-            width,
-            height,
-            locomotion ? Math.atan2(locomotion.forwardY, locomotion.forwardX) : 0,
-          )
-        : body
+      reducedMotionRef.current || !body ? pondStaticPose(width, height, 0) : body
     applyPondTransform(
       motionBuffersXRef.current,
       motionBuffersYRef.current,
       count,
-      resolvePondTransform(locomotion, pose, width, height),
+      resolvePondTransform(pose, width, height),
     )
   }
 

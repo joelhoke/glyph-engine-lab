@@ -12,10 +12,10 @@
  * impact edge masks), engine/pondFormation.ts (formation-level bounce:
  * per-wall unique-contact windows, deterministic opposing-wall resolution,
  * body rebound with restitution/min-kick/heading alignment, cooldown), and
- * the locomotion capability metadata on the creature registry in
- * engine/motion.ts (rotation opt-in for original/jelly/ray, verified against
- * each creature's generated geometry). SceneCanvas routing invariants and
- * PondPanel copy are asserted as source text.
+ * the fixed-orientation creature geometry in engine/motion.ts (resting-
+ * orientation evidence; no facing metadata — creatures never flip).
+ * SceneCanvas routing invariants and PondPanel copy are asserted as source
+ * text.
  */
 
 const { execSync } = require('child_process')
@@ -452,9 +452,9 @@ const RESTING = Math.PI // original fish rests facing -X
   assert(spinClamped.formationMaxAngularSpeed === 10, 'max spin speed clamps to its 0–10 range')
 }
 
-// (11) rotation opt-in: original/jelly/ray declare locomotion; custom stays
-// drift-only. Each declared forward direction is verified against the
-// creature's generated geometry, not the metadata alone.
+// (11) fixed-orientation creatures: no facing metadata remains — every
+// source rotates by impact spin only (no flip). The resting-orientation
+// geometry is still asserted as documentation of what "upright" means.
 {
   const restingParams = {
     time: 0,
@@ -474,19 +474,9 @@ const RESTING = Math.PI // original fish rests facing -X
     return { topology, outX, outY }
   }
 
-  const original = CREATURE_DEFINITIONS.original.locomotion
-  assert(original != null, 'original declares locomotion capability')
-  assert(
-    original.forwardX === -1 && original.forwardY === 0,
-    'original rests facing -X (head-left generated fish)',
-  )
-  assert(
-    original.anchorX === 0.5 && original.anchorY === 0.5,
-    'original anchors at the viewport center',
-  )
   {
-    // Fish geometry evidence: head-marked points (aux 2) sit at the left end,
-    // tail-fin points (aux 1) at the right end.
+    // Fish resting orientation: head-marked points (aux 2) sit at the left
+    // end, tail-fin points (aux 1) at the right end.
     const { topology, outX } = computeResting('original', 4000)
     let headX = 0
     let headN = 0
@@ -503,22 +493,12 @@ const RESTING = Math.PI // original fish rests facing -X
     }
     assert(
       headN > 0 && tailN > 0 && headX / headN < tailX / tailN,
-      'original geometry: head points sit left of the tail fin (forward -X)',
+      'original rests upright: head points sit left of the tail fin',
     )
   }
 
-  const jelly = CREATURE_DEFINITIONS.jelly.locomotion
-  assert(jelly != null, 'jelly declares locomotion capability')
-  assert(
-    jelly.forwardX === 0 && jelly.forwardY === -1,
-    'jelly rests facing -Y (bell-up generated jellyfish)',
-  )
-  assert(
-    jelly.anchorX === 0.5 && jelly.anchorY === 0.42,
-    'jelly anchors at its bell rim center (0.5, 0.42)',
-  )
   {
-    // Jelly geometry evidence: the bell dome apex is the topmost point and
+    // Jelly resting orientation: the bell dome apex is the topmost point and
     // sits above the rim (0.42 * height); tendrils trail below it.
     const { topology, outY } = computeResting('jelly', 4000)
     const rimY = H * 0.42
@@ -534,59 +514,35 @@ const RESTING = Math.PI // original fish rests facing -X
     }
     assert(
       topIsBell && topY < rimY,
-      'jelly geometry: the bell dome apex is the topmost point (forward -Y)',
+      'jelly rests upright: the bell dome apex is the topmost point',
     )
-    assert(tendrilBottom > rimY, 'jelly geometry: tendrils trail below the rim')
+    assert(tendrilBottom > rimY, 'jelly appendages trail below the rim')
   }
 
-  const ray = CREATURE_DEFINITIONS.ray.locomotion
-  assert(ray != null, 'ray declares locomotion capability')
-  assert(
-    ray.forwardX === 0 && ray.forwardY === -1,
-    'ray rests facing -Y (perpendicular to its span)',
-  )
-  assert(
-    ray.anchorX === 0.5 && ray.anchorY === 0.5,
-    'ray anchors at the viewport center',
-  )
   {
-    // Ray geometry evidence: a wide span mirrored about the vertical axis
-    // (so it swims perpendicular to the span), with a chord profile mirror-
-    // symmetric about the horizontal axis — the Y sign is a convention.
-    const { topology, outX, outY } = computeResting('ray', 4000)
+    // Ray resting orientation: a wide span mirrored about the vertical axis.
+    const { topology, outX } = computeResting('ray', 4000)
     let minX = Infinity
     let maxX = -Infinity
-    let minY = Infinity
-    let maxY = -Infinity
     let sumX = 0
-    let sumY = 0
     for (let i = 0; i < topology.count; i += 1) {
       minX = Math.min(minX, outX[i])
       maxX = Math.max(maxX, outX[i])
-      minY = Math.min(minY, outY[i])
-      maxY = Math.max(maxY, outY[i])
       sumX += outX[i]
-      sumY += outY[i]
     }
     const meanX = sumX / topology.count
-    const meanY = sumY / topology.count
     assert(
-      Math.abs(meanX - W * 0.5) < 1,
-      'ray geometry: the span is mirrored about the viewport center X',
-    )
-    assert(
-      maxX - minX > (maxY - minY) * 3,
-      'ray geometry: the span axis is X, so the facing is along ±Y',
-    )
-    assert(
-      Math.abs(meanY - H * 0.5) < 1,
-      'ray geometry: the chord is mirror-symmetric about cy (Y sign is a convention)',
+      Math.abs(meanX - W * 0.5) < 1 && maxX - minX > W * 0.5,
+      'ray rests upright: a wide span mirrored about the viewport center X',
     )
   }
 
   assert(
-    CREATURE_DEFINITIONS.custom.locomotion == null,
-    'custom declares no locomotion (runtime-form orientation: drift-only)',
+    CREATURE_DEFINITIONS.original.locomotion == null &&
+      CREATURE_DEFINITIONS.jelly.locomotion == null &&
+      CREATURE_DEFINITIONS.ray.locomotion == null &&
+      CREATURE_DEFINITIONS.custom.locomotion == null,
+    'no creature declares facing metadata (creatures keep a fixed upright orientation)',
   )
 }
 
@@ -684,42 +640,29 @@ const RESTING = Math.PI // original fish rests facing -X
   )
 }
 
-// (14) transform resolution: locomotion metadata decides rotation vs
-// translation-only; the reduced-motion static pose never rotates
+// (14) transform resolution: one rule for every source — impact spin around
+// the viewport center plus drift; the static pose is the identity
 {
   const pose = { x: W * 0.5 + 90, y: H * 0.5 - 30, heading: 1.1, spinAngle: 0 }
-  const driftT = resolvePondTransform(null, pose, W, H)
-  assert(driftT.angle === 0, 'no locomotion metadata → translation-only (angle 0)')
+  const driftT = resolvePondTransform(pose, W, H)
+  assert(driftT.angle === 0, 'zero spin → no rotation, whatever the heading')
   assert(
     driftT.anchorPx === W * 0.5 && driftT.anchorPy === H * 0.5,
-    'drift anchors at the viewport center',
+    'the transform pivots around the viewport center',
   )
   assert(
     Math.abs(driftT.translateX - 90) < EPS && Math.abs(driftT.translateY + 30) < EPS,
     'drift translation is the pose minus the viewport center',
   )
 
-  const jellyLoc = CREATURE_DEFINITIONS.jelly.locomotion
-  const resting = Math.atan2(jellyLoc.forwardY, jellyLoc.forwardX)
-  const rigidT = resolvePondTransform(jellyLoc, pose, W, H)
+  const spun = resolvePondTransform({ ...pose, heading: 2.4, spinAngle: 0.35 }, W, H)
   assert(
-    Math.abs(rigidT.angle - (pose.heading - resting)) < EPS,
-    'locomotion metadata → rotation by heading - resting forward',
-  )
-  assert(
-    rigidT.anchorPx === W * jellyLoc.anchorX && rigidT.anchorPy === H * jellyLoc.anchorY,
-    'rigid transform pivots around the declared anchor',
+    spun.angle === 0.35,
+    'angle is the impact spin alone — heading never composes (no creature flip)',
   )
 
-  const staticDrift = resolvePondTransform(null, pondStaticPose(W, H, 0), W, H)
+  const staticDrift = resolvePondTransform(pondStaticPose(W, H, 0), W, H)
   assert(isIdentityPondTransform(staticDrift), 'centered static pose → identity drift transform')
-  const staticRigid = resolvePondTransform(jellyLoc, pondStaticPose(W, H, resting), W, H)
-  assert(staticRigid.angle === 0, 'static pose → no rotation, whatever the anchor')
-  assert(
-    Math.abs(staticRigid.translateX - (W * 0.5 - W * jellyLoc.anchorX)) < EPS &&
-      Math.abs(staticRigid.translateY - (H * 0.5 - H * jellyLoc.anchorY)) < EPS,
-    'static pose shifts a non-centered anchor onto the viewport center deterministically',
-  )
 }
 
 // (15) motion-off routing: the base field is copied into the drift buffers
@@ -742,14 +685,14 @@ const RESTING = Math.PI // original fish rests facing -X
   for (let frame = 0; frame < 120; frame += 1) {
     stepPondBody(body, stepParams(config, W, H), 1 / 60)
     copyBaseIntoPondBuffers(baseX, baseY, bufX, bufY, count)
-    applyPondTransform(bufX, bufY, count, resolvePondTransform(null, body, W, H))
+    applyPondTransform(bufX, bufY, count, resolvePondTransform(body, W, H))
     for (let i = 0; i < count; i += 1) {
       if (baseX[i] !== baseSnapshotX[i] || baseY[i] !== baseSnapshotY[i]) baseOk = false
     }
   }
   assert(baseOk, 'base arrays stay byte-identical across 120 drifted pond frames')
 
-  const pose = resolvePondTransform(null, body, W, H)
+  const pose = resolvePondTransform(body, W, H)
   let driftOk = true
   for (let i = 0; i < count; i += 1) {
     if (
@@ -763,34 +706,32 @@ const RESTING = Math.PI // original fish rests facing -X
 }
 
 // (16) mode switching while the pond is active: the same body trajectory
-// drives every source; only the transform type changes with the metadata
+// drives every source with one rule — impact spin only, never heading
 {
   const config = pondWith({ cruiseSpeed: 80 })
   const body = createPondBody(W, H, 0, 33)
-  const sequence = [
-    { label: 'text/upload (no metadata)', locomotion: null },
-    { label: 'original', locomotion: CREATURE_DEFINITIONS.original.locomotion },
-    { label: 'organic-flow (no metadata)', locomotion: null },
-    { label: 'jelly', locomotion: CREATURE_DEFINITIONS.jelly.locomotion },
-    { label: 'ray', locomotion: CREATURE_DEFINITIONS.ray.locomotion },
-    { label: 'custom (no metadata)', locomotion: CREATURE_DEFINITIONS.custom.locomotion ?? null },
-    { label: 'motion-off (no metadata)', locomotion: null },
+  body.angularVelocity = 1.2
+  const sources = [
+    'text/upload',
+    'original',
+    'organic-flow',
+    'jelly',
+    'ray',
+    'custom',
+    'motion-off',
   ]
   const fx = new Float32Array([W * 0.5 + 10, W * 0.5 - 20])
   const fy = new Float32Array([H * 0.5 + 5, H * 0.5 - 15])
-  let typesOk = true
+  let angleOk = true
   let finite = true
-  for (const { locomotion } of sequence) {
+  for (let s = 0; s < sources.length; s += 1) {
     stepPondBody(body, stepParams(config, W, H), 1 / 30)
-    const t = resolvePondTransform(locomotion, body, W, H)
-    const expectedAngle = locomotion
-      ? body.heading - Math.atan2(locomotion.forwardY, locomotion.forwardX)
-      : 0
-    if (t.angle !== expectedAngle) typesOk = false
+    const t = resolvePondTransform(body, W, H)
+    if (t.angle !== body.spinAngle) angleOk = false
     applyPondTransform(fx, fy, fx.length, t)
     if (!Number.isFinite(fx[0]) || !Number.isFinite(fy[0])) finite = false
   }
-  assert(typesOk, 'transform type follows the locomotion metadata as the source switches')
+  assert(angleOk, 'every source rotates by the spin angle alone as the source switches')
   assert(finite, 'targets stay finite across source switches with the pond active')
 }
 
@@ -1568,30 +1509,25 @@ const RESTING = Math.PI // original fish rests facing -X
   assert(spinOk, 'a 20000-step spin run stays finite, wrapped, and capped')
 }
 
-// (25) transform composition: spin for every source, facing + spin for
-// creatures, rigid invariants preserved
+// (25) transform composition: spin for every source (fixed orientation,
+// heading never composes), rigid invariants preserved
 {
-  // Non-creature source: angle = spinAngle alone.
+  // Every source — creatures included: angle = spinAngle alone.
   const drift = resolvePondTransform(
-    null,
     { x: W * 0.5, y: H * 0.5, heading: 0, spinAngle: 0.4 },
     W,
     H,
   )
-  assert(drift.angle === 0.4, 'a non-creature source rotates by the spin angle alone')
+  assert(drift.angle === 0.4, 'a source rotates by the spin angle alone')
 
-  // Creature: angle = (heading - resting forward) + spinAngle.
-  const jellyLoc = CREATURE_DEFINITIONS.jelly.locomotion
-  const resting = Math.atan2(jellyLoc.forwardY, jellyLoc.forwardX)
   const composed = resolvePondTransform(
-    jellyLoc,
-    { x: W * 0.5, y: H * 0.5, heading: resting + 0.3, spinAngle: 0.4 },
+    { x: W * 0.5, y: H * 0.5, heading: 2.9, spinAngle: 0.4 },
     W,
     H,
   )
   assert(
-    Math.abs(composed.angle - 0.7) < EPS,
-    'a creature composes facing and spin (0.3 + 0.4)',
+    composed.angle === 0.4,
+    'a swimming heading never composes into the angle (creatures keep their fixed orientation)',
   )
 
   // Rigid transforms with spin still preserve pairwise distances.

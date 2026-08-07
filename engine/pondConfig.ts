@@ -1,11 +1,11 @@
 /**
  * Pond configuration (debug-only "Private Pond" experiment): a single
  * swimming body that carries any glyph source around the canvas — drift and
- * impact-driven spin for all, plus heading rotation for creatures declaring
- * locomotion metadata (engine/pondBody.ts does the steering physics,
- * engine/pondTransform.ts the target transform) — plus hard viewport
- * boundaries for the visible main glyph particles (engine/pondBoundaries.ts)
- * and the aggregate formation bounce and torque (engine/pondFormation.ts).
+ * impact-driven spin for all, creatures holding a fixed upright orientation
+ * (engine/pondBody.ts does the steering physics, engine/pondTransform.ts the
+ * target transform) — plus hard viewport boundaries for the visible main
+ * glyph particles (engine/pondBoundaries.ts) and the aggregate formation
+ * bounce and torque (engine/pondFormation.ts).
  *
  * Session-only by design: the config never enters PlaygroundConfig, presets,
  * unified history, URL sharing, analytics, or uploaded-source state. The

@@ -65,9 +65,8 @@ export default function PondPanel({ pond, onPondChange }: PondPanelProps) {
       {pond.enabled && (
         <>
           <p className="vibe-pond-hint">
-            Every source swims: the field drifts with the body, wall impacts
-            can spin it, and creatures with a known facing (Original, Jelly,
-            Ray) also follow the swimmer's heading.
+            Every source swims: the field drifts with the body, and wall
+            impacts can spin it. Creatures keep their upright orientation.
           </p>
           <NumericControl
             id={`pond-cruise-speed-${stableId}`}

@@ -26,12 +26,7 @@
  * - build the topology ONCE into typed arrays (u/v/aux/phase), never per frame;
  * - compute targets allocation-free into caller-owned buffers;
  * - clamp every numeric input the compute path reads;
- * - declare locomotion capability when the creature has a determinate resting
- *   forward direction in its generated local space, so the pond body can
- *   rotate the local targets by (body heading - resting forward) — creatures
- *   without it still swim, but drift translation-only (never rotated);
- * - add deterministic verification for the entry (scripts/verify-motion.js,
- *   plus scripts/verify-pond.js for locomotion).
+ * - add deterministic verification for the entry (scripts/verify-motion.js).
  */
 
 import { CustomCreatureForm, CustomCreatureParams, ParametricVariant } from './motionConfig'
@@ -184,26 +179,6 @@ export type CreatureDefinition = {
     outX: Float32Array,
     outY: Float32Array,
   ) => void
-  /**
-   * Locomotion capability (pond swimming): the creature has a determinate
-   * facing and can be rigidly driven by an external body. `forward` is the
-   * resting forward direction (unit vector) in the creature's generated
-   * local space, and `anchorX`/`anchorY` are the local point that maps onto
-   * the body position. Creatures without this field still drift with the
-   * body (translation-only) but are never rotated.
-   */
-  locomotion?: CreatureLocomotion
-}
-
-/** Locomotion metadata for body-driven creatures (see CreatureDefinition). */
-export type CreatureLocomotion = {
-  /** Resting forward direction in generated local space (unit vector). */
-  forwardX: number
-  forwardY: number
-  /** Local-space anchor that maps onto the body position: the fraction of the
-   *  viewport the creature is generated around (0.5 = viewport center). */
-  anchorX: number
-  anchorY: number
 }
 
 // ---------------------------------------------------------------------------
@@ -219,15 +194,28 @@ function makeTopologyArrays(count: number) {
   }
 }
 
-const FISH_BODY_FRACTION = 0.75
-const FISH_TAIL_FRACTION = 0.2
+const FISH_BODY_FRACTION = 0.62
+const FISH_TAIL_FRACTION = 0.18
+const FISH_HEAD_FRACTION = 0.05
+const FISH_DORSAL_FRACTION = 0.08
+const FISH_PECTORAL_FRACTION = 0.05
+// The anal fin takes the remainder (~2%), so the counts always sum exactly.
 const FISH_TAIL_START = 0.82
+
+/** Fin rigs (aux codes 3/4/5): spine range, height (× body length), side
+ *  (+1 = below the spine, -1 = above), tailward sweep, and flutter phase. */
+const FISH_FIN_SPECS = [
+  { aux: 3, start: 0.3, end: 0.55, height: 0.1, side: -1, sweep: 0.35, phase: 0 },
+  { aux: 4, start: 0.3, end: 0.45, height: 0.075, side: 1, sweep: 0.5, phase: 1.3 },
+  { aux: 5, start: 0.65, end: 0.75, height: 0.05, side: 1, sweep: 0.4, phase: 2.6 },
+]
 
 /**
  * Assign fish coordinates: spine parameter s ∈ [0, 1] in `u`, a lateral slot
- * in [-1, 1] in `v`, and the body part in `aux` (0 body, 1 tail fin, 2 head).
- * Points are spread across `schoolSize` fish (1 for the original variant);
- * the fish index is returned via `schoolIndex` when provided.
+ * in [-1, 1] in `v`, and the body part in `aux` (0 body, 1 tail fin, 2 head,
+ * 3 dorsal fin, 4 pectoral fin, 5 anal fin). Points are spread across
+ * `schoolSize` fish (1 for the original variant); the fish index is returned
+ * via `schoolIndex` when provided.
  */
 function assignFishCoordinates(
   start: number,
@@ -240,6 +228,11 @@ function assignFishCoordinates(
   const count = Math.max(0, end - start)
   const bodyCount = Math.max(1, Math.round(count * FISH_BODY_FRACTION))
   const tailCount = Math.max(1, Math.round(count * FISH_TAIL_FRACTION))
+  const headCount = Math.max(1, Math.round(count * FISH_HEAD_FRACTION))
+  const dorsalCount = Math.max(1, Math.round(count * FISH_DORSAL_FRACTION))
+  const pectoralCount = Math.max(1, Math.round(count * FISH_PECTORAL_FRACTION))
+  const finStart = bodyCount + tailCount + headCount
+  const finCounts = [dorsalCount, pectoralCount, Math.max(1, count - finStart - dorsalCount - pectoralCount)]
   for (let i = start; i < end; i += 1) {
     const local = i - start
     if (local < bodyCount) {
@@ -251,10 +244,25 @@ function assignFishCoordinates(
       u[i] = FISH_TAIL_START + t * (1 - FISH_TAIL_START)
       v[i] = hash01(local, 7 + schoolIndex) * 2 - 1
       aux[i] = 1
-    } else {
+    } else if (local < finStart) {
       u[i] = hash01(local, 11 + schoolIndex) * 0.1
       v[i] = (hash01(local, 13 + schoolIndex) * 2 - 1) * 0.6
       aux[i] = 2
+    } else {
+      // Fins: s sweeps the fin's spine range, the slot fills body → tip.
+      const finLocal = local - finStart
+      let fin = 0
+      let offset = 0
+      while (fin < 2 && finLocal >= offset + finCounts[fin]) {
+        offset += finCounts[fin]
+        fin += 1
+      }
+      const spec = FISH_FIN_SPECS[fin]
+      const finCount = finCounts[fin]
+      const finT = finCount > 1 ? (finLocal - offset) / (finCount - 1) : 0
+      u[i] = spec.start + finT * (spec.end - spec.start)
+      v[i] = hash01(local, 17 + fin * 4 + schoolIndex) * 2 - 1
+      aux[i] = spec.aux
     }
   }
 }
@@ -321,15 +329,31 @@ function computeFishPoints(
     const perpX = -slope * invNorm
     const perpY = invNorm
 
-    if (topology.aux[i] === 1) {
+    const part = topology.aux[i]
+    if (part === 1) {
       // Tail fin: flares perpendicular from the peduncle and sweeps back.
       // finT is clamped: Float32 rounding can push s just below the start.
       const finT = Math.min(1, Math.max(0, (s - FISH_TAIL_START) / (1 - FISH_TAIL_START)))
       const flare = length * 0.13 * finT ** 1.1 * breathe
       outX[i] = spineX + perpX * slot * flare - Math.abs(slot) * length * 0.05
       outY[i] = spineY + perpY * slot * flare * 1.15
+    } else if (part >= 3) {
+      // Fins (dorsal/pectoral/anal): swept triangular flares attached to the
+      // spine frame, filled from the body surface to the tip (slot spans the
+      // fin height), sweeping tailward as they rise. A small phase-delayed
+      // flutter is scaled by `amount`, so the resting pose is static.
+      const spec = FISH_FIN_SPECS[part - 3]
+      const bodyW = length * 0.11 * fishProfile(s) * breathe
+      const finT = Math.min(1, Math.max(0, (s - spec.start) / (spec.end - spec.start)))
+      const rise = Math.max(0, 1 - Math.abs(2 * finT - 1)) ** 0.8
+      const finH = length * spec.height * rise * breathe
+      const fill = 0.5 + slot * 0.5
+      const flutter =
+        Math.sin(tw * 3.2 - finT * 2.4 + phaseOffset + spec.phase) * a * length * 0.006
+      const off = (bodyW + finH * fill + flutter) * spec.side
+      outX[i] = spineX + perpX * off - finH * spec.sweep * fill
+      outY[i] = spineY + perpY * off
     } else {
-      const part = topology.aux[i]
       const w = length * 0.11 * fishProfile(s) * breathe * (part === 2 ? 0.9 : 1)
       outX[i] = spineX + perpX * slot * w
       outY[i] = spineY + perpY * slot * w
@@ -379,11 +403,13 @@ function computeOriginal(
 }
 
 // ---------------------------------------------------------------------------
-// jelly — pulsing bell with coherent trailing tendrils
+// jelly — embodied pulsing bell with a scalloped rim, an inner arc detail,
+// and varied curling oral arms
 // ---------------------------------------------------------------------------
 
-const JELLY_BELL_FRACTION = 0.45
-const JELLY_TENDRIL_COUNT = 6
+const JELLY_BELL_FRACTION = 0.55
+const JELLY_TENDRIL_COUNT = 5
+const JELLY_RIM_SCALLOPS = 7
 
 function buildJellyTopology(count: number): CreatureTopology {
   const safeCount = Math.max(0, Math.floor(count))
@@ -392,17 +418,24 @@ function buildJellyTopology(count: number): CreatureTopology {
   const tendrilCount = safeCount - bellCount
   for (let i = 0; i < safeCount; i += 1) {
     if (i < bellCount) {
+      // Dome fill: u = angle fraction along the dome, v = row fraction
+      // (0 interior → 1 rim). Every 8th bell point forms the inner arc
+      // detail row (aux -2); the rest are the dome body (aux -1).
       arrays.u[i] = bellCount > 1 ? i / (bellCount - 1) : 0.5
-      arrays.v[i] = 0
-      arrays.aux[i] = -1
+      arrays.v[i] = hash01(i, 29)
+      arrays.aux[i] = i % 8 === 7 ? -2 : -1
     } else {
+      // Arm: u = anchor angle fraction along the rim, v = distance along the
+      // strand, aux packs strand × 10 + (slot + 1) — slot ∈ {-1, 0, 1} gives
+      // each strand a 3-point width.
       const j = i - bellCount
       const strand = tendrilCount > 0 ? j % JELLY_TENDRIL_COUNT : 0
       const along = tendrilCount > 0 ? Math.floor(j / JELLY_TENDRIL_COUNT) : 0
       const perStrand = tendrilCount > 0 ? Math.ceil(tendrilCount / JELLY_TENDRIL_COUNT) : 1
+      const slot = (j % 3) - 1
       arrays.u[i] = (strand + 0.5) / JELLY_TENDRIL_COUNT
       arrays.v[i] = perStrand > 1 ? along / (perStrand - 1) : 0
-      arrays.aux[i] = strand
+      arrays.aux[i] = strand * 10 + (slot + 1)
     }
     arrays.phase[i] = indexPhase(i)
   }
@@ -428,23 +461,38 @@ function computeJelly(
   const radius = baseR * pulse
   const tendrilLength = params.height * 0.4
   const sway = Math.min(params.width, params.height) * 0.05 * a
+  const strandWidth = baseR * 0.05
 
   for (let i = 0; i < count; i += 1) {
     if (aux[i] < 0) {
-      // Bell dome: angle sweeps rim → apex → rim.
-      const s = u[i] * Math.PI
-      outX[i] = cx + Math.cos(s) * radius
-      outY[i] = rimY - Math.sin(s) * radius * squash
+      // Bell: points fill the dome from an interior core out to the rim
+      // (denser near the rim via sqrt). The pulse/squash extends through the
+      // rows, damped toward the interior; the outer band carries small
+      // radial scallops; aux -2 is the inner arc detail echoing the dome.
+      const theta = u[i] * Math.PI
+      const rho = aux[i] === -2 ? 0.62 : 0.35 + 0.65 * Math.sqrt(Math.max(0, v[i]))
+      const scallop = rho > 0.9 ? 1 + 0.05 * Math.abs(Math.sin(theta * JELLY_RIM_SCALLOPS)) : 1
+      const rowFactor = 0.65 + 0.35 * rho
+      const r = baseR * (1 + (pulse - 1) * rowFactor) * rho * scallop
+      outX[i] = cx + Math.cos(theta) * r
+      outY[i] = rimY - Math.sin(theta) * r * (1 + (squash - 1) * rowFactor)
     } else {
-      // Tendril: anchored on the rim, trailing down with a phase-delayed wave
-      // so the motion propagates coherently along the strand.
+      // Oral arm: anchored on the rim, 3 points wide, with a per-strand
+      // length (0.55–1.0 of max), a gentle static S-curl, and the
+      // phase-delayed sway whose amplitude grows along the strand.
+      const strand = Math.floor(aux[i] / 10)
+      const slot = Math.round(aux[i] - strand * 10) - 1
       const anchorS = u[i] * Math.PI
       const anchorX = cx + Math.cos(anchorS) * radius * 0.92
       const t = v[i]
-      const strandPhase = aux[i] * 1.7
-      const wave = Math.sin(tw * 1.6 - t * 3 * ws + strandPhase)
-      outX[i] = anchorX + wave * sway * (0.25 + 0.75 * t)
-      outY[i] = rimY + t * tendrilLength
+      const strandLength = tendrilLength * (0.55 + 0.45 * hash01(strand, 5))
+      const curlDir = strand % 2 === 0 ? 1 : -1
+      const restCurl =
+        curlDir * Math.sin(t * Math.PI * 1.6) * strandLength * 0.09 * (0.3 + 0.7 * t)
+      const wave = Math.sin(tw * 1.6 - t * 3 * ws + strand * 1.7)
+      outX[i] =
+        anchorX + wave * sway * (0.25 + 0.75 * t) + restCurl + slot * strandWidth * (1 - 0.4 * t)
+      outY[i] = rimY + t * strandLength
     }
   }
 }
@@ -526,21 +574,24 @@ function buildCustomTopology(
       assignFishCoordinates(start, end, f, arrays.u, arrays.v, arrays.aux)
     }
   } else if (form === 'bell') {
-    // Jelly layout with `symmetry` tendrils.
+    // Jelly layout with `symmetry` arms, matching the jelly encoding: dome
+    // fill (aux -1, inner arc -2) and arms with strand×10 + slot-packed aux.
     const bellCount = Math.max(1, Math.round(safeCount * JELLY_BELL_FRACTION))
     const tendrilCount = safeCount - bellCount
     for (let i = 0; i < safeCount; i += 1) {
       if (i < bellCount) {
         arrays.u[i] = bellCount > 1 ? i / (bellCount - 1) : 0.5
-        arrays.aux[i] = -1
+        arrays.v[i] = hash01(i, 29)
+        arrays.aux[i] = i % 8 === 7 ? -2 : -1
       } else {
         const j = i - bellCount
         const strand = tendrilCount > 0 ? j % symmetry : 0
         const along = tendrilCount > 0 ? Math.floor(j / symmetry) : 0
         const perStrand = tendrilCount > 0 ? Math.ceil(tendrilCount / symmetry) : 1
+        const slot = (j % 3) - 1
         arrays.u[i] = (strand + 0.5) / symmetry
         arrays.v[i] = perStrand > 1 ? along / (perStrand - 1) : 0
-        arrays.aux[i] = strand
+        arrays.aux[i] = strand * 10 + (slot + 1)
       }
     }
   } else if (form === 'wing') {
@@ -697,40 +748,9 @@ function computeCustom(
 // ---------------------------------------------------------------------------
 
 export const CREATURE_DEFINITIONS: Record<ParametricVariant, CreatureDefinition> = {
-  // The fish is generated head-left (spine s=0 at the head), so its resting
-  // forward direction points -X and its anchor is the viewport center.
-  original: {
-    variant: 'original',
-    label: 'Original',
-    buildTopology: buildOriginalTopology,
-    compute: computeOriginal,
-    locomotion: { forwardX: -1, forwardY: 0, anchorX: 0.5, anchorY: 0.5 },
-  },
-  // The jelly is generated bell-up: the dome apex sits above the rim
-  // (rimY = 0.42 * height) and the tendrils trail downward, so its resting
-  // forward direction points -Y and its anchor is the bell's rim center.
-  jelly: {
-    variant: 'jelly',
-    label: 'Jelly',
-    buildTopology: buildJellyTopology,
-    compute: computeJelly,
-    locomotion: { forwardX: 0, forwardY: -1, anchorX: 0.5, anchorY: 0.42 },
-  },
-  // The ray is generated as a wide span mirrored along X, so it swims
-  // perpendicular to the span (along Y). Its chord profile is mirror-
-  // symmetric about the X axis, so the Y sign is a convention: head-up (-Y),
-  // matching the jelly. Its anchor is the viewport center the sheet is
-  // generated around.
-  ray: {
-    variant: 'ray',
-    label: 'Ray',
-    buildTopology: buildRayTopology,
-    compute: computeRay,
-    locomotion: { forwardX: 0, forwardY: -1, anchorX: 0.5, anchorY: 0.5 },
-  },
-  // Custom stays drift-only: its orientation is a runtime knob (form: school
-  // = head-left fish, bell = head-up jelly, wing/grid = symmetric sheets), so
-  // no single resting forward direction exists to declare.
+  original: { variant: 'original', label: 'Original', buildTopology: buildOriginalTopology, compute: computeOriginal },
+  jelly: { variant: 'jelly', label: 'Jelly', buildTopology: buildJellyTopology, compute: computeJelly },
+  ray: { variant: 'ray', label: 'Ray', buildTopology: buildRayTopology, compute: computeRay },
   custom: { variant: 'custom', label: 'Custom', buildTopology: buildCustomTopology, compute: computeCustom },
 }
 

@@ -2,16 +2,11 @@
  * Pond target transform (debug-only "Private Pond" experiment): maps the
  * freshly computed target field onto the swimming body's pose.
  *
- * Every source follows the body's position, and impact-driven torque spins
- * the whole field around the anchor:
- *
- * - Creatures with `locomotion` metadata rotate by (body heading - resting
- *   forward + spin angle) around their declared anchor, then translate the
- *   anchor onto the body position.
- * - Every other source (JH logo, text, uploads, presets, organic-flow,
- *   motion-off) rotates by the spin angle alone around the viewport center
- *   and glides with the body — spin is impact-driven only; the body never
- *   twists text by its heading.
+ * Every source — JH logo, text, uploads, presets, organic-flow, motion-off,
+ * parametric creatures — translates with the body and spins by the
+ * impact-driven torque around the viewport center. Creatures keep their
+ * fixed upright resting orientation: the body's heading steers its travel
+ * but never rotates the field (no flip).
  *
  * Everything here is pure, in place, allocation-free, and bounded O(count),
  * matching the frame-path contract documented in engine/motion.ts.
@@ -19,20 +14,18 @@
  * Verified by scripts/verify-pond.js.
  */
 
-import { CreatureLocomotion } from './motion'
-
 /** A resolved body pose: position (px), world-space facing, and field spin. */
 export type PondPose = {
   x: number
   y: number
   heading: number
-  /** Impact-driven field orientation (radians), composed on top of facing. */
+  /** Impact-driven field orientation (radians); the only rotation applied. */
   spinAngle: number
 }
 
 /** The transform applied to one frame of targets. `angle` 0 = no rotation. */
 export type PondTransform = {
-  /** Rotation around the anchor (radians); 0 for translation-only drift. */
+  /** Rotation around the anchor (radians); the impact-driven spin. */
   angle: number
   /** Local-space pivot (px) the rotation turns around / the drift offsets from. */
   anchorPx: number
@@ -43,24 +36,19 @@ export type PondTransform = {
 }
 
 /**
- * Resolve the transform for one frame. With locomotion metadata the pose
- * rotates around the creature's declared anchor by (heading - resting
- * forward + spin); without it the transform rotates any source by the spin
- * alone around the viewport center. Heading and spin stay independent —
- * torque never steers the body. A centered pose at the resting heading with
- * zero spin resolves to the identity.
+ * Resolve the transform for one frame: rotate by the impact-driven spin
+ * around the viewport center, then translate the center onto the body
+ * position. A centered pose with zero spin resolves to the identity.
  */
 export function resolvePondTransform(
-  locomotion: CreatureLocomotion | null,
   pose: PondPose,
   width: number,
   height: number,
 ): PondTransform {
-  const anchorPx = width * (locomotion ? locomotion.anchorX : 0.5)
-  const anchorPy = height * (locomotion ? locomotion.anchorY : 0.5)
-  const restingHeading = locomotion ? Math.atan2(locomotion.forwardY, locomotion.forwardX) : 0
+  const anchorPx = width * 0.5
+  const anchorPy = height * 0.5
   return {
-    angle: pose.spinAngle + (locomotion ? pose.heading - restingHeading : 0),
+    angle: pose.spinAngle,
     anchorPx,
     anchorPy,
     translateX: pose.x - anchorPx,

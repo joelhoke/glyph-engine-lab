@@ -23,9 +23,9 @@ export type PondBody = {
   y: number
   vx: number
   vy: number
-  /** World-space facing in radians (0 = +X). The creature's resting forward
-   *  direction lives on its CreatureDefinition; the render transform rotates
-   *  by (heading - resting forward). */
+  /** World-space facing in radians (0 = +X): the cruise/wander steering
+   *  direction. It never rotates the field — visual spin comes from
+   *  impact-driven torque (spinAngle) only. */
   heading: number
   /** Visual field orientation in radians (impact-driven torque; independent
    *  of heading — torque never steers the body). */

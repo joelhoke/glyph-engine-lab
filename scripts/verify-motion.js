@@ -293,6 +293,206 @@ scanFinite(swimY, 'fish amount 0.6 outY is finite')
 assert(arraysDiffer(stillX, swimX) || arraysDiffer(stillY, swimY), 'fish output differs at amount > 0 (it swims)')
 
 // ---------------------------------------------------------------------------
+// Test 5b: fish fins — part fractions sum exactly, fins sit on their spine
+// ranges on the correct side of the body, the resting pose is static, and
+// the field stays contained at the parameter extremes.
+// ---------------------------------------------------------------------------
+{
+  const bigFish = buildCreatureTopology(2400, 'original')
+  const partCounts = [0, 0, 0, 0, 0, 0]
+  for (let i = 0; i < bigFish.count; i += 1) {
+    partCounts[bigFish.aux[i]] += 1
+  }
+  const expected = { body: 1488, tail: 432, head: 120, dorsal: 192, pectoral: 120, anal: 48 }
+  assert(
+    partCounts[0] === expected.body &&
+      partCounts[1] === expected.tail &&
+      partCounts[2] === expected.head &&
+      partCounts[3] === expected.dorsal &&
+      partCounts[4] === expected.pectoral &&
+      partCounts[5] === expected.anal,
+    `fish part fractions: body ${partCounts[0]}, tail ${partCounts[1]}, head ${partCounts[2]}, ` +
+      `dorsal ${partCounts[3]}, pectoral ${partCounts[4]}, anal ${partCounts[5]} (of 2400)`,
+  )
+
+  // Fin spine ranges: dorsal s ∈ [0.30, 0.55], pectoral [0.30, 0.45], anal [0.65, 0.75].
+  let rangesOk = true
+  for (let i = 0; i < bigFish.count; i += 1) {
+    const s = bigFish.u[i]
+    const part = bigFish.aux[i]
+    if (part === 3 && (s < 0.3 - 1e-6 || s > 0.55 + 1e-6)) rangesOk = false
+    if (part === 4 && (s < 0.3 - 1e-6 || s > 0.45 + 1e-6)) rangesOk = false
+    if (part === 5 && (s < 0.65 - 1e-6 || s > 0.75 + 1e-6)) rangesOk = false
+  }
+  assert(rangesOk, 'fin points stay on their spine ranges')
+
+  // Fin sides at amount 0: the dorsal fin rides above the body midline, the
+  // pectoral and anal fins below it.
+  const fx = new Float32Array(2400)
+  const fy = new Float32Array(2400)
+  computeCreatureTargets(bigFish, { ...fishStillParams, amount: 0 }, fx, fy)
+  const meanYByPart = [0, 0, 0, 0, 0, 0]
+  for (let i = 0; i < bigFish.count; i += 1) {
+    meanYByPart[bigFish.aux[i]] += fy[i]
+  }
+  const bodyMeanY = meanYByPart[0] / partCounts[0]
+  assert(
+    meanYByPart[3] / partCounts[3] < bodyMeanY,
+    'the dorsal fin sits above the body',
+  )
+  assert(
+    meanYByPart[4] / partCounts[4] > bodyMeanY && meanYByPart[5] / partCounts[5] > bodyMeanY,
+    'the pectoral and anal fins sit below the body',
+  )
+
+  // Static resting pose: amount 0 is byte-identical across times (the
+  // flutter and the spine wave both collapse).
+  const still0X = new Float32Array(2400)
+  const still0Y = new Float32Array(2400)
+  const still2X = new Float32Array(2400)
+  const still2Y = new Float32Array(2400)
+  computeCreatureTargets(bigFish, { ...fishStillParams, time: 0 }, still0X, still0Y)
+  computeCreatureTargets(bigFish, { ...fishStillParams, time: 2 }, still2X, still2Y)
+  assert(
+    byteIdentical(still0X, still2X) && byteIdentical(still0Y, still2Y),
+    'fish amount 0 pose is static (byte-identical across times)',
+  )
+
+  // Containment at the parameter extremes (amount 1, speed 2, waveScale 2).
+  const extremeX = new Float32Array(2400)
+  const extremeY = new Float32Array(2400)
+  computeCreatureTargets(
+    bigFish,
+    { time: 3.7, amount: 1, speed: 2, waveScale: 2, complexity: 4, width: 1280, height: 720 },
+    extremeX,
+    extremeY,
+  )
+  scanFinite(extremeX, 'fish extreme-params outX is finite')
+  scanFinite(extremeY, 'fish extreme-params outY is finite')
+  const exb = bounds(extremeX)
+  const eyb = bounds(extremeY)
+  assert(
+    exb.min > -0.25 * 1280 && exb.max < 1.25 * 1280 && eyb.min > -0.25 * 720 && eyb.max < 1.25 * 720,
+    'fish stays contained near the viewport at parameter extremes',
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Test 5c: jelly structure — embodied bell (interior rows + inner arc +
+// scalloped rim) and 5 arms of varied length with width and rest curl.
+// ---------------------------------------------------------------------------
+{
+  const jelly = buildCreatureTopology(2400, 'jelly')
+  let bell = 0
+  let innerArc = 0
+  let arms = 0
+  for (let i = 0; i < jelly.count; i += 1) {
+    if (jelly.aux[i] === -2) innerArc += 1
+    else if (jelly.aux[i] < 0) bell += 1
+    else arms += 1
+  }
+  assert(
+    bell + innerArc === 1320 && arms === 1080,
+    `jelly fractions: bell ${bell} + inner arc ${innerArc} (of 1320), arms ${arms} (of 1080)`,
+  )
+  assert(innerArc > 0, 'the bell carries an inner arc detail row')
+
+  // Arm encoding: 5 strands × 3 slots, all present.
+  const strandSet = new Set()
+  const slotSet = new Set()
+  for (let i = 0; i < jelly.count; i += 1) {
+    if (jelly.aux[i] >= 0) {
+      const strand = Math.floor(jelly.aux[i] / 10)
+      const slot = Math.round(jelly.aux[i] - strand * 10) - 1
+      strandSet.add(strand)
+      slotSet.add(slot)
+    }
+  }
+  assert(strandSet.size === 5, 'the jelly has 5 arm strands')
+  assert(
+    slotSet.has(-1) && slotSet.has(0) && slotSet.has(1),
+    'each arm strand is 3 points wide',
+  )
+
+  const jellyParams = { time: 1.234, amount: 0, speed: 1, waveScale: 1, complexity: 3, width: 1280, height: 720 }
+  const jx = new Float32Array(2400)
+  const jy = new Float32Array(2400)
+  computeCreatureTargets(jelly, jellyParams, jx, jy)
+  scanFinite(jx, 'jelly amount 0 outX is finite')
+  scanFinite(jy, 'jelly amount 0 outY is finite')
+
+  // Embodied bell: dome points span interior rows and the rim band, all
+  // above the rim line.
+  const rimY = 720 * 0.42
+  let domeAboveRim = true
+  let hasInteriorRow = false
+  let hasRimRow = false
+  for (let i = 0; i < jelly.count; i += 1) {
+    if (jelly.aux[i] === -1) {
+      if (jy[i] > rimY + 1) domeAboveRim = false
+      const rho = 0.35 + 0.65 * Math.sqrt(Math.max(0, jelly.v[i]))
+      if (rho < 0.6) hasInteriorRow = true
+      if (rho > 0.9) hasRimRow = true
+    }
+  }
+  assert(domeAboveRim, 'the bell dome stays above the rim line')
+  assert(hasInteriorRow && hasRimRow, 'the bell fills interior rows through the rim band')
+
+  // Arms trail below the rim with varied per-strand lengths, all within the
+  // max tendril length.
+  const strandBottom = [0, 0, 0, 0, 0]
+  for (let i = 0; i < jelly.count; i += 1) {
+    if (jelly.aux[i] >= 0) {
+      const strand = Math.floor(jelly.aux[i] / 10)
+      if (jy[i] > strandBottom[strand]) strandBottom[strand] = jy[i]
+    }
+  }
+  const maxLen = rimY + 720 * 0.4
+  let armsOk = true
+  for (let s = 0; s < 5; s += 1) {
+    if (strandBottom[s] <= rimY || strandBottom[s] > maxLen + 1) armsOk = false
+  }
+  assert(armsOk, 'every arm trails below the rim within the max tendril length')
+  const distinct = new Set(strandBottom.map((b) => Math.round(b)))
+  assert(distinct.size >= 3, 'arm lengths vary per strand')
+
+  // Static resting pose at amount 0; animation at amount > 0.
+  const j0X = new Float32Array(2400)
+  const j0Y = new Float32Array(2400)
+  const j2X = new Float32Array(2400)
+  const j2Y = new Float32Array(2400)
+  computeCreatureTargets(jelly, { ...jellyParams, time: 0 }, j0X, j0Y)
+  computeCreatureTargets(jelly, { ...jellyParams, time: 2 }, j2X, j2Y)
+  assert(
+    byteIdentical(j0X, j2X) && byteIdentical(j0Y, j2Y),
+    'jelly amount 0 pose is static (byte-identical across times)',
+  )
+  computeCreatureTargets(jelly, { ...jellyParams, amount: 0.6, time: 2 }, j2X, j2Y)
+  assert(
+    arraysDiffer(j0X, j2X) || arraysDiffer(j0Y, j2Y),
+    'jelly pulses and sways at amount > 0',
+  )
+
+  // Containment at the parameter extremes.
+  const jExtremeX = new Float32Array(2400)
+  const jExtremeY = new Float32Array(2400)
+  computeCreatureTargets(
+    jelly,
+    { time: 3.7, amount: 1, speed: 2, waveScale: 2, complexity: 4, width: 1280, height: 720 },
+    jExtremeX,
+    jExtremeY,
+  )
+  scanFinite(jExtremeX, 'jelly extreme-params outX is finite')
+  scanFinite(jExtremeY, 'jelly extreme-params outY is finite')
+  const jxb = bounds(jExtremeX)
+  const jyb = bounds(jExtremeY)
+  assert(
+    jxb.min > -0.25 * 1280 && jxb.max < 1.25 * 1280 && jyb.min > -0.25 * 720 && jyb.max < 1.25 * 720,
+    'jelly stays contained near the viewport at parameter extremes',
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Test 6: creature at complexity 1 and 4 is all-finite (every variant).
 // ---------------------------------------------------------------------------
 for (const variant of ['original', 'jelly', 'ray']) {
