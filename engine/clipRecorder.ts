@@ -23,6 +23,8 @@
  *    — all DOM — can never appear in the export.
  */
 
+import { ClipContainerInfo, probeClipContainer } from './clipContainerProbe'
+
 /** MIME precedence: MP4 (H.264/AAC) first, then WebM (VP9, VP8, bare), then
  *  the browser default when nothing matches. */
 export const CLIP_MIME_CANDIDATES: readonly string[] = [
@@ -34,17 +36,44 @@ export const CLIP_MIME_CANDIDATES: readonly string[] = [
 ]
 
 export const CLIP_DURATION_DEFAULT_MS = 15000
+/** Selectable clip durations in the Share chooser, seconds. */
+export const CLIP_DURATION_OPTIONS_SECONDS: readonly number[] = [5, 10, 15]
 export const CLIP_VIDEO_BITS_PER_SECOND = 4_000_000
 export const CLIP_AUDIO_BITS_PER_SECOND = 128_000
 /** MediaRecorder timeslice: collect 1-second chunks. */
 export const CLIP_CHUNK_TIMESLICE_MS = 1000
+/** Frame-flow watchdog: after this much ACTIVE recording the video track
+ *  must have produced frames, or the recording fails visibly. */
+export const CLIP_FRAME_FLOW_DEADLINE_MS = 1000
+/** Recording resolution cap: longest edge in pixels. 1080p-class — H.264
+ *  level 4.0 territory, safe on every modern hardware encoder. Field
+ *  evidence (Safari 26.5 diagnostics): asked to encode a 6016×3204 retina
+ *  backing store, Safari's encoder answered with avc1.42000a (level 1.0,
+ *  QCIF-class) and silently ended the video track → audio-only MP4. */
+export const CLIP_CAPTURE_MAX_LONG_EDGE = 1920
 const TICK_INTERVAL_MS = 100
 
-/** First supported candidate, or null for the browser default. */
+/** Plain-container-first order: Safari's isTypeSupported overclaims the
+ *  codecs-parameterized MP4 string (it accepts it, then records a broken
+ *  file); the plain container MIME lets the browser pick codecs it can
+ *  actually mux. */
+const CLIP_MIME_CANDIDATES_PLAIN_FIRST: readonly string[] = [
+  'video/mp4',
+  'video/webm',
+  'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+  'video/webm;codecs=vp9,opus',
+  'video/webm;codecs=vp8,opus',
+]
+
+/** First supported candidate, or null for the browser default. With
+ *  `preferPlainContainers` (Safari), plain container MIMEs are tried before
+ *  codecs-parameterized ones — see CLIP_MIME_CANDIDATES_PLAIN_FIRST. */
 export function resolveClipMimeType(
   isTypeSupported: (mimeType: string) => boolean,
+  preferPlainContainers = false,
 ): string | null {
-  for (const candidate of CLIP_MIME_CANDIDATES) {
+  const candidates = preferPlainContainers ? CLIP_MIME_CANDIDATES_PLAIN_FIRST : CLIP_MIME_CANDIDATES
+  for (const candidate of candidates) {
     if (isTypeSupported(candidate)) return candidate
   }
   return null
@@ -53,6 +82,29 @@ export function resolveClipMimeType(
 /** Filename by the recorder's ACTUAL output MIME. */
 export function clipFilenameForMime(mimeType: string): string {
   return /mp4/i.test(mimeType) ? 'joel-hoke-vibe.mp4' : 'joel-hoke-vibe.webm'
+}
+
+export type ClipCaptureSize = {
+  width: number
+  height: number
+  scale: number
+}
+
+/** Staging-canvas size for a recording: the source aspect ratio scaled to
+ *  fit the CLIP_CAPTURE_MAX_LONG_EDGE cap, never upscaled, dimensions rounded
+ *  to even (H.264 wants mod-2). See the cap's field-evidence comment. */
+export function resolveClipCaptureSize(
+  sourceWidth: number,
+  sourceHeight: number,
+  maxLongEdge: number = CLIP_CAPTURE_MAX_LONG_EDGE,
+): ClipCaptureSize {
+  const w = Math.max(0, Math.floor(sourceWidth))
+  const h = Math.max(0, Math.floor(sourceHeight))
+  if (w === 0 || h === 0) return { width: 2, height: 2, scale: 1 }
+  const longEdge = Math.max(w, h)
+  const scale = longEdge > maxLongEdge ? maxLongEdge / longEdge : 1
+  const even = (value: number) => Math.max(2, Math.round(value / 2) * 2)
+  return { width: even(w * scale), height: even(h * scale), scale }
 }
 
 // --- Minimal structural MediaRecorder/MediaStream interfaces (double-friendly)
@@ -99,6 +151,19 @@ export type ClipRecordingResult = {
   url: string
 }
 
+/** Recorder-side diagnostics for the copyable clip-diagnostics block. */
+export type ClipRecorderDiagnostics = {
+  /** Requested MIME candidate (null = browser default was used). */
+  requestedMime: string | null
+  /** The recorder's ACTUAL output MIME. */
+  recorderMime: string
+  chunkCount: number
+  chunkBytes: number
+  blobBytes: number
+  /** Container probe of the finished blob (null until validated). */
+  probe: ClipContainerInfo | null
+}
+
 export type ClipRecorderOptions = {
   /** Combined stream (canvas video track + cloned audio track). Its tracks
    *  are owned and stopped on every exit path. */
@@ -112,6 +177,13 @@ export type ClipRecorderOptions = {
     },
   ) => ClipRecorderLike
   isTypeSupported: (mimeType: string) => boolean
+  /** Safari workaround: try plain container MIMEs before codecs-parameterized
+   *  ones (see CLIP_MIME_CANDIDATES_PLAIN_FIRST). */
+  preferPlainContainers?: boolean
+  /** Frame-flow watchdog: after deadlineMs of ACTIVE recording, isFlowing()
+   *  must report true or the recording fails visibly (catches Safari's
+   *  silent black/empty video track within ~1s instead of after 15s). */
+  frameFlow?: { deadlineMs: number; isFlowing: () => boolean }
   /** Injected clock (ms). */
   now: () => number
   setIntervalFn: (fn: () => void, ms: number) => unknown
@@ -139,6 +211,7 @@ export type ClipRecorder = {
   dispose: () => void
   getState: () => ClipRecorderState
   getResult: () => ClipRecordingResult | null
+  getDiagnostics: () => ClipRecorderDiagnostics
 }
 
 export function createClipRecorder(options: ClipRecorderOptions): ClipRecorder {
@@ -158,6 +231,12 @@ export function createClipRecorder(options: ClipRecorderOptions): ClipRecorder {
   let discarding = false
   let canvasWidth = 0
   let canvasHeight = 0
+  let flowChecked = false
+  let recorderMime = ''
+  let chunkCount = 0
+  let chunkBytes = 0
+  let blobBytes = 0
+  let probeInfo: ClipContainerInfo | null = null
 
   const setState = (next: ClipRecorderState) => {
     if (state === next) return
@@ -206,19 +285,40 @@ export function createClipRecorder(options: ClipRecorderOptions): ClipRecorder {
     options.onError?.(message)
   }
 
-  const assembleResult = () => {
+  const assembleResult = async () => {
     if (discarding || !recorder) return
     const current = recorder
     // The ACTUAL output MIME wins over the requested candidate.
     const actualMime = current.mimeType || chosenMime || 'video/webm'
+    recorderMime = current.mimeType || ''
     const nonEmpty = chunks.filter((chunk) => chunk.size > 0)
     chunks = []
     const blob = new Blob(nonEmpty, { type: actualMime })
+    blobBytes = blob.size
     recorder = null
     stopOwnedTracks()
     if (blob.size === 0) {
       setState('error')
       options.onError?.('The recording produced no media.')
+      return
+    }
+    // Validate the container BEFORE handing the clip out: a file with no
+    // video track (or no video samples) must never reach the preview — that
+    // is exactly the audio-only Safari failure this guards against.
+    try {
+      probeInfo = probeClipContainer(await blob.arrayBuffer())
+    } catch {
+      probeInfo = null
+    }
+    if (discarding) return // canceled while the blob was being read
+    if (!probeInfo) {
+      setState('error')
+      options.onError?.('The recording could not be validated as a playable clip.')
+      return
+    }
+    if (!probeInfo.hasVideoTrack || probeInfo.videoSampleBytes <= 0) {
+      setState('error')
+      options.onError?.('The recording produced no picture.')
       return
     }
     result = {
@@ -240,6 +340,15 @@ export function createClipRecorder(options: ClipRecorderOptions): ClipRecorder {
         return
       }
     }
+    // Frame-flow watchdog: catches a silently black/empty video track after
+    // ~1s of ACTIVE recording instead of after the full duration.
+    if (options.frameFlow && !flowChecked && activeElapsedMs() >= options.frameFlow.deadlineMs) {
+      flowChecked = true
+      if (!options.frameFlow.isFlowing()) {
+        fail('The canvas produced no frames for the recorder.')
+        return
+      }
+    }
     const remaining = Math.max(0, durationMs - activeElapsedMs())
     options.onTick?.(remaining)
     if (remaining <= 0) finishRecording()
@@ -247,7 +356,7 @@ export function createClipRecorder(options: ClipRecorderOptions): ClipRecorder {
 
   const start = () => {
     if (state !== 'idle' && state !== 'canceled' && state !== 'error') return
-    chosenMime = resolveClipMimeType(options.isTypeSupported)
+    chosenMime = resolveClipMimeType(options.isTypeSupported, options.preferPlainContainers === true)
     try {
       recorder = options.createRecorder(options.stream, {
         ...(chosenMime ? { mimeType: chosenMime } : {}),
@@ -263,19 +372,29 @@ export function createClipRecorder(options: ClipRecorderOptions): ClipRecorder {
     }
     chunks = []
     discarding = false
+    flowChecked = false
+    recorderMime = ''
+    chunkCount = 0
+    chunkBytes = 0
+    blobBytes = 0
+    probeInfo = null
     if (options.getCanvasSize) {
       const size = options.getCanvasSize()
       canvasWidth = size.width
       canvasHeight = size.height
     }
     recorder.ondataavailable = (event) => {
-      if (event.data && event.data.size > 0) chunks.push(event.data)
+      if (event.data && event.data.size > 0) {
+        chunks.push(event.data)
+        chunkCount += 1
+        chunkBytes += event.data.size
+      }
     }
     recorder.onerror = () => {
       fail('The recorder reported an error.')
     }
     recorder.onstop = () => {
-      assembleResult()
+      void assembleResult()
     }
     try {
       recorder.start(CLIP_CHUNK_TIMESLICE_MS)
@@ -346,5 +465,13 @@ export function createClipRecorder(options: ClipRecorderOptions): ClipRecorder {
     dispose,
     getState: () => state,
     getResult: () => result,
+    getDiagnostics: () => ({
+      requestedMime: chosenMime,
+      recorderMime,
+      chunkCount,
+      chunkBytes,
+      blobBytes,
+      probe: probeInfo,
+    }),
   }
 }

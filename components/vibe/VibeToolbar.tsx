@@ -17,6 +17,7 @@ import {
   VIBE_TOOLBAR_UTILITIES,
   VibeToolbarTool,
 } from './toolbarConfig'
+import { CLIP_DURATION_OPTIONS_SECONDS } from '../../engine/clipRecorder'
 import UploadPanel from './UploadPanel'
 import TextEffectsPanel from './TextEffectsPanel'
 import ColorStylesPanel from './ColorStylesPanel'
@@ -642,17 +643,20 @@ export default function VibeToolbar({
           >
             Share image
           </button>
-          <button
-            type="button"
-            className="vibe-share-choice"
-            disabled={!clip.supported}
-            onClick={() => {
-              setShareChooserOpen(false)
-              clip.start()
-            }}
-          >
-            Record {Math.round(clip.durationMs / 1000)}-second clip
-          </button>
+          {CLIP_DURATION_OPTIONS_SECONDS.map((seconds) => (
+            <button
+              key={seconds}
+              type="button"
+              className="vibe-share-choice"
+              disabled={!clip.supported}
+              onClick={() => {
+                setShareChooserOpen(false)
+                clip.start(seconds)
+              }}
+            >
+              Share {seconds}s clip
+            </button>
+          ))}
           {!clip.supported && clip.unsupportedReason && (
             <p className="vibe-share-chooser-note">{clip.unsupportedReason}</p>
           )}
@@ -674,19 +678,44 @@ export default function VibeToolbar({
         </div>
       )}
       {clip && clip.phase === 'error' && clip.error && (
-        <p className="vibe-clip-error" role="alert">
-          {clip.error}
-        </p>
+        <div className="vibe-clip-error" role="alert">
+          <p className="vibe-clip-error-text">{clip.error}</p>
+          <div className="vibe-clip-error-actions">
+            <button type="button" className="vibe-clip-action" onClick={clip.retake}>
+              Retake
+            </button>
+            <button type="button" className="vibe-clip-action" onClick={clip.closePreview}>
+              Close
+            </button>
+          </div>
+          {/* Always visible in the failure state: Safari users can copy this. */}
+          {clip.diagnostics && (
+            <details className="vibe-clip-diagnostics" open>
+              <summary>Clip diagnostics</summary>
+              <pre>{clip.diagnostics}</pre>
+            </details>
+          )}
+        </div>
       )}
       {clip && clip.phase === 'ready' && clip.preview && (
         <div className="vibe-clip-preview" role="group" aria-label="Clip preview">
-          {/* Non-autoplaying preview: the default post-record state. */}
+          {/* Non-autoplaying preview: the default post-record state. Decode
+              failures surface into the visible error state (Safari). */}
           <video
             className="vibe-clip-preview-video"
             src={clip.preview.url}
             controls
             playsInline
             preload="metadata"
+            onLoadedMetadata={(event) =>
+              clip.reportPreviewInfo({
+                videoWidth: event.currentTarget.videoWidth,
+                videoHeight: event.currentTarget.videoHeight,
+              })
+            }
+            onError={(event) =>
+              clip.reportPreviewError(event.currentTarget.error?.code ?? -1)
+            }
           />
           <div className="vibe-clip-preview-actions">
             <button type="button" className="vibe-clip-action" onClick={handleShareClip}>
@@ -702,6 +731,12 @@ export default function VibeToolbar({
               Close
             </button>
           </div>
+          {debugMode && clip.diagnostics && (
+            <details className="vibe-clip-diagnostics">
+              <summary>Clip diagnostics</summary>
+              <pre>{clip.diagnostics}</pre>
+            </details>
+          )}
         </div>
       )}
       <div className="vibe-toolbar-capsule-wrapper">

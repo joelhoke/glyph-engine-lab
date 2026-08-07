@@ -705,24 +705,25 @@ export default function PortfolioExperience() {
     ambient: playgroundConfig.ambient,
   })
 
-  // 15-second vibe clips: canvas captureStream + sonification soundtrack.
-  // The dev-only ?clipTestMs= query param shortens the active-time target
-  // for automated verification (clamped 500–15000ms); production is 15s.
-  const clipDurationMs = useMemo(() => {
+  // 15/10/5-second vibe clips: canvas captureStream + sonification
+  // soundtrack. The dev-only ?clipTestMs= query param (clamped 500–15000)
+  // OVERRIDES any chosen duration for automated verification; production has
+  // no override and always honors the chooser's 5/10/15s selection.
+  const clipDurationOverrideMs = useMemo(() => {
     if (process.env.NODE_ENV !== 'development' || typeof window === 'undefined') {
-      return CLIP_DURATION_DEFAULT_MS
+      return null
     }
     const raw = new URLSearchParams(window.location.search).get('clipTestMs')
     const parsed = raw ? Number(raw) : NaN
     return Number.isFinite(parsed)
       ? Math.min(CLIP_DURATION_DEFAULT_MS, Math.max(500, parsed))
-      : CLIP_DURATION_DEFAULT_MS
+      : null
   }, [])
   const clipRecorder = useClipRecorder({
     enabled: displayed === 'vibe',
     sceneCanvasRef,
     beginCapture: sonification.beginCapture,
-    durationMs: clipDurationMs,
+    durationOverrideMs: clipDurationOverrideMs,
   })
 
   const controllerRef = useRef<SequenceController>({

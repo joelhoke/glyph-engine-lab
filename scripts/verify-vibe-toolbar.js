@@ -199,13 +199,15 @@ assert(
 )
 assert(!/onClose=/.test(parentSource), 'PortfolioExperience no longer passes onClose')
 
-// --- share chooser: nonmodal, accessible, PNG retained --------------------------------
+// --- share chooser: nonmodal, accessible, four peers, PNG retained -------------------------
 
 assert(
   toolbarSource.includes('vibe-share-chooser') &&
     toolbarSource.includes('Share image') &&
-    /Record \{Math\.round\(clip\.durationMs \/ 1000\)\}-second clip/.test(toolbarSource),
-  'share opens a chooser with "Share image" and "Record N-second clip"',
+    toolbarSource.includes('CLIP_DURATION_OPTIONS_SECONDS') &&
+    toolbarSource.includes('Share {seconds}s clip') &&
+    toolbarSource.includes('clip.start(seconds)'),
+  'share opens a chooser with four peers: "Share image" + 5/10/15s clips, each starting with its duration',
 )
 assert(
   toolbarSource.includes('shareImageButtonRef.current?.focus()'),
@@ -282,6 +284,36 @@ assert(
   'a successful clip share releases the preview',
 )
 
+// --- clip container validation + diagnostics UI -----------------------------------------------
+
+const clipCoreSource = fs.readFileSync(
+  path.join(projectRoot, 'engine', 'clipRecorder.ts'),
+  'utf8',
+)
+assert(
+  clipCoreSource.includes('probeClipContainer') &&
+    clipCoreSource.includes('produced no picture'),
+  'the recorder core validates the finished container and rejects audio-only files',
+)
+assert(
+  fs.existsSync(path.join(projectRoot, 'engine', 'clipContainerProbe.ts')),
+  'the container probe is a pure engine module (browser + Node testable)',
+)
+assert(
+  toolbarSource.includes('vibe-clip-diagnostics') &&
+    /debugMode && clip\.diagnostics/.test(toolbarSource) &&
+    /clip\.diagnostics && \(/.test(toolbarSource),
+  'the diagnostics block renders in the failure state always and under debugMode otherwise',
+)
+assert(
+  toolbarSource.includes('onError={(event) =>') && toolbarSource.includes('reportPreviewError'),
+  'preview video decode errors surface into the visible error state',
+)
+assert(
+  /vibe-clip-error[\s\S]*?Retake[\s\S]*?Close/.test(toolbarSource),
+  'the failure state offers Retake/Close instead of an audio-only preview',
+)
+
 // --- clip capture pipeline (hook) ------------------------------------------------------------
 
 const clipHookSource = fs.readFileSync(
@@ -289,8 +321,27 @@ const clipHookSource = fs.readFileSync(
   'utf8',
 )
 assert(
-  clipHookSource.includes('canvas.captureStream(30)'),
-  'the clip captures ONLY the canvas via captureStream(30) (DOM chrome can never appear)',
+  /durationSeconds \? durationSeconds \* 1000 : CLIP_DURATION_DEFAULT_MS/.test(clipHookSource),
+  'the chosen duration flows into the active-time target (default 15s)',
+)
+assert(
+  clipHookSource.includes('overrideRef.current ??'),
+  'the dev-only ?clipTestMs= override takes precedence over chosen durations',
+)
+assert(
+  clipHookSource.includes('staging.captureStream(30)') &&
+    clipHookSource.includes('stagingCtx.drawImage(canvas, 0, 0') &&
+    clipHookSource.includes('requestAnimationFrame(pump)') &&
+    clipHookSource.includes('resolveClipCaptureSize'),
+  'capture routes through a resolution-capped CPU staging canvas on a rAF drawImage pump (Safari/mp4 fixes)',
+)
+assert(
+  clipHookSource.includes('GPU-accelerated') && clipHookSource.includes('audio-only'),
+  'the Safari/mp4 audio-only root cause is documented at the fix site',
+)
+assert(
+  clipHookSource.includes('.captureStream(30)'),
+  'the clip captures ONLY canvas pixels via captureStream(30) (DOM chrome can never appear)',
 )
 assert(
   clipHookSource.includes(".getAudioTracks()[0]?.clone()"),
@@ -311,8 +362,21 @@ assert(
   'the pure recorder core runs with a canvas backing-size guard',
 )
 assert(
-  clipHookSource.includes('prefers-reduced-motion') && clipHookSource.includes('requestFrame'),
-  'reduced-motion recordings request deterministic frames for a static canvas',
+  clipHookSource.includes('reduced motion'),
+  'reduced-motion recordings get deterministic frames from the rAF staging pump',
+)
+assert(
+  clipHookSource.includes('preferPlainContainers') && /safari/i.test(clipHookSource),
+  'Safari (UA-detected) prefers plain container MIMEs over codecs-parameterized ones',
+)
+assert(
+  clipHookSource.includes('frameFlow') && clipHookSource.includes('isFlowing') &&
+    clipHookSource.includes('framesPumpedRef') && clipHookSource.includes("addEventListener('unmute'"),
+  'a frame-flow watchdog fails a frameless recording within ~1s of active time',
+)
+assert(
+  clipHookSource.includes('collectDiagnostics') && clipHookSource.includes('reportPreviewError'),
+  'the hook collects Safari-readable diagnostics and surfaces preview decode errors',
 )
 
 // --- parent wiring (clip) ---------------------------------------------------------------------
