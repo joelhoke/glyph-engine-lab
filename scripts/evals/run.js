@@ -49,9 +49,10 @@
  * unknown-source, and heading faults in rotation and asserts the gates catch
  * all of them (exit 1 by design).
  *
- * Live mode reads CF_ACCOUNT_ID, AIG_GATEWAY_ID, AIG_TOKEN, DEEPSEEK_API_KEY,
- * and OPENAI_API_KEY from the environment, calls each candidate adapter
- * DIRECTLY (bypassing ROUTING_POLICY — the bake-off scores each model
+ * Live mode reads CF_ACCOUNT_ID, AIG_GATEWAY_ID, AIG_TOKEN, MOONSHOT_API_KEY,
+ * DEEPSEEK_API_KEY, and OPENAI_API_KEY (plus optional MOONSHOT_MODEL and
+ * AIG_MOONSHOT_URL overrides) from the environment, calls each candidate
+ * adapter DIRECTLY (bypassing ROUTING_POLICY — the bake-off scores each model
  * independently), --runs times per case, non-streaming.
  *
  * Metrics per model per category: accept rate (all gates passed), p50/p95
@@ -87,6 +88,7 @@ const { performance } = require('perf_hooks')
 // the range of each provider's current flagship/chat tiers — replace them with
 // the actual list prices before trusting absolute cost figures.
 const PRICE_TABLE = {
+  'moonshot/kimi-k2.6': { inputPer1M: 0.60, outputPer1M: 2.50, source: 'Moonshot list price (placeholder — confirm)' },
   'openai/gpt-5.6-luna': { inputPer1M: 1.25, outputPer1M: 10.0, source: 'OpenAI list price (placeholder — confirm)' },
   'deepseek/deepseek-v4-pro': { inputPer1M: 0.55, outputPer1M: 2.19, source: 'Fireworks-hosted list price (placeholder — confirm)' },
   'mock/deterministic': { inputPer1M: 0, outputPer1M: 0, source: 'offline self-test model' },
@@ -511,18 +513,23 @@ async function main() {
       gatewayToken: process.env.AIG_TOKEN,
       deepseekApiKey: process.env.DEEPSEEK_API_KEY,
       openaiApiKey: process.env.OPENAI_API_KEY,
+      moonshotApiKey: process.env.MOONSHOT_API_KEY,
+      moonshotModel: process.env.MOONSHOT_MODEL,
+      moonshotUrl: process.env.AIG_MOONSHOT_URL,
     }
     if (!config.accountId || !config.gatewayId || !config.gatewayToken) {
       console.error('Live mode requires CF_ACCOUNT_ID, AIG_GATEWAY_ID, and AIG_TOKEN in the environment.')
       process.exit(2)
     }
     const adapters = []
+    if (config.moonshotApiKey) adapters.push(MODEL_ADAPTERS['moonshot/kimi-k2.6'])
+    else console.warn('WARN: MOONSHOT_API_KEY not set — skipping moonshot/kimi-k2.6.')
     if (config.deepseekApiKey) adapters.push(MODEL_ADAPTERS['deepseek/deepseek-v4-pro'])
     else console.warn('WARN: DEEPSEEK_API_KEY not set — skipping deepseek/deepseek-v4-pro.')
     if (config.openaiApiKey) adapters.push(MODEL_ADAPTERS['openai/gpt-5.6-luna'])
     else console.warn('WARN: OPENAI_API_KEY not set — skipping openai/gpt-5.6-luna.')
     if (adapters.length === 0) {
-      console.error('No provider keys set (DEEPSEEK_API_KEY, OPENAI_API_KEY) — nothing to evaluate.')
+      console.error('No provider keys set (MOONSHOT_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY) — nothing to evaluate.')
       process.exit(2)
     }
 

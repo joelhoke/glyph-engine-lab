@@ -22,7 +22,7 @@ export const COLLABORATE_SHOW_STARTERS = false
 
 /** Preview-only launch gate for the conversational AI guide. Flipping this
  *  requires the launch gates in docs/deployment.md to pass. */
-export const COLLABORATE_AI_GUIDE = false
+export const COLLABORATE_AI_GUIDE = true
 
 export type ConversationStarter = {
   /** Stable, unique identifier — used as the React key and selection state. */

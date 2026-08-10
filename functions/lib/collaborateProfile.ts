@@ -35,6 +35,7 @@ export const COLLABORATE_TOPICS = [
 export type CollaborateTopic = (typeof COLLABORATE_TOPICS)[number]
 
 export type ProfileCategory =
+  | 'values'
   | 'ic-craft'
   | 'design-leadership'
   | 'ambiguity'
@@ -142,6 +143,40 @@ export const PROFILE_ENTRIES: ProfileEntry[] = [
 
   // -- Approach / perspective ----------------------------------------------------
   {
+    id: 'values-business-human',
+    category: 'values',
+    statement:
+      'Joel believes business value and human value reinforce each other — the best products strengthen both rather than trading one off against the other. He treats curiosity as more valuable than certainty, and quality as the product of iteration, honest feedback, and shared ownership.',
+    aliases: [
+      'What does Joel value in product work?',
+      'How does Joel balance business goals and user needs?',
+      'What principles guide Joel’s work?',
+    ],
+    evidenceLabel: 'Approved profile — values',
+    tags: ['values', 'business-value', 'human-value', 'principles'],
+    canvasTopic: 'craft',
+    sourceType: 'approved-profile',
+    sensitivity: 'public',
+    reviewDate: '2026-08-07',
+  },
+  {
+    id: 'approach-decision-making',
+    category: 'research',
+    statement:
+      'Joel believes research should reshape the problem, not simply validate a solution. When evaluating ideas he weighs four things together — business outcomes, human outcomes, technical feasibility, and long-term maintainability — and treats proposals that consider only one of them with skepticism.',
+    aliases: [
+      'How does Joel evaluate ideas?',
+      'What role does research play in Joel’s decisions?',
+      'How does Joel decide what to build?',
+    ],
+    evidenceLabel: 'Approved profile — decision making',
+    tags: ['research', 'decision-making', 'feasibility', 'outcomes'],
+    canvasTopic: 'craft',
+    sourceType: 'approved-profile',
+    sensitivity: 'public',
+    reviewDate: '2026-08-07',
+  },
+  {
     id: 'approach-ambiguity',
     category: 'ambiguity',
     statement:
@@ -195,6 +230,57 @@ export const PROFILE_ENTRIES: ProfileEntry[] = [
   },
 
   // -- Leadership / collaboration --------------------------------------------------
+  {
+    id: 'ai-philosophy',
+    category: 'ai-product',
+    statement:
+      'Joel views AI as leverage rather than replacement: a thinking partner that enables broader exploration, faster prototyping, and deeper thinking. Human judgment stays responsible for synthesizing, prioritizing, and making final decisions.',
+    aliases: [
+      'How does Joel think about AI?',
+      'Does Joel use AI in his process?',
+      'What is Joel’s AI philosophy?',
+    ],
+    evidenceLabel: 'Approved profile — AI philosophy',
+    tags: ['ai', 'philosophy', 'leverage', 'judgment'],
+    canvasTopic: 'craft',
+    sourceType: 'approved-profile',
+    sensitivity: 'public',
+    reviewDate: '2026-08-07',
+  },
+  {
+    id: 'leadership-alignment',
+    category: 'design-leadership',
+    statement:
+      'Joel leads by creating alignment. He measures leadership by influence and shared understanding rather than title or authority — he does not seek leadership for status, but steps into it when a project benefits from clear direction, aiming to elevate the team rather than become its center.',
+    aliases: [
+      'What is Joel’s leadership philosophy?',
+      'How does Joel lead teams?',
+      'Does Joel seek out leadership roles?',
+    ],
+    evidenceLabel: 'Approved profile — leadership philosophy',
+    tags: ['leadership', 'alignment', 'influence', 'team'],
+    canvasTopic: 'leadership',
+    sourceType: 'approved-profile',
+    sensitivity: 'public',
+    reviewDate: '2026-08-07',
+  },
+  {
+    id: 'collaboration-style',
+    category: 'cross-functional',
+    statement:
+      'Joel prefers working with high trust, frequent feedback, and clear communication. He enjoys autonomy but values alignment just as highly, and he naturally bridges design, engineering, product, and business — helping each group understand the others without replacing their expertise.',
+    aliases: [
+      'What is it like to work with Joel?',
+      'How does Joel communicate?',
+      'How does Joel work across disciplines?',
+    ],
+    evidenceLabel: 'Approved profile — collaboration style',
+    tags: ['collaboration', 'trust', 'feedback', 'communication'],
+    canvasTopic: 'collaboration',
+    sourceType: 'approved-profile',
+    sensitivity: 'public',
+    reviewDate: '2026-08-07',
+  },
   {
     id: 'leadership-craft',
     category: 'design-leadership',

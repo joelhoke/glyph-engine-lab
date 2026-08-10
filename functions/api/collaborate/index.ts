@@ -37,10 +37,14 @@ type CollaborateEnv = {
   AIG_TOKEN?: string
   DEEPSEEK_API_KEY?: string
   OPENAI_API_KEY?: string
+  MOONSHOT_API_KEY?: string
+  /** Upstream model id override for the Kimi adapter (hosted names change). */
+  MOONSHOT_MODEL?: string
   /** Full-URL overrides — local preview/mocks only; production goes through
    *  the AI Gateway URLs constructed from CF_ACCOUNT_ID + AIG_GATEWAY_ID. */
   AIG_DEEPSEEK_URL?: string
   AIG_OPENAI_URL?: string
+  AIG_MOONSHOT_URL?: string
 }
 
 const JSON_HEADERS = {
@@ -60,10 +64,22 @@ export const onRequestPost: PagesFunction<CollaborateEnv> = async (context) => {
     gatewayToken: context.env.AIG_TOKEN,
     deepseekApiKey: context.env.DEEPSEEK_API_KEY,
     openaiApiKey: context.env.OPENAI_API_KEY,
+    moonshotApiKey: context.env.MOONSHOT_API_KEY,
+    moonshotModel: context.env.MOONSHOT_MODEL,
     deepseekUrl: context.env.AIG_DEEPSEEK_URL,
     openaiUrl: context.env.AIG_OPENAI_URL,
+    moonshotUrl: context.env.AIG_MOONSHOT_URL,
   }
-  if (!isAdapterConfigured(config)) return json(503, { ok: false, error: 'The AI guide is unavailable.' })
+  if (!isAdapterConfigured(config)) {
+    // TEMPORARY preview debug: report which config keys are missing (names only).
+    const missing = [
+      ['CF_ACCOUNT_ID', config.accountId],
+      ['AIG_GATEWAY_ID', config.gatewayId],
+      ['AIG_TOKEN', config.gatewayToken],
+      ['MOONSHOT_API_KEY', config.moonshotApiKey],
+    ].filter(([, v]) => !v).map(([k]) => k)
+    return json(503, { ok: false, error: 'The AI guide is unavailable.', missing })
+  }
 
   const contentType = context.request.headers.get('content-type') ?? ''
   if (!contentType.toLowerCase().startsWith('application/json'))
@@ -90,13 +106,17 @@ export const onRequestPost: PagesFunction<CollaborateEnv> = async (context) => {
   const candidates = ROUTING_POLICY[category]
 
   const messages = buildModelMessages(entries, validated.request.messages)
-  const result = await completeWithRouting(candidates, messages, activeIds, config, fetch)
+  // Thinking models (kimi-k2.6) can exceed the 12s adapter default; give each
+  // candidate 30s. The failure ladder still bounds total latency by candidate
+  // count, and the WAF/session limits bound abuse.
+  const result = await completeWithRouting(candidates, messages, activeIds, config, fetch, { timeoutMs: 30000 })
 
   if (!result.ok) {
     // Both candidates failed (timeout, provider error, rate limit, or invalid
     // structured output) — deterministic email handoff, still a 200 so the
     // conversation UI can show it as an ordinary answer card.
-    const body: CollaborateResponseBody = {
+    // TEMPORARY preview debug: why every candidate failed (messages only).
+    const body: CollaborateResponseBody & { debugErrors: string[] } = {
       heading: COLLABORATE_FALLBACK_HEADING,
       answer: COLLABORATE_FALLBACK_ANSWER,
       sourceCards: [{ id: 'logistics-contact', label: getProfileEntry('logistics-contact')?.evidenceLabel ?? 'Contact' }],
@@ -104,6 +124,7 @@ export const onRequestPost: PagesFunction<CollaborateEnv> = async (context) => {
       topic: 'logistics',
       modelClass: 'fallback',
       profileVersion: COLLABORATE_PROFILE_VERSION,
+      debugErrors: (result as { errors: string[] }).errors,
     }
     return json(200, body)
   }
