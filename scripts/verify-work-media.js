@@ -148,7 +148,7 @@ for (const story of WORK_STORIES) {
 
 // slide model: media and narrative details belong to project slides only —
 // the intro slide carries its title, copy, and hero source, nothing else.
-assert(WORK_SLIDES.length === 3, 'the work carousel has three slides (intro + two projects)')
+assert(WORK_SLIDES.length === WORK_STORIES.length + 1, 'the work carousel is intro + one slide per story')
 for (const slide of WORK_SLIDES) {
   if (slide.kind === 'intro') {
     assert(

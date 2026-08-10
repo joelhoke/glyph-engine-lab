@@ -66,7 +66,10 @@ export default function WorkStoryView({ story, headingRef, onTrackEvent }: WorkS
           <dd>{story.context}</dd>
         </div>
       </dl>
-      <p className="work-story-outcome">{story.outcome}</p>
+      {/* The outcome opens the expanded case study (first section below) to
+          keep the preview card light; stories without details sections keep
+          it here so it never disappears. */}
+      {details.length === 0 && <p className="work-story-outcome">{story.outcome}</p>}
 
       {story.access === 'protected' ? (
         <a className="work-story-link" href={`/protected-work?story=${story.protectedId}`}>
@@ -103,6 +106,10 @@ export default function WorkStoryView({ story, headingRef, onTrackEvent }: WorkS
               </button>
               {expanded && (
                 <div id={detailsId} className="work-story-sections">
+                  <section className="work-story-section">
+                    <h4 className="work-story-section-heading">Outcome</h4>
+                    <p className="work-story-outcome">{story.outcome}</p>
+                  </section>
                   {details.map((section) => (
                     <section key={section.heading} className="work-story-section">
                       <h4 className="work-story-section-heading">{section.heading}</h4>
