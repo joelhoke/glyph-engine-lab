@@ -3472,6 +3472,12 @@ a.guide-source:focus-visible {
      lines, and snaps into place as the rail scrolls horizontally. */
   .chat-rail {
     scroll-snap-type: x mandatory;
+    /* Full-bleed on mobile: the rail breaks out of the gutter so pills
+       scroll edge-to-edge; scroll padding keeps the resting first pill
+       aligned to the gutter and snap targets consistent. */
+    margin-left: calc(-1 * var(--collab-gutter));
+    margin-right: calc(-1 * var(--collab-gutter));
+    scroll-padding-left: var(--collab-gutter);
   }
 
   .chat-rail .guide-followup {
