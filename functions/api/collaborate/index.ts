@@ -107,9 +107,11 @@ export const onRequestPost: PagesFunction<CollaborateEnv> = async (context) => {
 
   const messages = buildModelMessages(entries, validated.request.messages)
   // Thinking models (kimi-k2.6) can exceed the 12s adapter default; give each
-  // candidate 30s. The failure ladder still bounds total latency by candidate
-  // count, and the WAF/session limits bound abuse.
-  const result = await completeWithRouting(candidates, messages, activeIds, config, fetch, { timeoutMs: 30000 })
+  // candidate 30s. maxTokens is raised for the same class of reason: reasoning
+  // models consume completion tokens before the answer, and 700 starved
+  // kimi-k2.6 into empty completions. The 220-word answer cap still bounds
+  // visible output.
+  const result = await completeWithRouting(candidates, messages, activeIds, config, fetch, { timeoutMs: 30000, maxTokens: 4000 })
 
   if (!result.ok) {
     // Both candidates failed (timeout, provider error, rate limit, or invalid
