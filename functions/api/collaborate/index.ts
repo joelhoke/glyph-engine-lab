@@ -70,16 +70,7 @@ export const onRequestPost: PagesFunction<CollaborateEnv> = async (context) => {
     openaiUrl: context.env.AIG_OPENAI_URL,
     moonshotUrl: context.env.AIG_MOONSHOT_URL,
   }
-  if (!isAdapterConfigured(config)) {
-    // TEMPORARY preview debug: report which config keys are missing (names only).
-    const missing = [
-      ['CF_ACCOUNT_ID', config.accountId],
-      ['AIG_GATEWAY_ID', config.gatewayId],
-      ['AIG_TOKEN', config.gatewayToken],
-      ['MOONSHOT_API_KEY', config.moonshotApiKey],
-    ].filter(([, v]) => !v).map(([k]) => k)
-    return json(503, { ok: false, error: 'The AI guide is unavailable.', missing })
-  }
+  if (!isAdapterConfigured(config)) return json(503, { ok: false, error: 'The AI guide is unavailable.' })
 
   const contentType = context.request.headers.get('content-type') ?? ''
   if (!contentType.toLowerCase().startsWith('application/json'))
@@ -114,11 +105,10 @@ export const onRequestPost: PagesFunction<CollaborateEnv> = async (context) => {
   const result = await completeWithRouting(candidates, messages, activeIds, config, fetch, { timeoutMs: 30000, maxTokens: 4000 })
 
   if (!result.ok) {
-    // Both candidates failed (timeout, provider error, rate limit, or invalid
+    // All candidates failed (timeout, provider error, rate limit, or invalid
     // structured output) — deterministic email handoff, still a 200 so the
     // conversation UI can show it as an ordinary answer card.
-    // TEMPORARY preview debug: why every candidate failed (messages only).
-    const body: CollaborateResponseBody & { debugErrors: string[] } = {
+    const body: CollaborateResponseBody = {
       heading: COLLABORATE_FALLBACK_HEADING,
       answer: COLLABORATE_FALLBACK_ANSWER,
       sourceCards: [{ id: 'logistics-contact', label: getProfileEntry('logistics-contact')?.evidenceLabel ?? 'Contact' }],
@@ -126,7 +116,6 @@ export const onRequestPost: PagesFunction<CollaborateEnv> = async (context) => {
       topic: 'logistics',
       modelClass: 'fallback',
       profileVersion: COLLABORATE_PROFILE_VERSION,
-      debugErrors: (result as { errors: string[] }).errors,
     }
     return json(200, body)
   }
