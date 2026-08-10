@@ -322,18 +322,19 @@ export const PROFILE_ENTRIES: ProfileEntry[] = [
     id: 'career-interests',
     category: 'career-interests',
     statement:
-      'Joel is focused on senior and lead individual-contributor design roles and design-leadership opportunities — work where the problem is still a little undefined and the team gets to figure out what the thing wants to be. The collaborations that energize him most pair curiosity with real constraints.',
+      'Joel is focused on senior and lead individual-contributor design roles and design-leadership opportunities — and he is ready for principal-level scope. He is confident in the work he does as a senior contributor and wants the harder problems and wider responsibilities that come with principal roles. The collaborations that energize him most pair curiosity with real constraints: problems still a little undefined, where the team gets to figure out what the thing wants to be.',
     aliases: [
       'What kind of role and team brings out Joel’s best work?',
       'What is Joel looking for?',
       'Is Joel open to new roles?',
+      'Is Joel ready for a principal role?',
     ],
     evidenceLabel: 'Approved profile — career interests',
-    tags: ['career', 'senior-ic', 'lead', 'design-leadership'],
+    tags: ['career', 'senior-ic', 'lead', 'principal', 'design-leadership'],
     canvasTopic: 'career-fit',
     sourceType: 'approved-profile',
     sensitivity: 'public',
-    reviewDate: '2026-08-03',
+    reviewDate: '2026-08-10',
   },
 
   // -- Entrepreneurial section (secondary path) -------------------------------------
@@ -353,6 +354,23 @@ export const PROFILE_ENTRIES: ProfileEntry[] = [
     sourceType: 'approved-profile',
     sensitivity: 'public',
     reviewDate: '2026-08-03',
+  },
+  {
+    id: 'small-business-enablement',
+    category: 'entrepreneurial',
+    statement:
+      'Joel is glad to talk with small and local businesses about solving real business problems with software — operational and process problems like scheduling, customer coordination, and the daily friction that software can smooth out. His interest is in enabling the business to do more for itself, not in creating dependency, and he is excited to explore whether a collaboration makes sense. Terms are flexible and always a direct conversation with Joel — compensation is negotiable and not always cash-based, especially where Joel is a customer or advocate of the business.',
+    aliases: [
+      'Can Joel help a small business?',
+      'Does Joel build software for local businesses?',
+      'Would Joel help with scheduling or customer coordination tools?',
+    ],
+    evidenceLabel: 'Approved profile — small business collaborations',
+    tags: ['small-business', 'consulting', 'operations', 'enablement'],
+    canvasTopic: 'entrepreneurial-fit',
+    sourceType: 'approved-profile',
+    sensitivity: 'public',
+    reviewDate: '2026-08-10',
   },
   {
     id: 'entrepreneurial-boundaries',
