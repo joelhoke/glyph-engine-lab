@@ -233,8 +233,12 @@ export const kimiAdapter: ModelAdapter = {
           messages: input.messages,
           response_format: { type: 'json_object' },
           max_tokens: input.maxTokens,
-          // kimi-k2.6 (thinking) rejects any temperature other than 1.
-          temperature: 1,
+          // With thinking disabled, kimi-k2.6 allows only temperature 0.6
+          // (thinking mode requires 1 instead).
+          temperature: 0.6,
+          // Reasoning is optional on k2.6 and blows the latency budget for a
+          // 220-word chat answer (30s+); keep it off for this use case.
+          thinking: { type: 'disabled' },
         }),
         signal: AbortSignal.timeout(input.timeoutMs || DEFAULT_TIMEOUT_MS),
       })
