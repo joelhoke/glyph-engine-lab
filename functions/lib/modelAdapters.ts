@@ -1,11 +1,13 @@
 // =============================================================================
 // Collaborate AI guide — model adapters.
 //
-// The two V1 candidates use different wire formats, so each gets an
+// The V1 candidates use different wire formats, so each gets an
 // application-level adapter behind the shared ModelAdapter interface:
+//   - moonshot/kimi-k2.6 — Chat Completions via the gateway compat endpoint
+//     (primary candidate; verify Moonshot's data-retention terms before launch)
+//   - openai/gpt-5.6-luna — the Responses API with store: false
 //   - deepseek/deepseek-v4-pro — Chat Completions (Cloudflare hosts it on
 //     Fireworks infrastructure; verify zero-data-retention terms before launch)
-//   - openai/gpt-5.6-luna — the Responses API with store: false
 //
 // Both are called through Cloudflare AI Gateway (authenticated access,
 // metadata-only observability, spend limits, retries, health fallback).
@@ -33,9 +35,14 @@ export type AdapterConfig = {
   /** Provider API keys (gateway passes them upstream; BYOK at the gateway also works). */
   deepseekApiKey?: string
   openaiApiKey?: string
+  moonshotApiKey?: string
   /** Full-URL overrides for tests or non-gateway routing. */
   deepseekUrl?: string
   openaiUrl?: string
+  moonshotUrl?: string
+  /** Upstream model id for the Kimi adapter (e.g. 'moonshotai/kimi-k2' via the
+   *  gateway compat endpoint). Configurable because hosted model names change. */
+  moonshotModel?: string
 }
 
 export type AdapterUsage = { inputTokens?: number; outputTokens?: number }
@@ -206,9 +213,58 @@ export const openaiAdapter: ModelAdapter = {
   },
 }
 
+// -- Moonshot (Kimi): Chat Completions via the gateway compat endpoint ----------
+
+export const DEFAULT_MOONSHOT_MODEL = 'kimi-k2.6'
+
+export const kimiAdapter: ModelAdapter = {
+  id: 'moonshot/kimi-k2.6',
+  async complete(input, config, fetchImpl) {
+    // The gateway's OpenAI-compatible endpoint accepts provider-prefixed model
+    // ids; AIG_MOONSHOT_URL can point at a native provider path or a mock.
+    const url = config.moonshotUrl ?? gatewayUrl(config, 'compat/chat/completions')
+    let res: Response
+    try {
+      res = await fetchImpl(url, {
+        method: 'POST',
+        headers: gatewayHeaders(config, config.moonshotApiKey),
+        body: JSON.stringify({
+          model: config.moonshotModel ?? DEFAULT_MOONSHOT_MODEL,
+          messages: input.messages,
+          response_format: { type: 'json_object' },
+          max_tokens: input.maxTokens,
+          // kimi-k2.6 (thinking) rejects any temperature other than 1.
+          temperature: 1,
+        }),
+        signal: AbortSignal.timeout(input.timeoutMs || DEFAULT_TIMEOUT_MS),
+      })
+    } catch (err) {
+      return { ok: false, error: `request failed: ${String(err)}` }
+    }
+    if (!res.ok) return { ok: false, error: await readError(res) }
+    let data: any
+    try {
+      data = await res.json()
+    } catch {
+      return { ok: false, error: 'non-JSON provider response' }
+    }
+    const text = data?.choices?.[0]?.message?.content
+    if (typeof text !== 'string' || !text.trim()) return { ok: false, error: 'empty completion' }
+    return {
+      ok: true,
+      text,
+      usage: {
+        inputTokens: data?.usage?.prompt_tokens,
+        outputTokens: data?.usage?.completion_tokens,
+      },
+    }
+  },
+}
+
 export const MODEL_ADAPTERS: Record<string, ModelAdapter> = {
   [deepseekAdapter.id]: deepseekAdapter,
   [openaiAdapter.id]: openaiAdapter,
+  [kimiAdapter.id]: kimiAdapter,
 }
 
 // -- Routed completion with fallback -----------------------------------------------

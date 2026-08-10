@@ -203,12 +203,15 @@ anything outside the pack is abstained and handed off to email.
   message), classifies it into a routing category, and tries the category's
   candidate models in the approved `ROUTING_POLICY` order
   (`functions/lib/collaborateShared.ts`).
-- Both candidates are called through **Cloudflare AI Gateway** (authenticated
+- All candidates are called through **Cloudflare AI Gateway** (authenticated
   access, spend limits, metadata-only observability):
-  - **OpenAI gpt-5.6-luna** via the Responses API with `store: false` and a
-    strict `json_schema` response format.
+  - **Moonshot Kimi K2** via the gateway's OpenAI-compatible `compat` endpoint
+    with `response_format: json_object` (primary candidate; the upstream model
+    id is `MOONSHOT_MODEL`-overridable, default `kimi-k2.6`).
   - **DeepSeek V4 Pro** (hosted on Fireworks infrastructure) via Chat
     Completions with `response_format: json_object`.
+  - **OpenAI gpt-5.6-luna** via the Responses API with `store: false` and a
+    strict `json_schema` response format.
 - The approved knowledge pack is sent **whole** in the system prompt on every
   turn — the corpus is small enough that embeddings/Vectorize would add
   moving parts without buying anything. Revisit retrieval only when the pack
@@ -242,10 +245,14 @@ anything outside the pack is abstained and handed off to email.
 4. **AI Gateway**: create a gateway with **authenticated access** enabled
    (Workers AI → AI Gateway → your gateway → settings → Authenticated
    Gateway, then create an API token).
-5. **Env vars/secrets** (Pages project → Settings → Environment variables):
-   `CF_ACCOUNT_ID`, `AIG_GATEWAY_ID`, `AIG_TOKEN` (gateway auth token),
-   `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`. The Function fails closed with 503 if
-   the gateway config is missing.
+5. **Env vars/secrets**: this project manages non-secret vars through
+   `wrangler.toml` (`[vars]`: `CF_ACCOUNT_ID`, `AIG_GATEWAY_ID`) — the dashboard
+   accepts **only secrets**: `AIG_TOKEN` (gateway auth token), `MOONSHOT_API_KEY`,
+   `OPENAI_API_KEY`, `DEEPSEEK_API_KEY` (Pages project → Settings → Variables
+   and Secrets, production **and** preview). The Function fails closed with 503
+   if the gateway config is missing. `MOONSHOT_MODEL` is an optional non-secret
+   var (add to `wrangler.toml` `[vars]`) overriding the default
+   `kimi-k2.6` upstream model id.
 6. **Spend limit**: set a gateway spend limit (**$20/month initial**) as the
    hard cost cap.
 7. **Log payloads off**: the code sends `cf-aig-collect-log-payload: false` on
@@ -284,10 +291,12 @@ The full conversation loop runs locally against a mock model server:
   visitor explicitly shares it.
 - Gateway logging is **metadata-only** (the payload header above); provider
   calls carry no analytics identifiers.
-- **Before launch**, verify that Cloudflare's hosted DeepSeek route preserves
-  Fireworks' default zero-data-retention
-  (<https://docs.fireworks.ai/guides/security_compliance/data_handling>).
-  If it does not, remove `deepseek/deepseek-v4-pro` from `ROUTING_POLICY`.
+- **Before launch**, verify the data-retention terms of every serving provider:
+  that Cloudflare's hosted DeepSeek route preserves Fireworks' default
+  zero-data-retention
+  (<https://docs.fireworks.ai/guides/security_compliance/data_handling>), and
+  Moonshot's API data policy for Kimi. If either does not hold up, remove that
+  adapter from `ROUTING_POLICY`.
 - OpenAI is eligible with disclosure: API content is not used for training but
   may be retained up to 30 days for abuse monitoring unless a zero-retention
   agreement applies (<https://openai.com/enterprise-privacy/>). The adapter
