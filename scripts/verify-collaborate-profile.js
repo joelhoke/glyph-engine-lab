@@ -51,7 +51,7 @@ function assert(condition, message) {
 
 const packErrors = validateProfileEntries(PROFILE_ENTRIES)
 assert(packErrors.length === 0, `shipped pack validates clean (got: ${packErrors.join('; ') || 'none'})`)
-assert(PROFILE_ENTRIES.length === 18, 'pack contains exactly 18 entries')
+assert(PROFILE_ENTRIES.length === 25, 'pack contains exactly 25 entries')
 
 // The validator itself works: it must flag a broken clone.
 const broken = JSON.parse(JSON.stringify(PROFILE_ENTRIES[0]))
@@ -205,6 +205,7 @@ const EXPECTED_COVERED_NOW = [
   'systems-thinking',
   'ai-product',
   'cross-functional',
+  'conflict',
   'career-interests',
   'entrepreneurial',
   'logistics',
@@ -215,8 +216,8 @@ for (const cat of EXPECTED_COVERED_NOW) {
 }
 const missing = ALL_CATEGORIES.filter((c) => !covered.has(c))
 assert(
-  missing.length === 1 && missing[0] === 'conflict',
-  `only "conflict" awaits the interview import (missing: ${missing.join(', ') || 'none'})`,
+  missing.length === 0,
+  `every category is covered (missing: ${missing.join(', ') || 'none'})`,
 )
 
 // --- Lookup helper ---
