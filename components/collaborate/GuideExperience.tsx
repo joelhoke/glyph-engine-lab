@@ -2,7 +2,6 @@
 
 import { FormEvent, RefObject, useId, useState } from 'react'
 import {
-  COLLABORATE_ENERGIZING_STATEMENT,
   COLLABORATE_GUIDE_CONTACT,
   COLLABORATE_GUIDE_DISCLOSURE,
   COLLABORATE_GUIDE_NAME,
@@ -44,12 +43,13 @@ type GuideExperienceProps = {
 }
 
 /**
- * The guide landing: headline, statement, disclosure, and either the
- * conversation starters + freeform input (no conversation yet) or a preview
- * card for the in-memory conversation (resume, or start over behind an inline
- * confirm). Submitting from here never answers inline — it navigates to the
- * chat view. Contact routes stay visible in both states. The bordered card
- * is the fixed frame; everything inside it scrolls (BoundedScrollPanel).
+ * The guide landing, kept minimal: headline, the one-line disclosure, and
+ * either the conversation starters + freeform input (no conversation yet) or
+ * a preview card for the in-memory conversation (resume, or start over behind
+ * an inline confirm). Submitting from here never answers inline — it
+ * navigates to the chat view. Contact routes stay visible in both states. The
+ * bordered card is the fixed frame; everything inside it scrolls
+ * (BoundedScrollPanel).
  */
 export default function GuideExperience({
   headingRef,
@@ -88,7 +88,6 @@ export default function GuideExperience({
       >
         {COLLABORATE_HEADLINE}
       </h2>
-      <p className="collaborate-statement">{COLLABORATE_ENERGIZING_STATEMENT}</p>
       <p className="guide-disclosure">{COLLABORATE_GUIDE_DISCLOSURE}</p>
       {hasConversation ? (
         <div className="guide-preview" aria-label={COLLABORATE_GUIDE_PREVIEW_LABEL}>

@@ -194,8 +194,9 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
     onClient(client)
     const stored = readConsent(window.localStorage, Date.now())
     setRecord(stored)
-    // First visit: no stored decision — open the panel on the Privacy view.
-    if (!stored) setPanelOpen(true)
+    // The panel is opt-in: it never opens on its own — the persistent
+    // "Privacy and feedback" control opens it. Nothing loads before a decision
+    // regardless.
     if (stored?.decision === 'granted') client.grant()
     setMounted(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
