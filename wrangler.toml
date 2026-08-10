@@ -17,9 +17,10 @@ pages_build_output_dir = "out"
 [vars]
 CF_ACCOUNT_ID = "42cf2d6bb1238015365cb8aa5cbeb251"
 AIG_GATEWAY_ID = "jh-guide"
-# TEMPORARY preview debug: route the Kimi adapter directly at Moonshot's
-# OpenAI-compatible API while gateway provider support is confirmed. Remove
-# for production so Kimi traffic also goes through the gateway.
+# Kimi goes direct to Moonshot's OpenAI-compatible API for launch: this
+# gateway has no native moonshot provider (400 "Invalid provider" via compat).
+# Revisit a gateway Custom Provider later to bring Kimi traffic under the
+# gateway's spend limit and observability (see docs/deployment.md).
 AIG_MOONSHOT_URL = "https://api.moonshot.ai/v1/chat/completions"
 MOONSHOT_MODEL = "kimi-k2.6"
 

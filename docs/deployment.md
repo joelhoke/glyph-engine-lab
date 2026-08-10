@@ -203,15 +203,20 @@ anything outside the pack is abstained and handed off to email.
   message), classifies it into a routing category, and tries the category's
   candidate models in the approved `ROUTING_POLICY` order
   (`functions/lib/collaborateShared.ts`).
-- All candidates are called through **Cloudflare AI Gateway** (authenticated
-  access, spend limits, metadata-only observability):
-  - **Moonshot Kimi K2** via the gateway's OpenAI-compatible `compat` endpoint
-    with `response_format: json_object` (primary candidate; the upstream model
-    id is `MOONSHOT_MODEL`-overridable, default `kimi-k2.6`).
+- Candidates:
+  - **Moonshot Kimi K2.6** via Chat Completions with `response_format:
+    json_object` (primary candidate; the upstream model id is
+    `MOONSHOT_MODEL`-overridable, default `kimi-k2.6`). For launch it goes
+    **direct to api.moonshot.ai** (`AIG_MOONSHOT_URL` in `wrangler.toml`) —
+    the gateway has no native moonshot provider. Its spend is therefore not
+    covered by the gateway spend limit; watch the Moonshot balance instead,
+    and revisit a gateway Custom Provider later to bring it under the gateway.
   - **DeepSeek V4 Pro** (hosted on Fireworks infrastructure) via Chat
-    Completions with `response_format: json_object`.
+    Completions with `response_format: json_object`, through **Cloudflare AI
+    Gateway** (authenticated access, spend limits, metadata-only
+    observability).
   - **OpenAI gpt-5.6-luna** via the Responses API with `store: false` and a
-    strict `json_schema` response format.
+    strict `json_schema` response format, through the gateway.
 - The approved knowledge pack is sent **whole** in the system prompt on every
   turn — the corpus is small enough that embeddings/Vectorize would add
   moving parts without buying anything. Revisit retrieval only when the pack
