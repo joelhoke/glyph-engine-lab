@@ -17,8 +17,10 @@
 
 import { SceneDescriptor } from '../engine/sceneConfig'
 
-/** Launch gate for the conversation starters (see header). */
-export const COLLABORATE_SHOW_STARTERS = false
+/** Launch gate for the conversation starters (see header). Enabled alongside
+ *  the AI guide: three audience-framed invitations (hiring managers,
+ *  early-stage collaborators, small businesses). */
+export const COLLABORATE_SHOW_STARTERS = true
 
 /** Preview-only launch gate for the conversational AI guide. Flipping this
  *  requires the launch gates in docs/deployment.md to pass. */
@@ -63,52 +65,28 @@ export const COLLABORATE_ENERGIZING_STATEMENT =
 
 export const CONVERSATION_STARTERS: ConversationStarter[] = [
   {
-    id: 'have-an-idea',
-    label: 'I have an idea.',
+    id: 'hiring-role',
+    label: 'I’m hiring for a design role.',
     response:
-      'Good — bring the messy version. The early, half-shaped ideas are usually the most fun to work on.',
-    prompt: 'I have an early-stage idea — how might Joel contribute?',
+      'The short version: senior or lead individual-contributor work, on a problem still a little undefined. Ask the guide for the longer one.',
+    prompt: 'What kind of role and team brings out Joel’s best work?',
+    glyphPhrase: '✳ ✳ ✳',
+  },
+  {
+    id: 'early-stage',
+    label: 'I’m building something early-stage.',
+    response:
+      'Early and half-shaped is a great place to start — that is where Joel does his best work.',
+    prompt: 'Would Joel advise or join an early-stage startup?',
     glyphPhrase: 'idea idea idea',
   },
   {
-    id: 'strange-problem',
-    label: 'I have a strange problem.',
+    id: 'small-business',
+    label: 'I run a small business and need product help.',
     response:
-      'Strange problems are my favorite kind. The weirder the constraint, the more interesting the solution tends to be.',
-    prompt: 'I have a strange, hard-to-categorize problem — how would Joel approach it?',
+      'Worth a conversation — Joel can usually tell quickly whether he is the right pair of hands for it.',
+    prompt: 'How could Joel help a small business with its product or digital experience?',
     glyphPhrase: '? ? ?',
-  },
-  {
-    id: 'explore-possible',
-    label: "I want to explore what's possible.",
-    response:
-      "Let's explore. Some of the best work starts with no brief at all — just curiosity and a little time.",
-    prompt: "I want to explore what's possible — where could Joel help?",
-    glyphPhrase: '✳ ✳ ✳',
-  },
-  {
-    id: 'ambiguous-problems',
-    label: 'How does Joel approach ambiguous product problems?',
-    response:
-      'Start with the people and the constraints, not the artifact — shape the problem before shaping the solution.',
-    prompt: 'How does Joel approach ambiguous product problems?',
-    glyphPhrase: '? ? ?',
-  },
-  {
-    id: 'lead-with-craft',
-    label: 'How does Joel lead without losing the craft?',
-    response:
-      'By staying close to the work — leading through the craft itself, not around it.',
-    prompt: 'How does Joel lead without losing the craft?',
-    glyphPhrase: 'craft craft craft',
-  },
-  {
-    id: 'best-role-team',
-    label: 'What kind of role and team brings out his best work?',
-    response:
-      'Small teams, real ownership, and a problem still a little undefined — that is where the best work happens.',
-    prompt: 'What kind of role and team brings out his best work?',
-    glyphPhrase: '✳ ✳ ✳',
   },
 ]
 
