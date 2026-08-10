@@ -120,6 +120,9 @@ export type WorkStory = {
   context: string
   /** Concise outcome statement. */
   outcome: string
+  /** Optional additional outcome narrative, rendered after `outcome` in the
+   *  case study's opening Outcome section. */
+  outcomeParagraphs?: string[]
   /** External references; may be empty. */
   links: WorkStoryLink[]
   /** Public stories render fully; protected stories show only the teaser. */
@@ -196,12 +199,6 @@ export const WORK_STORIES: WorkStory[] = [
           'Shared architecture supporting the option of broad ecosystem development across operational tooling.',
         ],
       },
-      {
-        heading: 'The outcome',
-        paragraphs: [
-          'Two agent-integrated operational dashboards that synthesized information spread across 48+ Power BI dashboards and SharePoint folders. The work established a foundation for an operational ecosystem of tools to serve the many different operational teams domestically and internationally.',
-        ],
-      },
     ],
     media: [],
     // Microsoft project: the field takes the sampled brand colors straight
@@ -221,6 +218,10 @@ export const WORK_STORIES: WorkStory[] = [
     context: 'Microsoft · cross-functional team across design, product management, research, and engineering · 2019–2026',
     thesis: 'Supporting efficiency across Microsoft by reducing fragmentation across internal tools, enabling employees to complete tasks more easily and return their focus to the work at hand.',
     outcome: 'I helped Microsoft move toward a more unified employee-experience ecosystem by aligning teams around shared patterns, reusable components, and a standardized design process.',
+    outcomeParagraphs: [
+      'As employee services transitioned from MyHub to Microsoft Viva Connections, our team created the EX Toolkit — a common design language and component library that reduced variation and duplicated implementation across teams, made platform capabilities and constraints clearer to developers, streamlined partner onboarding, and improved consistency across compensation, benefits, workplace services, and daily employee tasks.',
+      'This work supported an employee platform deployed globally at Microsoft, established practices shared with other product teams and external customers, and contributed to the broader evolution from fragmented employee tools toward a centralized Viva experience. Microsoft later reported usage above 97% among employees across the Viva suite.',
+    ],
     links: [
       { label: 'Microsoft MyHub', url: 'https://apps.apple.com/us/app/microsoft-myhub/id1476326475' },
       { label: 'Microsoft Viva Connections', url: 'https://www.microsoft.com/en-us/microsoft-viva/connections' },
@@ -257,11 +258,6 @@ export const WORK_STORIES: WorkStory[] = [
         'Component toolkits for use across tools and business verticals',
         'Lobby experience',
         'Return-to-work implementation and tracking',
-      ] },
-      { heading: 'The outcome', paragraphs: [
-        'I helped Microsoft move toward a more unified employee-experience ecosystem by aligning teams around shared patterns, reusable components, and a standardized design process.',
-        'As employee services transitioned from MyHub to Microsoft Viva Connections, our team created the EX Toolkit — a common design language and component library that reduced variation and duplicated implementation across teams, made platform capabilities and constraints clearer to developers, streamlined partner onboarding, and improved consistency across compensation, benefits, workplace services, and daily employee tasks.',
-        'This work supported an employee platform deployed globally at Microsoft, established practices shared with other product teams and external customers, and contributed to the broader evolution from fragmented employee tools toward a centralized Viva experience. Microsoft later reported usage above 97% among employees across the Viva suite.',
       ] },
     ],
   },
@@ -302,12 +298,6 @@ export const WORK_STORIES: WorkStory[] = [
           'Platform redesign',
           'Coordination across PM, research and engineering',
           'Scope expansion in service of the business and employee needs',
-        ],
-      },
-      {
-        heading: 'The outcome',
-        paragraphs: [
-          'I drove the design of a first-party platform that Microsoft continues to use to communicate compensation and benefits, helping employees understand the full value of their package in an increasingly competitive market.',
         ],
       },
     ],
