@@ -408,6 +408,130 @@ export const PROFILE_ENTRIES: ProfileEntry[] = [
     sensitivity: 'public',
     reviewDate: '2026-08-03',
   },
+
+  // -- Colleague feedback themes (approved abstracts) ------------------------------
+  // Synthesized from anonymized Microsoft Connect reviews + peer notes (2020–
+  // 2026). Themes, not quotes: no names, teams, codenames, tools, metrics, or
+  // locations. Each line reviewed and approved by Joel, 2026-08-10.
+  {
+    id: 'feedback-thought-partner-ambiguity',
+    category: 'ambiguity',
+    statement:
+      'Feedback from Joel’s Microsoft colleagues consistently highlights his ability to walk into ambiguous, loosely defined problem spaces and quickly become a useful thought partner. Reviewers repeatedly describe him asking the kind of questions that make a room pause and re-examine assumptions it had stopped noticing, then helping reframe the work into something grounded and actionable. Peers note that he picks up new domains fast and brings an outside-in perspective that surfaces gaps early rather than late — a pattern across his entire Microsoft tenure.',
+    aliases: [
+      'How does Joel handle ambiguous problem spaces?',
+      'What do coworkers say about working with Joel?',
+      'Is Joel good at bringing clarity to messy problems?',
+    ],
+    evidenceLabel: 'Approved abstract — colleague feedback',
+    tags: ['ambiguity', 'thought-partnership', 'peer-feedback', 'clarity'],
+    canvasTopic: 'leadership',
+    sourceType: 'approved-profile',
+    sensitivity: 'approved-abstract',
+    reviewDate: '2026-08-10',
+  },
+  {
+    id: 'feedback-systems-thinking-scale',
+    category: 'systems-thinking',
+    statement:
+      'Reviewers across Joel’s Microsoft tenure highlight that he designs beyond the immediate problem: colleagues cite his instinct for reuse, scalability, and how one solution can extend across teams, platforms, and products. Managers and peers credit him with elevating one-off workstreams into shared toolkits, patterns, and frameworks that outlasted the original project, and with connecting work happening in different corners of the organization before others notice the overlap.',
+    aliases: [
+      'Does Joel think in systems or just screens?',
+      'How does Joel approach design systems and reuse?',
+      'What is Joel’s design philosophy around scale?',
+    ],
+    evidenceLabel: 'Approved abstract — colleague feedback',
+    tags: ['systems-thinking', 'scalability', 'design-systems', 'ecosystems'],
+    canvasTopic: 'craft',
+    sourceType: 'approved-profile',
+    sensitivity: 'approved-abstract',
+    reviewDate: '2026-08-10',
+  },
+  {
+    id: 'feedback-cross-functional-trust',
+    category: 'cross-functional',
+    statement:
+      'Feedback from Joel’s Microsoft colleagues consistently cites the trust he builds across disciplines. Engineering and product partners describe him as approachable, reliable, and unusually willing to meet them where they are — at one point working directly inside the engineering platform rather than only handing off artifacts, so the team could move from abstract ideas to something real. Reviewers note that he grounds design conversations in implementation realities and end-user needs, which partners say improves the quality of shared decision-making.',
+    aliases: [
+      'How does Joel work with engineers and PMs?',
+      'Do cross-functional partners trust Joel?',
+      'How technical is Joel as a designer?',
+    ],
+    evidenceLabel: 'Approved abstract — colleague feedback',
+    tags: ['cross-functional', 'engineering-partnership', 'trust', 'collaboration'],
+    canvasTopic: 'collaboration',
+    sourceType: 'approved-profile',
+    sensitivity: 'approved-abstract',
+    reviewDate: '2026-08-10',
+  },
+  {
+    id: 'feedback-leadership-without-authority',
+    category: 'design-leadership',
+    statement:
+      'Colleagues across Joel’s Microsoft tenure describe a leadership style built on inclusion rather than authority: peers praise a "no one left behind" approach that makes sure every voice in the room is heard and brings out others’ best work. Reviewers cite him founding and running recurring forums for sharing work and feedback, mentoring interns and onboarding new teammates, and coordinating peer mentorship programs — all alongside his individual-contributor responsibilities. Managers note that teams look to him as a leader in the room even when leadership isn’t in his job description, and that his positivity and humor materially shape team culture and morale.',
+    aliases: [
+      'What is Joel’s leadership style?',
+      'Has Joel led teams without being a manager?',
+      'Does Joel mentor other designers?',
+    ],
+    evidenceLabel: 'Approved abstract — colleague feedback',
+    tags: ['design-leadership', 'mentorship', 'facilitation', 'culture'],
+    canvasTopic: 'leadership',
+    sourceType: 'approved-profile',
+    sensitivity: 'approved-abstract',
+    reviewDate: '2026-08-10',
+  },
+  {
+    id: 'feedback-handling-disagreement',
+    category: 'conflict',
+    statement:
+      'Feedback from Joel’s Microsoft colleagues shows he handles disagreement directly but without ego. Peers say they trust him for an honest, informed opinion even when it isn’t the easy one, and managers describe him as assertive and decisive in crucial conversations without becoming combative — advocating for users and design quality while keeping relationships intact. In one instance a partner specifically thanked him for taking the initiative to repair a strained working relationship. Reviewers frame his candor as discussion-fostering rather than debate-provoking: he asks uncomfortable questions in a way that moves the work forward.',
+    aliases: [
+      'How does Joel handle disagreement or pushback?',
+      'Does Joel avoid conflict or address it?',
+      'Can Joel be assertive without damaging relationships?',
+    ],
+    evidenceLabel: 'Approved abstract — colleague feedback',
+    tags: ['conflict', 'candor', 'disagreement', 'honesty'],
+    canvasTopic: 'collaboration',
+    sourceType: 'approved-profile',
+    sensitivity: 'approved-abstract',
+    reviewDate: '2026-08-10',
+  },
+  {
+    id: 'feedback-ai-fluency-teaching',
+    category: 'ai-product',
+    statement:
+      'In the later years of his Microsoft tenure, reviewers highlight Joel as one of the designers who helped his organization become fluent in AI product work — designing conversational and agent-driven employee experiences, pressure-testing where the technology is strong and where it falls short, and advocating for users within its constraints. Peers especially credit him with creating hands-on learning sessions that made agentic AI approachable for other designers, changing how colleagues actually work rather than just informing them, and with prototyping with the newest tools early and feeding those learnings back into shared frameworks and playbooks.',
+    aliases: [
+      'What is Joel’s experience designing AI products?',
+      'Does Joel help others learn AI tools?',
+      'How hands-on is Joel with AI product design?',
+    ],
+    evidenceLabel: 'Approved abstract — colleague feedback',
+    tags: ['ai-product', 'agentic-ux', 'enablement', 'upskilling'],
+    canvasTopic: 'craft',
+    sourceType: 'approved-profile',
+    sensitivity: 'approved-abstract',
+    reviewDate: '2026-08-10',
+  },
+  {
+    id: 'feedback-growth-arc',
+    category: 'career-interests',
+    statement:
+      'Across Joel’s Microsoft reviews a clear growth arc is visible: earlier coaching asked him to put a stake in the ground sooner, sharpen his storytelling, and own workstreams end-to-end — and later reviews explicitly name each of those as strengths he now demonstrates. Colleagues watching that trajectory describe someone who converts feedback into visible growth, which is part of why they trust him with larger, more ambiguous scopes over time.',
+    aliases: [
+      'How has Joel grown as a designer?',
+      'How does Joel respond to feedback?',
+      'What is Joel’s career trajectory?',
+    ],
+    evidenceLabel: 'Approved abstract — colleague feedback',
+    tags: ['growth', 'trajectory', 'feedback', 'career'],
+    canvasTopic: 'career-fit',
+    sourceType: 'approved-profile',
+    sensitivity: 'approved-abstract',
+    reviewDate: '2026-08-10',
+  },
 ]
 
 // -- Helpers ---------------------------------------------------------------------
