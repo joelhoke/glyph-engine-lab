@@ -3477,14 +3477,6 @@ a.guide-source:focus-visible {
      lines, and snaps into place as the rail scrolls horizontally. */
   .chat-rail {
     scroll-snap-type: x mandatory;
-    /* Full-bleed on mobile: the rail breaks out of the gutter so pills
-       scroll edge-to-edge. The rail's own left padding keeps the resting
-       first pill aligned with the composer; once the visitor scrolls,
-       pills travel past the padding to the screen edge. */
-    margin-left: calc(-1 * var(--collab-gutter));
-    margin-right: calc(-1 * var(--collab-gutter));
-    padding-left: var(--collab-gutter);
-    padding-right: var(--collab-gutter);
   }
 
   .chat-rail .guide-followup {
