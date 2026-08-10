@@ -155,12 +155,44 @@ export default function ChatShell({
     announcedCountRef.current = answerCount
   }, [answerCount])
 
-  // Keep the transcript pinned to the latest turn (instant scroll — no JS
-  // animation, so reduced motion needs nothing extra).
+  // Anchor to the start of the newest exchange: when the visitor sends a
+  // message (and again when the answer lands), scroll so their latest message
+  // sits at the top of the viewport — never pinned to the bottom of a long
+  // answer. A manual scroll disables this until the visitor sends another
+  // message. Instant scroll — no JS animation, so reduced motion needs
+  // nothing extra.
+  const lastVisitorRef = useRef<HTMLLIElement | null>(null)
+  const autoScrollRef = useRef(true)
+  const targetScrollRef = useRef<number | null>(null)
+  const lastVisitorIndex = state.turns.reduce(
+    (last, turn, index) => (turn.role === 'user' ? index : last),
+    -1,
+  )
+  // Only the newest answer animates in (see .chat-answer-new in globals.css).
+  const lastAssistantIndex = state.turns.reduce(
+    (last, turn, index) => (turn.role === 'assistant' ? index : last),
+    -1,
+  )
   useEffect(() => {
     const node = transcriptRef.current
-    if (node) node.scrollTop = node.scrollHeight
-  }, [state.turns.length, pending])
+    const anchor = lastVisitorRef.current
+    if (!node || !anchor) return
+    // A newly sent visitor message re-arms auto-scroll after a manual scroll.
+    if (state.turns[state.turns.length - 1]?.role === 'user') autoScrollRef.current = true
+    if (!autoScrollRef.current) return
+    anchor.scrollIntoView({ block: 'start' })
+    targetScrollRef.current = node.scrollTop
+  }, [state.turns, pending])
+
+  const handleTranscriptScroll = () => {
+    const node = transcriptRef.current
+    if (!node) return
+    // Ignore the scroll event our own anchor scroll fires; anything else is
+    // the visitor taking over.
+    if (targetScrollRef.current !== null && Math.abs(node.scrollTop - targetScrollRef.current) < 2)
+      return
+    autoScrollRef.current = false
+  }
 
   // Auto-growing composer, bounded to a max height.
   useEffect(() => {
@@ -197,11 +229,15 @@ export default function ChatShell({
           {heading ?? COLLABORATE_GUIDE_PENDING_HEADING}
         </h2>
       </header>
-      <div className="chat-transcript" ref={transcriptRef}>
+      <div className="chat-transcript" ref={transcriptRef} onScroll={handleTranscriptScroll}>
         <ol className="chat-turns">
           {state.turns.map((turn, index) =>
             turn.role === 'user' ? (
-              <li key={index} className="chat-turn chat-turn-visitor">
+              <li
+                key={index}
+                className="chat-turn chat-turn-visitor"
+                ref={index === lastVisitorIndex ? lastVisitorRef : null}
+              >
                 <div className="chat-visitor-card">
                   <p className="chat-turn-meta chat-visitor-meta">
                     {COLLABORATE_GUIDE_VISITOR_LABEL} | {formatTurnTime(turn.at)}
@@ -211,7 +247,11 @@ export default function ChatShell({
               </li>
             ) : (
               <li key={index} className="chat-turn">
-                <article className="chat-answer">
+                <article
+                  className={
+                    index === lastAssistantIndex ? 'chat-answer chat-answer-new' : 'chat-answer'
+                  }
+                >
                   <p className="chat-turn-meta">
                     {COLLABORATE_GUIDE_NAME} | {formatTurnTime(turn.at)}
                   </p>

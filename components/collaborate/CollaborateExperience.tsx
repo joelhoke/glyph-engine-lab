@@ -85,7 +85,6 @@ export default function CollaborateExperience({
           >
             {COLLABORATE_HEADLINE}
           </h2>
-          <p className="collaborate-statement">{COLLABORATE_ENERGIZING_STATEMENT}</p>
           <p className="guide-disclosure">{COLLABORATE_GUIDE_DISCLOSURE}</p>
           <ContactActions contact={COLLABORATE_GUIDE_CONTACT} />
         </BoundedScrollPanel>

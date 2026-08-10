@@ -3191,6 +3191,23 @@ a.guide-source:focus-visible {
   -webkit-backdrop-filter: blur(8px);
 }
 
+/* Newest guide answer only: a small upward settle + fade as the turn arrives.
+   The global prefers-reduced-motion kill-switch covers it. */
+.chat-answer-new {
+  animation: chat-answer-in 320ms ease-out;
+}
+
+@keyframes chat-answer-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .chat-answer-text {
   margin: 0;
   font-family: var(--font-display), var(--font-mono);
