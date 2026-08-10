@@ -109,6 +109,11 @@ export default function WorkStoryView({ story, headingRef, onTrackEvent }: WorkS
                   <section className="work-story-section">
                     <h4 className="work-story-section-heading">Outcome</h4>
                     <p className="work-story-outcome">{story.outcome}</p>
+                    {story.outcomeParagraphs?.map((paragraph, i) => (
+                      <p key={i} className="work-story-section-copy">
+                        {paragraph}
+                      </p>
+                    ))}
                   </section>
                   {details.map((section) => (
                     <section key={section.heading} className="work-story-section">
