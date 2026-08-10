@@ -2357,13 +2357,18 @@ button:focus-visible {
   align-items: stretch;
 }
 
+/* The invitation card reads left-aligned like the Work cards; only the
+   email CTAs stay centered. */
 .collaborate-guide .collaborate-heading,
 .collaborate-guide .collaborate-statement,
 .collaborate-guide .guide-disclosure {
-  text-align: center;
+  text-align: left;
 }
 
-.collaborate-guide .conversation-starters,
+.collaborate-guide .conversation-starters {
+  justify-content: flex-start;
+}
+
 .collaborate-guide .collaborate-contact {
   justify-content: center;
 }
@@ -3473,11 +3478,13 @@ a.guide-source:focus-visible {
   .chat-rail {
     scroll-snap-type: x mandatory;
     /* Full-bleed on mobile: the rail breaks out of the gutter so pills
-       scroll edge-to-edge; scroll padding keeps the resting first pill
-       aligned to the gutter and snap targets consistent. */
+       scroll edge-to-edge. The rail's own left padding keeps the resting
+       first pill aligned with the composer; once the visitor scrolls,
+       pills travel past the padding to the screen edge. */
     margin-left: calc(-1 * var(--collab-gutter));
     margin-right: calc(-1 * var(--collab-gutter));
-    scroll-padding-left: var(--collab-gutter);
+    padding-left: var(--collab-gutter);
+    padding-right: var(--collab-gutter);
   }
 
   .chat-rail .guide-followup {
