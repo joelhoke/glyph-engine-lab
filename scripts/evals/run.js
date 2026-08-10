@@ -348,7 +348,7 @@ async function runModel(modelId, callModel) {
       agg.runs += 1
       // Steady-state throttle: the Moonshot org caps at 20 RPM; spacing calls
       // keeps the backoff loop for genuine collisions. Outside latency timing.
-      await new Promise((resolve) => setTimeout(resolve, 1200))
+      await new Promise((resolve) => setTimeout(resolve, 3000))
       const started = performance.now()
       // Retry provider rate limits (HTTP 429) with backoff: the org RPM cap
       // is an infrastructure constraint, not a model-quality signal, and an
