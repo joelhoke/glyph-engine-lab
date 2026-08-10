@@ -48,22 +48,19 @@ function formatTurnTime(at: number): string {
 }
 
 function SourceChips({ turn }: { turn: GuideAssistantTurn }) {
-  if (turn.sourceCards.length === 0) return null
+  // Only functional links are shown: pack entries without an evidenceUrl are
+  // provenance metadata (model sourceIds), not destinations, so rendering
+  // them would present a dead, link-looking affordance.
+  const linked = turn.sourceCards.filter((card) => card.url)
+  if (linked.length === 0) return null
   return (
     <div className="guide-sources" role="group" aria-label="Sources">
-      {turn.sourceCards.map((card) =>
-        card.url ? (
-          <a key={card.id} className="guide-source" href={card.url}>
-            <LinkIcon />
-            {card.label}
-          </a>
-        ) : (
-          <span key={card.id} className="guide-source">
-            <LinkIcon />
-            {card.label}
-          </span>
-        ),
-      )}
+      {linked.map((card) => (
+        <a key={card.id} className="guide-source" href={card.url}>
+          <LinkIcon />
+          {card.label}
+        </a>
+      ))}
     </div>
   )
 }
