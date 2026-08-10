@@ -76,10 +76,9 @@ function assert(condition, message) {
 
 // --- Launch flags ---
 
-assert(COLLABORATE_SHOW_STARTERS === false, 'conversation starters are hidden for launch')
-// Preview development runs with the flag ON (uncommitted local change); the
-// launch gate lives in docs/deployment.md. Here we only require that the
-// flag exists, is a boolean, and that the component actually gates on it.
+// Both flags ship enabled with the guide; here we only require that they
+// exist, are booleans, and that the component actually gates on them.
+assert(typeof COLLABORATE_SHOW_STARTERS === 'boolean', 'starters flag exists and is a boolean')
 assert(typeof COLLABORATE_AI_GUIDE === 'boolean', 'AI guide flag exists and is a boolean')
 
 const collaborateSurface = fs.readFileSync(
@@ -95,9 +94,9 @@ assert(
   'the collaborate surface gates the guide on its own launch flag',
 )
 
-// --- Starters: six, unique ids, all copy fields present ---
+// --- Starters: three audience-framed, unique ids, all copy fields present ---
 
-assert(CONVERSATION_STARTERS.length === 6, 'exactly 6 conversation starters')
+assert(CONVERSATION_STARTERS.length === 3, 'exactly 3 conversation starters')
 assert(
   COLLABORATE_STARTER_COUNT === CONVERSATION_STARTERS.length,
   'COLLABORATE_STARTER_COUNT matches the array',
