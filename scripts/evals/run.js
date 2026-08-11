@@ -566,7 +566,10 @@ async function main() {
     for (const adapter of adapters) {
       console.log(`Running ${allCases.length} cases x ${RUNS} runs against ${adapter.id} ...`)
       const result = await runModel(adapter.id, (input) =>
-        adapter.complete({ messages: input.messages, maxTokens: 700, timeoutMs: 12000 }, config, fetch),
+        // Mirror production settings (functions/api/collaborate/index.ts):
+        // thinking models (kimi-k2.6) need maxTokens 4000 — 700 starves them
+        // into empty completions — and 30s, not the 12s adapter default.
+        adapter.complete({ messages: input.messages, maxTokens: 4000, timeoutMs: 30000 }, config, fetch),
       )
       summaries.push({ modelId: adapter.id, perCategory: summarize(result) })
       failureList.push(...result.failureList)
