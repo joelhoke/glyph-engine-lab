@@ -177,7 +177,12 @@ export default function ChatShell({
     // A newly sent visitor message re-arms auto-scroll after a manual scroll.
     if (state.turns[state.turns.length - 1]?.role === 'user') autoScrollRef.current = true
     if (!autoScrollRef.current) return
-    anchor.scrollIntoView({ block: 'start' })
+    // Transcript-scoped scroll — NOT scrollIntoView, which scrolls every
+    // scrollable ancestor (including the page) and can leave the visitor's
+    // message stranded outside the bounded transcript's reach. Pin the
+    // visitor's latest message just below the header overlay instead.
+    const topPad = parseFloat(getComputedStyle(node).scrollPaddingTop) || 0
+    node.scrollTo({ top: Math.max(anchor.offsetTop - topPad, 0) })
     targetScrollRef.current = node.scrollTop
   }, [state.turns, pending])
 

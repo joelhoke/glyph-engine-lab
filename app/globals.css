@@ -2853,6 +2853,7 @@ a.guide-source:focus-visible {
   font-weight: 400;
   font-size: 1rem;
   line-height: 1.6;
+  letter-spacing: 0.02em;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -3163,6 +3164,7 @@ a.guide-source:focus-visible {
   font-weight: 400;
   font-size: 1rem;
   line-height: 1.65;
+  letter-spacing: 0.02em;
   color: var(--color-warm-strong);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -3219,6 +3221,7 @@ a.guide-source:focus-visible {
   font-weight: 400;
   font-size: 1rem;
   line-height: 1.65;
+  letter-spacing: 0.02em;
   color: var(--color-warm-strong);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -3407,6 +3410,7 @@ a.guide-source:focus-visible {
   font-weight: 400;
   font-size: 1rem;
   line-height: 1.6;
+  letter-spacing: 0.02em;
   flex: 1 1 auto;
   min-width: 0;
   resize: none;
