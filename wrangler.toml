@@ -8,8 +8,21 @@
 # Deploys run from the Cloudflare dashboard or an authenticated wrangler
 # session (see docs/deployment.md). Nothing here changes the local build.
 
-name = "jh-portfolio"
+name = "glyph-engine-lab"
 pages_build_output_dir = "out"
+
+# Non-secret configuration for the collaborate AI guide (see docs/deployment.md,
+# "Collaborate AI guide"). The dashboard manages ONLY secrets for this project
+# (AIG_TOKEN, OPENAI_API_KEY, DEEPSEEK_API_KEY) — never put those here.
+[vars]
+CF_ACCOUNT_ID = "42cf2d6bb1238015365cb8aa5cbeb251"
+AIG_GATEWAY_ID = "jh-guide"
+# Kimi goes direct to Moonshot's OpenAI-compatible API for launch: this
+# gateway has no native moonshot provider (400 "Invalid provider" via compat).
+# Revisit a gateway Custom Provider later to bring Kimi traffic under the
+# gateway's spend limit and observability (see docs/deployment.md).
+AIG_MOONSHOT_URL = "https://api.moonshot.ai/v1/chat/completions"
+MOONSHOT_MODEL = "kimi-k2.6"
 
 # R2 binding for the confidential-work Pages Functions (Stage 4b). Bind the
 # private bucket in the Pages dashboard (Settings → Functions → R2 bucket

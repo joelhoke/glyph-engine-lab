@@ -2357,13 +2357,18 @@ button:focus-visible {
   align-items: stretch;
 }
 
+/* The invitation card reads left-aligned like the Work cards; only the
+   email CTAs stay centered. */
 .collaborate-guide .collaborate-heading,
 .collaborate-guide .collaborate-statement,
 .collaborate-guide .guide-disclosure {
-  text-align: center;
+  text-align: left;
 }
 
-.collaborate-guide .conversation-starters,
+.collaborate-guide .conversation-starters {
+  justify-content: flex-start;
+}
+
 .collaborate-guide .collaborate-contact {
   justify-content: center;
 }
@@ -2848,6 +2853,7 @@ a.guide-source:focus-visible {
   font-weight: 400;
   font-size: 1rem;
   line-height: 1.6;
+  letter-spacing: 0.02em;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -3158,6 +3164,7 @@ a.guide-source:focus-visible {
   font-weight: 400;
   font-size: 1rem;
   line-height: 1.65;
+  letter-spacing: 0.02em;
   color: var(--color-warm-strong);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -3191,12 +3198,30 @@ a.guide-source:focus-visible {
   -webkit-backdrop-filter: blur(8px);
 }
 
+/* Newest guide answer only: a small upward settle + fade as the turn arrives.
+   The global prefers-reduced-motion kill-switch covers it. */
+.chat-answer-new {
+  animation: chat-answer-in 320ms ease-out;
+}
+
+@keyframes chat-answer-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .chat-answer-text {
   margin: 0;
   font-family: var(--font-display), var(--font-mono);
   font-weight: 400;
   font-size: 1rem;
   line-height: 1.65;
+  letter-spacing: 0.02em;
   color: var(--color-warm-strong);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -3385,6 +3410,7 @@ a.guide-source:focus-visible {
   font-weight: 400;
   font-size: 1rem;
   line-height: 1.6;
+  letter-spacing: 0.02em;
   flex: 1 1 auto;
   min-width: 0;
   resize: none;
@@ -3455,6 +3481,17 @@ a.guide-source:focus-visible {
      lines, and snaps into place as the rail scrolls horizontally. */
   .chat-rail {
     scroll-snap-type: x mandatory;
+    /* Full-bleed: the rail breaks out of the gutter so pills scroll
+       edge-to-edge. The resting inset lives on the pill group (not the
+       rail), so it scrolls away with the content once the visitor swipes —
+       pill type treatment is untouched. */
+    margin-left: calc(-1 * var(--collab-gutter));
+    margin-right: calc(-1 * var(--collab-gutter));
+  }
+
+  .chat-rail .guide-followups {
+    padding-left: var(--collab-gutter);
+    padding-right: var(--collab-gutter);
   }
 
   .chat-rail .guide-followup {

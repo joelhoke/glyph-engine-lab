@@ -75,11 +75,10 @@ assert(WORK_STORY_COUNT === WORK_STORIES.length, 'WORK_STORY_COUNT matches the a
 
 assert(WORK_SLIDE_COUNT === WORK_SLIDES.length, 'WORK_SLIDE_COUNT matches the slide array')
 assert(
-  WORK_SLIDES.length === 3 &&
+  WORK_SLIDES.length === WORK_STORIES.length + 1 &&
     WORK_SLIDES[0].kind === 'intro' &&
-    WORK_SLIDES[1].kind === 'project' &&
-    WORK_SLIDES[2].kind === 'project',
-  'WORK_SLIDES is exactly intro + two project slides',
+    WORK_SLIDES.slice(1).every((slide) => slide.kind === 'project'),
+  'WORK_SLIDES is intro + one project slide per story',
 )
 
 const introSlide = WORK_SLIDES.find((slide) => slide.kind === 'intro')

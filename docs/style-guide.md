@@ -148,7 +148,8 @@ Two typefaces, both self-hosted (no remote font requests):
 - **Cabin Regular (400)** — the intentional exception to the mono default,
   reserved for the collaborate AI guide's conversation copy: visitor message
   text, guide response text, typed composer content, and the landing preview
-  excerpts (~1rem, line-height 1.6–1.7, `font-weight: 400`). Loaded from the
+  excerpts (~1rem, line-height 1.6–1.7, `font-weight: 400`, letter-spacing
+  0.02em for legibility). Loaded from the
   same self-hosted `next/font` build as Cabin Bold.
 - **Cutive Mono** — everything else: body copy, navigation, toolbar and
   control text, Work mode labels, narrative section headings, dialogs,

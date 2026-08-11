@@ -8,14 +8,16 @@
 //
 //   POST /openai/responses              → Responses API shape (output_text)
 //   POST /deepseek/chat/completions     → Chat Completions shape
+//   POST /compat/chat/completions       → Chat Completions shape (Kimi adapter)
 //
 // Answers are canned but valid per functions/lib/collaborateShared.ts
 // validateModelAnswer: real pack source IDs, third person, ≤220 words.
 //
 // Test knobs (put the token anywhere in your visitor message):
-//   mock_fail_openai  → OpenAI route 500s; DeepSeek fallback answers
+//   mock_fail_kimi    → Kimi (compat) route 500s; DeepSeek fallback answers
+//   mock_fail_openai  → OpenAI route 500s; next candidate answers
 //   mock_invalid      → OpenAI returns malformed JSON; fallback answers
-//   mock_fail_all     → both routes 500; deterministic email handoff
+//   mock_fail_all     → all routes 500; deterministic email handoff
 //
 // Usage: node scripts/dev/mock-collaborate-model.mjs [port]   (default 8790)
 // =============================================================================
@@ -105,7 +107,12 @@ const server = http.createServer(async (req, res) => {
   }
 
   const isOpenAI = req.url.startsWith('/openai/')
-  if (visitorText.includes('mock_fail_all') || (visitorText.includes('mock_fail_openai') && isOpenAI)) {
+  const isKimi = req.url.startsWith('/compat/')
+  if (
+    visitorText.includes('mock_fail_all') ||
+    (visitorText.includes('mock_fail_openai') && isOpenAI) ||
+    (visitorText.includes('mock_fail_kimi') && isKimi)
+  ) {
     res.writeHead(500, { 'content-type': 'application/json' }).end('{"error":"mock failure"}')
     return
   }
@@ -127,5 +134,6 @@ server.listen(PORT, () => {
   console.log(`Mock collaborate model server on http://localhost:${PORT}`)
   console.log('  POST /openai/responses')
   console.log('  POST /deepseek/chat/completions')
-  console.log('  knobs: mock_fail_openai | mock_invalid | mock_fail_all')
+  console.log('  POST /compat/chat/completions')
+  console.log('  knobs: mock_fail_kimi | mock_fail_openai | mock_invalid | mock_fail_all')
 })
