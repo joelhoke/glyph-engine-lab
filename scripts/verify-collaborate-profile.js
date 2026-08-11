@@ -51,7 +51,7 @@ function assert(condition, message) {
 
 const packErrors = validateProfileEntries(PROFILE_ENTRIES)
 assert(packErrors.length === 0, `shipped pack validates clean (got: ${packErrors.join('; ') || 'none'})`)
-assert(PROFILE_ENTRIES.length === 25, 'pack contains exactly 25 entries')
+assert(PROFILE_ENTRIES.length === 28, 'pack contains exactly 28 entries')
 
 // The validator itself works: it must flag a broken clone.
 const broken = JSON.parse(JSON.stringify(PROFILE_ENTRIES[0]))

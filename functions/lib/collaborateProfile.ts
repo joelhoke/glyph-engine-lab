@@ -322,12 +322,13 @@ export const PROFILE_ENTRIES: ProfileEntry[] = [
     id: 'career-interests',
     category: 'career-interests',
     statement:
-      'Joel is focused on senior and lead individual-contributor design roles and design-leadership opportunities — and he is ready for principal-level scope. He is confident in the work he does as a senior contributor and wants the harder problems and wider responsibilities that come with principal roles. The collaborations that energize him most pair curiosity with real constraints: problems still a little undefined, where the team gets to figure out what the thing wants to be.',
+      'Joel is focused on senior and lead individual-contributor design roles and design-leadership opportunities — and he is ready for principal-level scope. He is confident in the work he does as a senior contributor and wants the harder problems and wider responsibilities that come with principal roles. The collaborations that energize him most pair curiosity with real constraints: problems still a little undefined, where the team gets to figure out what the thing wants to be. Longer term, he is moving his career toward business experience strategy — applying design thinking to every aspect of product development that shapes the business process.',
     aliases: [
       'What kind of role and team brings out Joel’s best work?',
       'What is Joel looking for?',
       'Is Joel open to new roles?',
       'Is Joel ready for a principal role?',
+      'Where does Joel want to take his career?',
     ],
     evidenceLabel: 'Approved profile — career interests',
     tags: ['career', 'senior-ic', 'lead', 'principal', 'design-leadership'],
@@ -335,6 +336,62 @@ export const PROFILE_ENTRIES: ProfileEntry[] = [
     sourceType: 'approved-profile',
     sensitivity: 'public',
     reviewDate: '2026-08-10',
+  },
+
+  // -- The site itself, tools, and process (Joel-approved, 2026-08-11) -------------
+  {
+    id: 'site-built-by-joel',
+    category: 'ic-craft',
+    statement:
+      'This portfolio is Joel’s own work end to end: he designed and built the site from the ground up, working with AI tools, on a custom engine derived from a digital typesetting technology (Pretext) that he finds fascinating. The agentic chat guide the visitor is using right now is itself a shipped AI product — the site is both a portfolio and a working demonstration of the development delivery Joel is capable of as an individual contributor.',
+    aliases: [
+      'What AI products has Joel shipped?',
+      'Did Joel build this site himself?',
+      'Is this chat something Joel built?',
+      'How technical is Joel?',
+    ],
+    evidenceLabel: 'Approved profile — this site',
+    tags: ['portfolio', 'agentic-ai', 'development', 'pretext', 'shipped'],
+    canvasTopic: 'craft',
+    sourceType: 'approved-profile',
+    sensitivity: 'public',
+    reviewDate: '2026-08-11',
+  },
+  {
+    id: 'tools-and-workflow',
+    category: 'ic-craft',
+    statement:
+      'Figma is Joel’s primary canvas — it is where he does most of his detailed design work and fine-tuning. On the development side he uses VS Code as his primary environment and is comfortable in AI-assisted coding harnesses; he has come to genuinely enjoy CLI tools and likes exploring the latest frontier models as they land. He treats new tooling as something to learn hands-on rather than read about.',
+    aliases: [
+      'What design tools does Joel use?',
+      'Does Joel use Figma?',
+      'What is Joel’s development setup?',
+      'How does Joel keep up with new tools?',
+    ],
+    evidenceLabel: 'Approved profile — tools and workflow',
+    tags: ['figma', 'vscode', 'cli', 'tools', 'frontier-models'],
+    canvasTopic: 'craft',
+    sourceType: 'approved-profile',
+    sensitivity: 'public',
+    reviewDate: '2026-08-11',
+  },
+  {
+    id: 'prototyping-process',
+    category: 'research',
+    statement:
+      'Joel’s prototyping starts with understanding, not screens: for the Global Operations dashboards he ran workshops and user research to map the space, the users, and the key pain points across business teams and verticals. From those needs he created a flexible information architecture that could span multiple tools — a front- and back-end ecosystem that drives efficiency through backend operations and front-end communication, so users can act sooner and more decisively. At the highest level he uses prototypes to better understand user needs — testing early and often, then working with research to report findings that define product iterations.',
+    aliases: [
+      'How did Joel prototype the operations dashboards?',
+      'How does Joel prototype interactions?',
+      'What is Joel’s process from research to prototype?',
+      'How does Joel use testing in his process?',
+    ],
+    evidenceLabel: 'Approved profile — prototyping process',
+    tags: ['prototyping', 'workshops', 'user-research', 'information-architecture', 'testing'],
+    canvasTopic: 'craft',
+    sourceType: 'approved-profile',
+    sensitivity: 'public',
+    reviewDate: '2026-08-11',
   },
 
   // -- Entrepreneurial section (secondary path) -------------------------------------
