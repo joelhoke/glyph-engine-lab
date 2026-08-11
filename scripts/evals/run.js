@@ -116,6 +116,10 @@ function argValue(flag, fallback) {
   return i !== -1 && args[i + 1] ? args[i + 1] : fallback
 }
 const RUNS = Math.max(1, parseInt(argValue('--runs', '3'), 10) || 3)
+// Hard wall-clock budget: rate-limit retry chains must never make a run's
+// duration unknowable again. On expiry the run stops launching new calls and
+// writes a partial report. Override with --max-minutes; 0 disables.
+const MAX_MINUTES = Math.max(0, parseInt(argValue('--max-minutes', '45'), 10) || 0)
 const projectRoot = path.resolve(__dirname, '..', '..')
 const outDir = path.resolve(projectRoot, argValue('--out', 'tmp-evals'))
 
@@ -174,7 +178,15 @@ const entriesById = new Map(activeEntries.map((e) => [e.id, e]))
 
 const questionCases = loadCases(path.join(__dirname, 'questions.json'))
 const adversarialCases = loadCases(path.join(__dirname, 'adversarial.json'))
-const allCases = [...questionCases, ...adversarialCases]
+// --only id1,id2,... narrows the run to specific case ids (regression passes
+// over a prior report's failure list without paying for the full suite).
+const ONLY = argValue('--only', '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+const allCases = ONLY.length
+  ? [...questionCases, ...adversarialCases].filter((c) => ONLY.includes(c.id))
+  : [...questionCases, ...adversarialCases]
 
 assert(questionCases.length >= MIN_QUESTION_CASES, `questions.json has >= ${MIN_QUESTION_CASES} cases (got ${questionCases.length})`)
 assert(adversarialCases.length >= MIN_ADVERSARIAL_CASES, `adversarial.json has >= ${MIN_ADVERSARIAL_CASES} cases (got ${adversarialCases.length})`)
@@ -338,6 +350,8 @@ async function runModel(modelId, callModel) {
     categories[cat] = { runs: 0, accepted: 0, latencies: [], inputTokens: 0, outputTokens: 0, usageMissing: 0 }
   }
   const failureList = []
+  const deadline = MAX_MINUTES > 0 ? Date.now() + MAX_MINUTES * 60 * 1000 : Infinity
+  let truncated = false
 
   for (let caseIndex = 0; caseIndex < allCases.length; caseIndex += 1) {
     const evalCase = allCases[caseIndex]
@@ -345,6 +359,7 @@ async function runModel(modelId, callModel) {
     const agg = categories[evalCase.category]
 
     for (let run = 0; run < RUNS; run += 1) {
+      if (Date.now() > deadline) { truncated = true; break }
       agg.runs += 1
       // Steady-state throttle: the Moonshot org caps at 20 RPM; spacing calls
       // keeps the backoff loop for genuine collisions. Outside latency timing.
@@ -387,7 +402,10 @@ async function runModel(modelId, callModel) {
         failureList.push({ model: modelId, caseId: evalCase.id, run: run + 1, reasons })
       }
     }
+    if (truncated) break
   }
+  if (truncated)
+    failureList.push({ model: modelId, caseId: '(harness)', run: 0, reasons: [`run truncated at the ${MAX_MINUTES}-minute budget — partial results`] })
   return { modelId, categories, failureList }
 }
 
