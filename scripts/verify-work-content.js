@@ -89,8 +89,8 @@ assert(
   "intro slide carries id 'microsoft' and title 'Microsoft'",
 )
 assert(
-  !!introSlide && introSlide.copy.includes('eight years'),
-  'intro slide carries the eight-years tenure copy',
+  !!introSlide && introSlide.copy.includes('seven years'),
+  'intro slide carries the seven-years tenure copy',
 )
 assert(
   !!introSlide && introSlide.sourceUrl === '/assets/work/story-03.svg',

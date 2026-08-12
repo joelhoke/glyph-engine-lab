@@ -208,7 +208,7 @@ export const WORK_STORIES: WorkStory[] = [
         width: 1920,
         height: 1080,
         alt: 'Excerpt from the Realcomm conference keynote “Microsoft’s AI Frontier Transformation” — a speaker on stage with the keynote title slide behind him.',
-        caption: 'Realcomm keynote excerpt — Microsoft’s AI frontier transformation, featuring Building Orchestrator.',
+        caption: 'An excerpt from Microsoft’s RealComm 2026 Keynote presentation, which I supported by developing slide content while collaborating on the strategic story and vision. This work led to Microsoft winning the 2026 Digie award for "Most Intelligent Corporate Headquarters".',
         poster: '/assets/work/RealComm-Keynote-poster.jpg',
         // TODO: replace with the excerpt's spoken transcript before launch.
         transcript: 'Transcript for this excerpt is being prepared.',
@@ -397,7 +397,7 @@ export const WORK_SLIDES: WorkSlide[] = [
     kind: 'intro',
     id: 'microsoft',
     title: 'Microsoft',
-    copy: 'Over nearly eight years at Microsoft, I had the privilege of helping shape the future of work by designing thoughtful experiences where people, business, and technology meet. Due to the nature of internal work, I’m limited in what I’m able to publicly share.',
+    copy: 'Over nearly seven years at Microsoft, I had the privilege of helping shape the future of work by designing thoughtful experiences where people, business, and technology meet.',
     // The full-color Microsoft logo/wordmark SVG; the field takes the sampled
     // brand colors straight from the source.
     sourceUrl: '/assets/work/story-03.svg',
