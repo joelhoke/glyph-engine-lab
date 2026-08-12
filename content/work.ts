@@ -200,7 +200,20 @@ export const WORK_STORIES: WorkStory[] = [
         ],
       },
     ],
-    media: [],
+    media: [
+      {
+        kind: 'video',
+        id: 'realcomm-keynote',
+        src: '/assets/work/RealComm-Keynote.mp4',
+        width: 1920,
+        height: 1080,
+        alt: 'Excerpt from the Realcomm conference keynote “Microsoft’s AI Frontier Transformation” — a speaker on stage with the keynote title slide behind him.',
+        caption: 'Realcomm keynote excerpt — Microsoft’s AI frontier transformation, featuring Building Orchestrator.',
+        poster: '/assets/work/RealComm-Keynote-poster.jpg',
+        // TODO: replace with the excerpt's spoken transcript before launch.
+        transcript: 'Transcript for this excerpt is being prepared.',
+      },
+    ],
     // Microsoft project: the field takes the sampled brand colors straight
     // from the source SVG.
     sourceUrl: '/assets/work/building-multiple.svg',
@@ -213,7 +226,7 @@ export const WORK_STORIES: WorkStory[] = [
   },
   {
     id: 'microsoft-employee-experience',
-    title: 'Microsoft Employee Experience',
+    title: 'Employee Experience',
     role: 'Junior to Senior Designer',
     context: 'Microsoft · cross-functional team across design, product management, research, and engineering · 2019–2026',
     thesis: 'Supporting efficiency across Microsoft by reducing fragmentation across internal tools, enabling employees to complete tasks more easily and return their focus to the work at hand.',
@@ -233,7 +246,17 @@ export const WORK_STORIES: WorkStory[] = [
     colorMode: 'source-colors',
     mark: MICROSOFT_BRAND_MARK,
     glyphText: 'Defragmenting the Employee Experience ',
-    media: [],
+    media: [
+      {
+        kind: 'image',
+        id: 'myhub-viva',
+        src: '/assets/work/EmployeeExperience-MyHub+Viva.png',
+        width: 899,
+        height: 963,
+        alt: 'Two iPhone screens: the MyHub dashboard with tiles for booking a space, booking a connector, dining, maintenance, parking, and directions, alongside the Microsoft Viva Connections dashboard with paystub, holiday, and on-site cards.',
+        caption: 'MyHub and Viva Connections — the employee-experience platforms this work spanned.',
+      },
+    ],
     details: [
       { heading: 'The thesis', paragraphs: [
         'Employee experience at the scale of a business like Microsoft — built over 50 years — presents challenges from many perspectives. The work ranged from helping employees commute, order lunch, and review compensation information to supporting broader business needs and engagement targets that help employees stay focused and efficient.',
@@ -263,7 +286,7 @@ export const WORK_STORIES: WorkStory[] = [
   },
   {
     id: 'microsoft-global-compensation',
-    title: 'Microsoft Global Compensation',
+    title: 'Global Compensation',
     thesis:
       'Fortune 500 companies like Microsoft offer complex compensation packages spanning cash, stock, and benefits. A platform that clearly explains total compensation and connects employees to available benefits helps them maximize their earnings, improve satisfaction, and reduce unused benefits.',
     role: 'Lead Designer',
@@ -301,7 +324,17 @@ export const WORK_STORIES: WorkStory[] = [
         ],
       },
     ],
-    media: [],
+    media: [
+      {
+        kind: 'image',
+        id: 'total-rewards',
+        src: '/assets/work/GlobalCompensation-TotalRewards.png',
+        width: 1002,
+        height: 566,
+        alt: 'The Microsoft Total Rewards portal overview page, showing the employee’s total rewards figure with breakdown cards for cash, stock, and benefits.',
+        caption: 'The Total Rewards portal — Microsoft’s first-party platform for communicating compensation and benefits.',
+      },
+    ],
     sourceUrl: '/assets/work/Stocks.png',
     sourceKind: 'raster',
     colorMode: 'source-colors',
@@ -364,7 +397,7 @@ export const WORK_SLIDES: WorkSlide[] = [
     kind: 'intro',
     id: 'microsoft',
     title: 'Microsoft',
-    copy: 'Over nearly eight years at Microsoft, I had the privilege of helping shape the future of work by designing thoughtful experiences where people, business, and technology meet.',
+    copy: 'Over nearly eight years at Microsoft, I had the privilege of helping shape the future of work by designing thoughtful experiences where people, business, and technology meet. Due to the nature of internal work, I’m limited in what I’m able to publicly share.',
     // The full-color Microsoft logo/wordmark SVG; the field takes the sampled
     // brand colors straight from the source.
     sourceUrl: '/assets/work/story-03.svg',

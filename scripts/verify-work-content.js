@@ -135,7 +135,7 @@ assert(
 const employeeProject = projectSlides.find((slide) => slide.story.id === 'microsoft-employee-experience')
 assert(!!employeeProject, 'the microsoft-employee-experience project slide exists')
 assert(
-  !!employeeProject && employeeProject.story.title === 'Microsoft Employee Experience',
+  !!employeeProject && employeeProject.story.title === 'Employee Experience',
   'employee-experience story carries its exact title',
 )
 assert(
@@ -155,8 +155,11 @@ assert(
   'employee-experience story is public',
 )
 assert(
-  !!employeeProject && Array.isArray(employeeProject.story.media) && employeeProject.story.media.length === 0,
-  'employee-experience story ships no gallery media',
+  !!employeeProject &&
+    Array.isArray(employeeProject.story.media) &&
+    employeeProject.story.media.length === 1 &&
+    employeeProject.story.media[0].src === '/assets/work/EmployeeExperience-MyHub+Viva.png',
+  'employee-experience story ships the MyHub+Viva gallery image',
 )
 assert(
   !!employeeProject && employeeProject.story.links.length === 3,
