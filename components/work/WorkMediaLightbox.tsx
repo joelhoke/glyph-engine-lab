@@ -1,6 +1,7 @@
 'use client'
 
 import { RefObject, useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { WorkMedia } from '../../content/work'
 
 type WorkMediaLightboxProps = {
@@ -114,7 +115,11 @@ export default function WorkMediaLightbox({
 
   if (!item) return null
 
-  return (
+  // Portal to document.body: rendered inline, the fixed backdrop would be
+  // trapped by .work-experience's backdrop-filter (any ancestor filter/
+  // backdrop-filter/transform becomes the containing block for fixed
+  // descendants), binding the overlay to the slide instead of the viewport.
+  return createPortal(
     <div className="work-lightbox-backdrop" onClick={handleClose}>
       <div
         ref={dialogRef}
@@ -163,7 +168,8 @@ export default function WorkMediaLightbox({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
