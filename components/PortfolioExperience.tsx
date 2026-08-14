@@ -4,7 +4,7 @@ import SceneCanvas, { SceneCanvasHandle, SceneTargetRegion } from './SceneCanvas
 import CanvasFallback from './CanvasFallback'
 import ExperienceNav from './ExperienceNav'
 import ExperienceTransition, { useExperienceTransition } from './ExperienceTransition'
-import WorkExperience from './work/WorkExperience'
+import WorkExperience, { MIN_EXPANSION_RANGE_PX } from './work/WorkExperience'
 import CollaborateExperience from './collaborate/CollaborateExperience'
 import VibeExperience, { VibeSurfaceStatus } from './vibe/VibeExperience'
 import VibeToolbar from './vibe/VibeToolbar'
@@ -12,8 +12,8 @@ import PrimaryActions, { ExperienceKey, PRIMARY_ACTION_COUNT } from './PrimaryAc
 import TuningPanel from './tuning/TuningPanel'
 import AnalyticsConsent from './AnalyticsConsent'
 import { ExperienceMode, ExperienceSceneKey } from '../engine/types'
-import { EXPERIENCE_SCENES, LANDING_SOURCE_URL, resolveScenePlayground } from '../engine/sceneConfig'
-import { getWorkSlide, getWorkSlideId, resolveWorkSlideScene, WORK_SLIDES } from '../content/work'
+import { EXPERIENCE_SCENES, resolveScenePlayground } from '../engine/sceneConfig'
+import { getWorkSlide, getWorkSlideHeroFit, getWorkSlideId, resolveWorkSlideScene, WORK_SLIDES } from '../content/work'
 import {
   COLLABORATE_AI_GUIDE,
   COLLABORATE_CONTACT,
@@ -53,7 +53,6 @@ import {
 } from '../engine/diagnostics'
 import { QualityTier } from '../engine/qualityTiers'
 import { SceneSourceSelection } from '../engine/animatedSource'
-import { isMobileViewport } from '../engine/displayBudget'
 import {
   captureSeasonalAtmosphereInput,
   resolveSeasonalAtmosphere,
@@ -203,6 +202,22 @@ export default function PortfolioExperience() {
   // the foreground slide and the canvas descriptor.
   const [workSlideIndex, setWorkSlideIndex] = useState(0)
 
+  // Work card expansion progress (0 = compact hero+card, 1 = full-height
+  // reading panel). Controlled here because this component coordinates the
+  // inputs: in-card scrolling (via WorkExperience), gap gestures outside the
+  // card, and the measured glyph region those gestures must avoid. Gap
+  // gestures are additionally gated on the expansion metrics reported up from
+  // WorkExperience — a non-scrollable slide (the intro) never expands — and
+  // accumulate against the same expansion range the card uses.
+  const [workExpansionProgress, setWorkExpansionProgress] = useState(0)
+  // Live mirrors for the passive window listeners (state is too stale
+  // mid-gesture); gap commits are rAF-coalesced like the card's.
+  const workExpansionProgressRef = useRef(0)
+  const workOverflowEligibleRef = useRef(false)
+  const workExpansionRangeRef = useRef(MIN_EXPANSION_RANGE_PX)
+  const workGapRafRef = useRef<number | null>(null)
+  const workGapPendingRef = useRef(0)
+
   // Resolved work scene: the work baseline merged with the active slide's
   // source, palette/background, and behavior overrides.
   const workDescriptor = useMemo(
@@ -210,13 +225,22 @@ export default function PortfolioExperience() {
     [workSlideIndex],
   )
 
-  // Mobile Work glyph stage: the measured viewport-relative rect the source
-  // target field is fitted into (null on desktop / outside Work mode = the
-  // canvas keeps the full-viewport treatment). Measured with a
-  // ResizeObserver on the stage (plus its layout wrapper, whose size shifts
-  // the stage's position) and window resize/orientationchange; values are
-  // rounded to whole CSS px so only real changes propagate.
+  // Work glyph stage: the active slide's hero-fit policy decides the canvas
+  // target region. 'viewport' (the Microsoft intro's wide wordmark) keeps
+  // MAIN's full-viewport sampling size — viewport-sized bounds centered on
+  // the stage's center — so the glyphs render at their original scale,
+  // shifted directionally up, with a slight intentional overlap behind the
+  // compact card. 'stage' passes the measured stage rectangle directly.
+  // 'balanced' (every project story) interpolates halfway between the two,
+  // centered on the stage: larger than stage fit, smaller than viewport fit.
+  // The stage rect itself always stays the gesture-dedication area (and
+  // never changes with card expansion, so expansion never morphs the
+  // canvas). Measured with a ResizeObserver on the stage (plus its layout
+  // wrapper, whose size shifts the stage's position) and window
+  // resize/orientationchange; values are rounded to whole CSS px so only
+  // real changes propagate.
   const glyphStageRef = useRef<HTMLDivElement | null>(null)
+  const workHeroFit = getWorkSlideHeroFit(getWorkSlide(workSlideIndex))
   const [workTargetRegion, setWorkTargetRegion] = useState<SceneTargetRegion | null>(null)
   useEffect(() => {
     if (displayed !== 'work') {
@@ -227,17 +251,43 @@ export default function PortfolioExperience() {
     if (!stage) return
     const measure = () => {
       const rect = stage.getBoundingClientRect()
-      const width = Math.round(rect.width)
-      const height = Math.round(rect.height)
-      const next: SceneTargetRegion | null =
-        width > 1 && height > 1
-          ? { x: Math.round(rect.left), y: Math.round(rect.top), width, height }
-          : null
+      const vw = window.visualViewport?.width ?? window.innerWidth
+      const vh = window.visualViewport?.height ?? window.innerHeight
+      if (rect.width <= 1 || rect.height <= 1) {
+        setWorkTargetRegion((prev) => (prev === null ? prev : null))
+        return
+      }
+      // Viewport-fit bounds: viewport-sized, centered on the stage center.
+      const viewportBounds = {
+        x: rect.left + rect.width / 2 - vw / 2,
+        y: rect.top + rect.height / 2 - vh / 2,
+        width: vw,
+        height: vh,
+      }
+      const stageBounds = { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
+      // 'balanced': halfway between stage and viewport bounds, component by
+      // component — both share the stage center, so the midpoint does too.
+      const balancedBounds = {
+        x: (stageBounds.x + viewportBounds.x) / 2,
+        y: (stageBounds.y + viewportBounds.y) / 2,
+        width: (stageBounds.width + viewportBounds.width) / 2,
+        height: (stageBounds.height + viewportBounds.height) / 2,
+      }
+      const raw =
+        workHeroFit === 'viewport'
+          ? viewportBounds
+          : workHeroFit === 'stage'
+            ? stageBounds
+            : balancedBounds
+      const next: SceneTargetRegion = {
+        x: Math.round(raw.x),
+        y: Math.round(raw.y),
+        width: Math.round(raw.width),
+        height: Math.round(raw.height),
+      }
       setWorkTargetRegion((prev) => {
-        if (prev === null && next === null) return prev
         if (
           prev !== null &&
-          next !== null &&
           prev.x === next.x &&
           prev.y === next.y &&
           prev.width === next.width &&
@@ -261,6 +311,143 @@ export default function PortfolioExperience() {
       observer?.disconnect()
       window.removeEventListener('resize', measure)
       window.removeEventListener('orientationchange', measure)
+    }
+    // transitionPhase: the entrance morph transforms the foreground without
+    // RESIZING the stage, so the initial measurement can be mid-flight —
+    // re-measure once the transition settles.
+  }, [displayed, workHeroFit, transitionPhase])
+
+  // Dev-only debug surface for scripts/dev/work-visual-smoke.js (?debug=true):
+  // the resolved hero fit and target region for the active slide.
+  useEffect(() => {
+    if (!tuningMode) return
+    ;(window as unknown as { __workHero?: unknown }).__workHero = {
+      fit: workHeroFit,
+      region: workTargetRegion,
+    }
+  }, [tuningMode, workHeroFit, workTargetRegion])
+
+  // Keep the gap-gesture mirror in sync with the controlled state (card-side
+  // commits from WorkExperience also move it).
+  useEffect(() => {
+    workExpansionProgressRef.current = workExpansionProgress
+  }, [workExpansionProgress])
+
+  // Leaving Work always returns the card to the compact state.
+  useEffect(() => {
+    if (displayed !== 'work') {
+      workExpansionProgressRef.current = 0
+      workOverflowEligibleRef.current = false
+      workExpansionRangeRef.current = MIN_EXPANSION_RANGE_PX
+      setWorkExpansionProgress(0)
+    }
+  }, [displayed])
+
+  // Gap gestures: wheel/trackpad or touch in the empty gap OUTSIDE the card
+  // scrubs the expansion progress against the same expansion range the card
+  // reports (compactCardTop - expandedCardTop) — but never inside the
+  // measured glyph region, which stays dedicated to canvas interaction. The
+  // gaps are pointer-transparent, so these gestures land on the canvas; the
+  // window listeners observe them without intercepting (all passive). The
+  // card's own viewport handles in-card gestures (WorkExperience). Upward gap
+  // input contracts only when the card content is at its top — gap gestures
+  // never scroll content. Non-overflowing slides ignore gap input entirely.
+  useEffect(() => {
+    if (displayed !== 'work') return
+    const commitGapProgress = (next: number) => {
+      const clamped = Math.min(1, Math.max(0, next))
+      if (clamped === workExpansionProgressRef.current) return
+      workExpansionProgressRef.current = clamped
+      workGapPendingRef.current = clamped
+      if (workGapRafRef.current === null) {
+        workGapRafRef.current = requestAnimationFrame(() => {
+          workGapRafRef.current = null
+          setWorkExpansionProgress(workGapPendingRef.current)
+        })
+      }
+    }
+    const gapRangePx = () => Math.max(workExpansionRangeRef.current, MIN_EXPANSION_RANGE_PX)
+    const contentScrolled = () => {
+      const viewport = document.querySelector('.work-experience-viewport')
+      return !!viewport && viewport.scrollTop > 1
+    }
+    const applyGapDelta = (deltaPx: number) => {
+      if (!workOverflowEligibleRef.current || deltaPx === 0) return
+      if (deltaPx < 0 && contentScrolled()) return
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      if (reduced) {
+        commitGapProgress(deltaPx > 0 ? 1 : 0)
+        return
+      }
+      commitGapProgress(workExpansionProgressRef.current + deltaPx / gapRangePx())
+    }
+    const isInCard = (target: EventTarget | null) =>
+      target instanceof Element &&
+      !!(target.closest('.work-experience') || target.closest('.work-lightbox'))
+    const isInGlyphRegion = (x: number, y: number) => {
+      const rect = glyphStageRef.current?.getBoundingClientRect()
+      return (
+        !!rect &&
+        rect.width > 1 &&
+        rect.height > 1 &&
+        x >= rect.left &&
+        x <= rect.right &&
+        y >= rect.top &&
+        y <= rect.bottom
+      )
+    }
+    const handleWheel = (event: globalThis.WheelEvent) => {
+      if (isInCard(event.target)) return
+      if (isInGlyphRegion(event.clientX, event.clientY)) return
+      applyGapDelta(event.deltaY)
+    }
+    // Gesture dedication is decided where the touch BEGINS: a swipe that
+    // starts in the glyph region never scrubs the card, even if it travels
+    // over the gap. Like the card, gap touch progress is ABSOLUTE — computed
+    // from the gesture's starting Y and starting progress.
+    let touch: { startY: number; startProgress: number; allowed: boolean } | null = null
+    const handleTouchStart = (event: globalThis.TouchEvent) => {
+      const point = event.touches[0]
+      if (!point) {
+        touch = null
+        return
+      }
+      touch = {
+        startY: point.clientY,
+        startProgress: workExpansionProgressRef.current,
+        allowed: !isInCard(event.target) && !isInGlyphRegion(point.clientX, point.clientY),
+      }
+    }
+    const handleTouchMove = (event: globalThis.TouchEvent) => {
+      if (!touch?.allowed) return
+      const point = event.touches[0]
+      if (!point) return
+      const dy = touch.startY - point.clientY
+      if (!workOverflowEligibleRef.current) return
+      if (dy < 0 && contentScrolled()) return
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      if (reduced) {
+        commitGapProgress(dy > 0 ? 1 : 0)
+        return
+      }
+      commitGapProgress(touch.startProgress + dy / gapRangePx())
+    }
+    const handleTouchEnd = () => {
+      touch = null
+    }
+    window.addEventListener('wheel', handleWheel, { passive: true })
+    window.addEventListener('touchstart', handleTouchStart, { passive: true })
+    window.addEventListener('touchmove', handleTouchMove, { passive: true })
+    window.addEventListener('touchend', handleTouchEnd)
+    window.addEventListener('touchcancel', handleTouchEnd)
+    return () => {
+      window.removeEventListener('wheel', handleWheel)
+      window.removeEventListener('touchstart', handleTouchStart)
+      window.removeEventListener('touchmove', handleTouchMove)
+      window.removeEventListener('touchend', handleTouchEnd)
+      window.removeEventListener('touchcancel', handleTouchEnd)
+      if (workGapRafRef.current !== null) cancelAnimationFrame(workGapRafRef.current)
+      workGapRafRef.current = null
     }
   }, [displayed])
 
@@ -342,17 +529,6 @@ export default function PortfolioExperience() {
 
   useEffect(() => {
     setTuningMode(isTuningMode())
-  }, [])
-
-  // Current viewport width (resize-listened; updates on resize only, never
-  // per frame). Drives the landing source choice: the JH logotype on
-  // desktop, the built-in monogram on mobile viewports.
-  const [viewportWidth, setViewportWidth] = useState(0)
-  useEffect(() => {
-    const updateViewportWidth = () => setViewportWidth(window.innerWidth)
-    updateViewportWidth()
-    window.addEventListener('resize', updateViewportWidth)
-    return () => window.removeEventListener('resize', updateViewportWidth)
   }, [])
 
   // Editable working copies of authored configuration. The intro sequence
@@ -1553,18 +1729,17 @@ export default function PortfolioExperience() {
     if (displayed !== 'vibe') setVibeControlsOpen(false)
   }, [displayed])
 
-  // The scene's source selection: the landing samples the JH logotype
-  // (LANDING_SOURCE_URL, falling back to the built-in monogram on decode
-  // failure) on desktop viewports and the built-in JH monogram on mobile;
-  // work/collaborate sample their resolved static SVGs; vibe samples the
-  // uploaded image or the built-in monogram. (The animated Black-hole
-  // provider is retained in engine/animatedSource.ts but is not a
-  // selectable production option — nothing here can construct it.)
+  // The scene's source selection: the landing is ALWAYS the responsive
+  // landing variant — SceneCanvas resolves logotype (desktop) vs monogram
+  // (mobile) at build time from its own measured canvas width, so a cold
+  // mobile load never briefly builds the desktop source. Work/collaborate
+  // sample their resolved static SVGs; vibe samples the uploaded image or
+  // the built-in monogram. (The animated Black-hole provider is retained in
+  // engine/animatedSource.ts but is not a selectable production option —
+  // nothing here can construct it.)
   const sceneSource = useMemo<SceneSourceSelection>(() => {
     if (displayed === 'intro') {
-      return isMobileViewport(viewportWidth)
-        ? { kind: 'builtin' }
-        : { kind: 'static', url: LANDING_SOURCE_URL, sourceKind: 'svg' }
+      return { kind: 'responsive-landing' }
     }
     if (displayed === 'work') {
       if (!workDescriptor.sourceUrl) return { kind: 'builtin' }
@@ -1591,7 +1766,7 @@ export default function PortfolioExperience() {
       return { kind: 'static', url: uploadedSource.url, sourceKind: uploadedSource.kind }
     }
     return { kind: 'builtin' }
-  }, [displayed, viewportWidth, workDescriptor, collaborateDescriptor, uploadedSource, workSlideIndex, theme])
+  }, [displayed, workDescriptor, collaborateDescriptor, uploadedSource, workSlideIndex, theme])
 
   // The landing runs on the themed canvas gradient (engine/theme) with the
   // seasonal atmosphere adopted as soon as it resolves; the work/collaborate
@@ -1706,11 +1881,14 @@ export default function PortfolioExperience() {
               </>
             ) : displayed === 'work' ? (
               <div className="work-layout">
-                {/* Glyph stage: on mobile the Work glyph field is region-bound
-                    to this measured rect (above/beside the panel) instead of
-                    rendering behind it. Empty and pointer-transparent — the
-                    fixed canvas beneath stays interactive. Desktop hides it
-                    (display:none) and keeps the full-scene treatment. */}
+                {/* Glyph stage: its measured rect positions the hero (fit per
+                    the active slide's hero policy — 'viewport' samples at
+                    full-viewport size centered on the stage, 'stage' is
+                    contained inside the stage bounds) and marks the
+                    canvas-dedicated gesture area. Empty and
+                    pointer-transparent — the fixed canvas beneath stays
+                    interactive. Its geometry does not change when the card
+                    expands, so expansion never morphs the canvas. */}
                 <div className="work-glyph-stage" aria-hidden="true" ref={glyphStageRef} />
                 <WorkExperience
                   slides={WORK_SLIDES}
@@ -1719,6 +1897,12 @@ export default function PortfolioExperience() {
                   headingRef={modeHeadingRef}
                   titleBase={BASE_DOCUMENT_TITLE}
                   modeTitle={EXPERIENCE_SCENES.work.copy.documentTitle}
+                  expansionProgress={workExpansionProgress}
+                  onExpansionProgressChange={setWorkExpansionProgress}
+                  onExpansionMetricsChange={(metrics) => {
+                    workOverflowEligibleRef.current = metrics.eligible
+                    workExpansionRangeRef.current = metrics.rangePx
+                  }}
                   onTrackEvent={trackEvent}
                 />
               </div>

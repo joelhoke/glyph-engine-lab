@@ -2146,9 +2146,23 @@ function SceneCanvasInternal(
 
     // Static selections never keep the animated provider alive.
     stopAnimatedProvider()
-    const activeUrl = selection.kind === 'static' ? selection.url : '/assets/test-source.svg'
+    // Responsive landing: resolve logotype vs monogram HERE, from the canvas
+    // width measured by the resize path (never from a parent's not-yet-set
+    // viewport state) — cold mobile loads build the monogram directly, and
+    // every resize-triggered rebuild re-resolves against current geometry.
+    const activeUrl =
+      selection.kind === 'static'
+        ? selection.url
+        : selection.kind === 'responsive-landing' && !isMobileViewport(W)
+          ? LANDING_SOURCE_URL
+          : '/assets/test-source.svg'
     const activeKind = selection.kind === 'static' ? selection.sourceKind : 'svg'
-    const sourceId = selection.kind === 'static' ? selection.url : 'default'
+    const sourceId =
+      selection.kind === 'static'
+        ? selection.url
+        : selection.kind === 'responsive-landing'
+          ? activeUrl
+          : 'default'
     patchDiagnostics({
       sourceStatus: 'loading',
       sourceError: null,
@@ -2196,6 +2210,7 @@ function SceneCanvasInternal(
       const isLandingField =
         experienceRef.current === 'intro' &&
         (selection.kind === 'builtin' ||
+          selection.kind === 'responsive-landing' ||
           (selection.kind === 'static' && selection.url === LANDING_SOURCE_URL))
       if (isLandingField) {
         const landingGradient = LANDING_GLYPH_GRADIENT_THEMES[themeRef.current]
@@ -2215,8 +2230,19 @@ function SceneCanvasInternal(
       })
     } else {
       // Missing, invalid, or zero-alpha source: fall back to the logo field
-      // so the scene stays readable instead of going blank.
+      // so the scene stays readable instead of going blank. On the landing
+      // the fallback gets the same gradient recolor as a decoded hero — a
+      // fallback must never render as unprocessed white glyphs.
       const fallback = buildLogoTargets()
+      if (experienceRef.current === 'intro') {
+        const landingGradient = LANDING_GLYPH_GRADIENT_THEMES[themeRef.current]
+        applyHorizontalGlyphGradient(
+          fallback.colors,
+          fallback.normX,
+          landingGradient.from,
+          landingGradient.to,
+        )
+      }
       setBaseField(fallback.x, fallback.y, fallback.colors, fallback.normX, fallback.normY)
       patchDiagnostics({
         sourceStatus: 'error',
@@ -2976,9 +3002,29 @@ function SceneCanvasInternal(
     ctxRef.current = ctx
 
     // Observe the canvas container instead of the window so the scene tracks
-    // its actual layout box; resize handling is debounced.
+    // its actual layout box; resize handling is debounced. Orientation
+    // changes and mobile browser-chrome expansion/contraction ALSO trigger a
+    // rebuild from current canvas dimensions — the container observer alone
+    // can miss the momentary viewport states iOS Safari produces.
     const container = canvas.parentElement
     let resizeObserver: ResizeObserver | null = null
+    const scheduleResizeScene = () => {
+      if (resizeTimeoutRef.current !== null) {
+        window.clearTimeout(resizeTimeoutRef.current)
+      }
+      resizeTimeoutRef.current = window.setTimeout(() => {
+        resizeTimeoutRef.current = null
+        resizeScene()
+      }, RESIZE_DEBOUNCE_MS)
+    }
+    const handleViewportChange = () => {
+      if (!container) return
+      viewportSizeRef.current = {
+        width: Math.round(container.clientWidth),
+        height: Math.round(container.clientHeight),
+      }
+      scheduleResizeScene()
+    }
     if (container && typeof ResizeObserver !== 'undefined') {
       viewportSizeRef.current = {
         width: Math.round(container.clientWidth),
@@ -2992,16 +3038,12 @@ function SceneCanvasInternal(
         const prev = viewportSizeRef.current
         if (prev.width === width && prev.height === height) return
         viewportSizeRef.current = { width, height }
-        if (resizeTimeoutRef.current !== null) {
-          window.clearTimeout(resizeTimeoutRef.current)
-        }
-        resizeTimeoutRef.current = window.setTimeout(() => {
-          resizeTimeoutRef.current = null
-          resizeScene()
-        }, RESIZE_DEBOUNCE_MS)
+        scheduleResizeScene()
       })
       resizeObserver.observe(container)
     }
+    window.addEventListener('orientationchange', handleViewportChange)
+    window.visualViewport?.addEventListener('resize', handleViewportChange)
 
     resizeScene()
 
@@ -3038,6 +3080,8 @@ function SceneCanvasInternal(
 
     return () => {
       if (resizeObserver) resizeObserver.disconnect()
+      window.removeEventListener('orientationchange', handleViewportChange)
+      window.visualViewport?.removeEventListener('resize', handleViewportChange)
       if (resizeTimeoutRef.current !== null) {
         window.clearTimeout(resizeTimeoutRef.current)
         resizeTimeoutRef.current = null

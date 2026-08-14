@@ -20,6 +20,22 @@
  * 6. The retired building-orchestrator-live-campus asset path is referenced
  *    nowhere, and the work sceneSource threads the descriptor's sourceKind
  *    (raster heroes) instead of hardcoding 'svg'.
+ * 7. Scroll-scrubbed expansion (feature/work-expanding-case-study):
+ *    PortfolioExperience owns the numeric expansion progress (0..1), scrubs
+ *    it from gap gestures outside the card/glyph region (gated on the
+ *    reported expansion metrics), and resets on mode leave; WorkExperience
+ *    runs the scroll-delta machine (the card's expansion travel = full scrub,
+ *    absolute start-Y touch mapping, pinned scrollTop below 1,
+ *    boundary-crossing delta preservation, reduced-motion snap) with the
+ *    controls in a non-scrolling BoundedScrollPanel footer; WorkStory always
+ *    renders details, dedupes inline media out of the gallery, and renders
+ *    Related links last; globals.css carries the compact geometry, grid
+ *    rows, and --work-expansion consumers. The per-slide hero-fit policy
+ *    ('viewport' for the Microsoft intro, 'stage' for project stories)
+ *    decides the canvas target region.
+ * 8. The responsive-landing source variant: SceneCanvas resolves the
+ *    landing hero from its own measured canvas width, and the landing
+ *    gradient covers both decoded and fallback fields.
  */
 
 const { execSync } = require('child_process')
@@ -53,6 +69,15 @@ const workContentSource = fs.readFileSync(
   path.join(projectRoot, 'content', 'work.ts'),
   'utf8',
 )
+const boundedPanelSource = fs.readFileSync(
+  path.join(projectRoot, 'components', 'BoundedScrollPanel.tsx'),
+  'utf8',
+)
+const workStorySource = fs.readFileSync(
+  path.join(projectRoot, 'components', 'work', 'WorkStory.tsx'),
+  'utf8',
+)
+const globalsCss = fs.readFileSync(path.join(projectRoot, 'app', 'globals.css'), 'utf8')
 
 let failures = 0
 
@@ -207,6 +232,326 @@ for (const [label, source] of [
 assert(
   /sourceKind:\s*workDescriptor\.sourceKind \?\? 'svg'/.test(portfolioSource),
   "the work sceneSource threads the descriptor's sourceKind (raster heroes reach SceneCanvas)",
+)
+
+// --- 7. controlled expansion progress (PortfolioExperience) -----------------
+
+assert(
+  portfolioSource.includes('const [workExpansionProgress, setWorkExpansionProgress] = useState(0)'),
+  'PortfolioExperience owns the controlled expansion progress (numeric 0..1)',
+)
+assert(
+  portfolioSource.includes('expansionProgress={workExpansionProgress}') &&
+    portfolioSource.includes('onExpansionProgressChange={setWorkExpansionProgress}'),
+  'PortfolioExperience passes expansionProgress + onExpansionProgressChange into WorkExperience',
+)
+assert(
+  portfolioSource.includes('onExpansionMetricsChange'),
+  'WorkExperience reports expansion metrics up (gap gestures are gated on them)',
+)
+assert(
+  portfolioSource.includes('workOverflowEligibleRef.current = metrics.eligible'),
+  'gap gestures cannot modify progress for a non-scrollable slide',
+)
+assert(
+  portfolioSource.includes('workExpansionRangeRef.current = metrics.rangePx'),
+  'the reported expansion range is cached for gap gestures (same mapping as the card)',
+)
+assert(
+  portfolioSource.includes('className="work-glyph-stage"') &&
+    portfolioSource.includes('ref={glyphStageRef}'),
+  'the glyph stage renders (desktop and mobile) with its measuring ref',
+)
+assert(
+  portfolioSource.includes("window.addEventListener('wheel'"),
+  'gap wheel gestures are observed at the window level (gaps are pointer-transparent)',
+)
+assert(
+  portfolioSource.includes('isInGlyphRegion') &&
+    portfolioSource.includes('glyphStageRef.current?.getBoundingClientRect()'),
+  'gap gestures are checked against the measured glyph region (glyph stays canvas-dedicated)',
+)
+assert(
+  portfolioSource.includes("target.closest('.work-experience')"),
+  'gap gestures ignore gestures inside the card (the card handles its own)',
+)
+assert(
+  portfolioSource.includes('setWorkExpansionProgress(0)'),
+  'leaving Work resets the expansion progress to compact',
+)
+assert(
+  portfolioSource.includes('deltaPx / gapRangePx()'),
+  'gap wheel input accumulates against the reported expansion range',
+)
+assert(
+  portfolioSource.includes('touch.startProgress + dy / gapRangePx()'),
+  'gap touch progress is computed from the gesture start Y and start progress',
+)
+
+// --- 7b. per-slide hero fit (PortfolioExperience + content/work) ------------
+
+assert(
+  workContentSource.includes(
+    "export type WorkHeroFit = 'viewport' | 'stage' | 'balanced'",
+  ) && workContentSource.includes('getWorkSlideHeroFit'),
+  'content/work.ts declares the Work hero-fit policy (including balanced) and resolver',
+)
+assert(
+  workContentSource.includes("heroFit: 'viewport'"),
+  'the Microsoft intro explicitly opts into the viewport hero fit',
+)
+assert(
+  /slide\.kind === 'intro' \? \(slide\.heroFit \?\? 'balanced'\) : 'balanced'/.test(
+    workContentSource,
+  ),
+  "project stories always use 'balanced' fit (future case studies never inherit 'viewport')",
+)
+assert(
+  portfolioSource.includes('getWorkSlideHeroFit(getWorkSlide(workSlideIndex))') &&
+    portfolioSource.includes("workHeroFit === 'viewport'"),
+  'PortfolioExperience resolves the active slide hero fit and branches the target region on it',
+)
+assert(
+  /x:\s*rect\.left \+ rect\.width \/ 2 - vw \/ 2/.test(portfolioSource),
+  "'viewport' fit keeps viewport-sized sampling bounds centered on the glyph stage",
+)
+assert(
+  portfolioSource.includes(
+    'const stageBounds = { x: rect.left, y: rect.top, width: rect.width, height: rect.height }',
+  ),
+  "'stage' fit passes the measured stage rectangle directly to SceneCanvas",
+)
+assert(
+  /width:\s*\(stageBounds\.width \+ viewportBounds\.width\) \/ 2/.test(portfolioSource) &&
+    /height:\s*\(stageBounds\.height \+ viewportBounds\.height\) \/ 2/.test(portfolioSource),
+  "'balanced' fit interpolates halfway between stage and viewport bounds",
+)
+
+// --- 8. WorkExperience: the scroll-scrub machine ----------------------------
+
+assert(
+  workExperienceSource.includes('expansionProgress: number') &&
+    workExperienceSource.includes('onExpansionProgressChange: (progress: number) => void'),
+  'WorkExperience receives the controlled numeric expansion progress',
+)
+assert(
+  workExperienceSource.includes('onExpansionMetricsChange?: (metrics: WorkExpansionMetrics) => void') &&
+    workExperienceSource.includes('eligible: boolean') &&
+    workExperienceSource.includes('rangePx: number'),
+  'WorkExperience reports { eligible, rangePx } expansion metrics',
+)
+assert(
+  workExperienceSource.includes('MIN_EXPANSION_RANGE_PX') &&
+    workExperienceSource.includes('rect.top - expandedRect().top'),
+  'the scrub denominator is the card expansion travel (compactCardTop - expandedCardTop), clamped positive',
+)
+assert(
+  workExperienceSource.includes('MOBILE_SCRUB_RANGE_FACTOR = 0.48') &&
+    workExperienceSource.includes('travel * (mobile ? MOBILE_SCRUB_RANGE_FACTOR : 1)'),
+  'mobile shortens the scrub distance to 48% of the expansion travel (desktop unchanged)',
+)
+assert(
+  workExperienceSource.includes("querySelector('.work-story-section')") &&
+    workExperienceSource.includes('card.style.maxHeight'),
+  'the compact card clips below the meta so Outcome starts at/below the fold',
+)
+assert(
+  workExperienceSource.includes('touch.startProgress + dy / range') &&
+    workExperienceSource.includes('startProgress: progressRef.current'),
+  'touch progress is computed from the gesture start Y and start progress (reversal-safe)',
+)
+assert(
+  workExperienceSource.includes("touch.mode = 'scrub'") &&
+    workExperienceSource.includes('touch.startY = y'),
+  'an upward native content scroll that reaches the top rebases into scrub mode',
+)
+assert(
+  workExperienceSource.includes('requestAnimationFrame'),
+  'progress commits are coalesced through requestAnimationFrame',
+)
+assert(
+  workExperienceSource.includes("addEventListener('wheel', handleWheel, { passive: false })") &&
+    workExperienceSource.includes("addEventListener('touchmove', handleTouchMove, { passive: false })"),
+  'wheel/touchmove listeners are non-passive (iOS cannot scroll while the gesture drives expansion)',
+)
+assert(
+  workExperienceSource.includes('viewport.scrollTop = 0') &&
+    workExperienceSource.includes('viewport.scrollTop = excess'),
+  'scrollTop stays pinned at 0 below full expansion; unused delta scrolls content at 1',
+)
+assert(
+  workExperienceSource.includes('scrollTop - up <= TOP_EPSILON'),
+  'upward input crossing the top boundary preserves the unused delta for contraction',
+)
+assert(
+  workExperienceSource.includes('OVERFLOW_TOLERANCE_PX') &&
+    workExperienceSource.includes('measureCompact') &&
+    workExperienceSource.includes('content.scrollHeight'),
+  'overflow eligibility is measured from the compact content wrapper vs the compact viewport',
+)
+assert(
+  workExperienceSource.includes('if (!viewport || !content || progressRef.current > 0) return'),
+  'eligibility is cached from compact geometry (mid-transition changes never disable it)',
+)
+assert(
+  workExperienceSource.includes('document.fonts?.ready') &&
+    workExperienceSource.includes("addEventListener('orientationchange'"),
+  'eligibility recalculates on font readiness, resize, and orientation changes',
+)
+assert(
+  workExperienceSource.includes('(prefers-reduced-motion: reduce)'),
+  'reduced motion snaps between compact and expanded instead of scrubbing',
+)
+assert(
+  workExperienceSource.includes('Math.min(960, vw - 64)'),
+  'desktop expanded width interpolates to min(60rem, 100vw - 4rem)',
+)
+assert(
+  workExperienceSource.includes("card.style.position = 'fixed'") &&
+    workExperienceSource.includes("card.style.setProperty('--work-expansion'"),
+  'the scrub interpolates measured compact → expanded rect inline and exposes --work-expansion',
+)
+assert(
+  workExperienceSource.includes('progressChangeRef.current(0)'),
+  'slide changes reset progress (with scrollTop, title, and preventScroll focus)',
+)
+assert(
+  workExperienceSource.includes('footer={') &&
+    workExperienceSource.indexOf('footer={') < workExperienceSource.indexOf('work-controls'),
+  'the prev/next controls live in the non-scrolling panel footer',
+)
+
+// --- 9. BoundedScrollPanel: footer + viewport callbacks ---------------------
+
+assert(
+  boundedPanelSource.includes('footer?: ReactNode') &&
+    boundedPanelSource.includes('bounded-scroll-footer'),
+  'BoundedScrollPanel supports an optional non-scrolling footer',
+)
+assert(
+  boundedPanelSource.includes('onViewportScroll?:') &&
+    boundedPanelSource.includes('onViewportWheel?:') &&
+    boundedPanelSource.includes('onViewportTouchStart?:') &&
+    boundedPanelSource.includes('onViewportTouchMove?:'),
+  'BoundedScrollPanel exposes optional viewport scroll/input callbacks',
+)
+assert(
+  boundedPanelSource.includes('{footer && <div className="bounded-scroll-footer">{footer}</div>}'),
+  'the footer renders only when provided (Collaborate is unchanged)',
+)
+
+// --- 10. WorkStory: always-rendered details, dedupe, Related links ----------
+
+assert(
+  !workStorySource.includes('work-story-disclosure') &&
+    !workStorySource.includes('Read the case study') &&
+    !workStorySource.includes('aria-expanded'),
+  'the Read/Close disclosure is gone — details render immediately',
+)
+assert(
+  workStorySource.includes('inlineIds') && workStorySource.includes('galleryMedia'),
+  'inline media (mediaIds) is deduplicated out of the gallery',
+)
+assert(
+  workStorySource.includes('work-inline-media-button'),
+  'inline images open the existing lightbox',
+)
+assert(
+  workStorySource.includes('Related links') &&
+    workStorySource.indexOf('work-story-related') > workStorySource.indexOf('work-gallery'),
+  'Related links render after the narrative and gallery (final story content)',
+)
+assert(
+  workStorySource.includes('trackOutbound'),
+  'outbound analytics on related links are preserved',
+)
+
+// --- 11. layout CSS: compact hero, scrubbed expansion, fixed footer ---------
+
+assert(
+  globalsCss.includes('grid-template-rows: minmax(0, 1fr) auto'),
+  'the Work card is grid rows minmax(0, 1fr) auto: viewport scrolls, footer pinned',
+)
+assert(
+  globalsCss.includes('width: min(60rem, calc(100vw - 4rem))'),
+  'the desktop compact card rests at the expanded width/position (expansion interpolates top+height only)',
+)
+assert(
+  /@media \(max-width: 760px\) \{[\s\S]*?\.work-experience \{\s*width: 100%;/.test(globalsCss),
+  'mobile keeps the available-width compact card (width-to-full-width interpolation preserved)',
+)
+assert(
+  globalsCss.includes('--work-expansion'),
+  'globals.css consumes the scrubbed --work-expansion custom property',
+)
+assert(
+  globalsCss.includes('calc(100% - 60% * var(--work-expansion, 0))'),
+  'desktop inline images scrub toward 40% of the content width',
+)
+assert(
+  !globalsCss.includes('.work-experience--expanded'),
+  'the binary expanded class is gone (geometry is scrubbed inline, no CSS transition)',
+)
+const workCardBlock = globalsCss.slice(
+  globalsCss.indexOf('.work-experience {'),
+  globalsCss.indexOf('}', globalsCss.indexOf('.work-experience {')),
+)
+assert(
+  !workCardBlock.includes('transition'),
+  'no CSS transition on the card — input scrubs geometry without easing or snapping',
+)
+assert(
+  globalsCss.includes('.bounded-scroll-footer') &&
+    globalsCss.includes('env(safe-area-inset-bottom, 0px)'),
+  'the non-scrolling footer is styled and carries the bottom safe-area inset',
+)
+const glyphStageBlock = globalsCss.slice(
+  globalsCss.indexOf('.work-glyph-stage {'),
+  globalsCss.indexOf('}', globalsCss.indexOf('.work-glyph-stage {')),
+)
+assert(
+  glyphStageBlock.length > 0 && !glyphStageBlock.includes('display: none'),
+  'the glyph stage is shown (never display:none) so it can be measured on desktop and mobile',
+)
+assert(
+  globalsCss.includes('prefers-reduced-motion'),
+  'reduced-motion behavior is preserved',
+)
+
+// --- 12. responsive landing source (mobile landing race) --------------------
+
+const sceneCanvasSource = fs.readFileSync(
+  path.join(projectRoot, 'components', 'SceneCanvas.tsx'),
+  'utf8',
+)
+const animatedSourceTypes = fs.readFileSync(
+  path.join(projectRoot, 'engine', 'animatedSource.ts'),
+  'utf8',
+)
+assert(
+  animatedSourceTypes.includes("| { kind: 'responsive-landing' }"),
+  'SceneSourceSelection carries the stable responsive-landing variant',
+)
+assert(
+  portfolioSource.includes("return { kind: 'responsive-landing' }"),
+  'PortfolioExperience passes the responsive landing source on every landing render',
+)
+assert(
+  !portfolioSource.includes('viewportWidth'),
+  "the parent's effect-driven viewport-width source switch is gone",
+)
+assert(
+  sceneCanvasSource.includes("selection.kind === 'responsive-landing' && !isMobileViewport(W)"),
+  'SceneCanvas resolves logotype vs monogram at build time from its measured canvas width',
+)
+assert(
+  sceneCanvasSource.includes("window.addEventListener('orientationchange', handleViewportChange)") &&
+    sceneCanvasSource.includes("window.visualViewport?.addEventListener('resize', handleViewportChange)"),
+  'orientation changes and mobile browser-chrome viewport changes rebuild the field',
+)
+assert(
+  (sceneCanvasSource.match(/applyHorizontalGlyphGradient\(/g) ?? []).length >= 2,
+  'the landing gradient applies to both the decoded hero AND the fallback field (never raw white glyphs)',
 )
 
 if (failures > 0) {

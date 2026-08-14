@@ -922,7 +922,9 @@ async function scenarioTouch(browser) {
     )
   }
 
-  // Work: a touch drag on the card scrolls the panel, never the canvas.
+  // Work: a touch drag on the card scrubs the expansion first (content stays
+  // pinned at scrollTop 0), and only scrolls the panel once the card is fully
+  // expanded — never the canvas.
   await page.evaluate(() => {
     window.location.hash = '#work'
   })
@@ -936,27 +938,51 @@ async function scenarioTouch(browser) {
     return { x: r.left + r.width / 2, y: r.top + r.height / 2, overflow: v.scrollHeight > v.clientHeight + 4 }
   })
   if (scrollInfo) {
+    const readScrub = () =>
+      page.evaluate(() => {
+        const card = document.querySelector('.work-experience')
+        const v = document.querySelector('.work-experience-viewport')
+        return {
+          progress: parseFloat(getComputedStyle(card).getPropertyValue('--work-expansion')) || 0,
+          scrollTop: v?.scrollTop ?? -1,
+        }
+      })
+    const dragUp = (distance) => {
+      const steps = 6
+      const pts = []
+      for (let i = 0; i <= steps; i += 1) {
+        pts.push([scrollInfo.x, scrollInfo.y + 120 - ((120 + distance) * i) / steps])
+      }
+      return touchDrag(page, pts, { holdMs: 70 })
+    }
     const before = await impulseCount(page)
-    await touchDrag(
-      page,
-      [
-        [scrollInfo.x, scrollInfo.y + 120],
-        [scrollInfo.x, scrollInfo.y + 80],
-        [scrollInfo.x, scrollInfo.y + 40],
-        [scrollInfo.x, scrollInfo.y],
-        [scrollInfo.x, scrollInfo.y - 50],
-        [scrollInfo.x, scrollInfo.y - 100],
-      ],
-      { holdMs: 110 },
+    // Phase 1: a partial upward drag scrubs expansion; content must not scroll.
+    await dragUp(100)
+    await sleep(400)
+    let scrub = await readScrub()
+    check(
+      'touch drag scrubs Work expansion before content scrolls',
+      scrub.progress > 0.05 && scrub.progress < 1 && scrub.scrollTop <= 1,
+      JSON.stringify(scrub),
     )
+    // Phase 2: once a full viewport height has been dragged, the card is
+    // expanded and further drags scroll the panel.
+    for (let i = 0; i < 8 && scrub.progress < 1; i += 1) {
+      await dragUp(220)
+      await sleep(250)
+      scrub = await readScrub()
+    }
+    if (scrub.progress === 1) await dragUp(150)
     await sleep(600)
+    scrub = await readScrub()
     const after = await impulseCount(page)
-    const scrollTop = await page.evaluate(
-      () => document.querySelector('.work-experience-viewport')?.scrollTop ?? -1,
-    )
     check('touch drag on the Work panel fires no canvas impulse', before === after)
     if (scrollInfo.overflow) {
-      check('touch drag scrolls the Work panel', scrollTop > 0, `scrollTop ${scrollTop}`)
+      check(
+        'touch drag scrolls the Work panel once fully expanded',
+        scrub.progress === 1 && scrub.scrollTop > 0,
+        JSON.stringify(scrub),
+      )
     }
   }
 
