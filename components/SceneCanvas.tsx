@@ -920,7 +920,11 @@ function SceneCanvasInternal(
     const ctx = ctxRef.current
     if (!ctx) return
     const text = getActiveText()
-    sourceCharsRef.current = Array.from(text)
+    // Never touch sourceCharsRef here: it is owned by the playground-config
+    // effect (the scene's glyph text). This builder runs inside resizeScene,
+    // and clobbering the chars with the paragraph default made source scenes
+    // render the fallback quote after any region/resize rebuild. Paragraph
+    // mode draws its own per-target chars, so it does not need the write.
     preparedTextRef.current = prepareWithSegments(text, fontRef.current)
     paragraphTargetsRef.current = []
     ctx.font = fontRef.current

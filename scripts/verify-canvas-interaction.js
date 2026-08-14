@@ -955,9 +955,29 @@ async function scenarioTouch(browser) {
       }
       return touchDrag(page, pts, { holdMs: 70 })
     }
+    // Measure the live scrub range exactly like the app does (expansion
+    // travel × mobile factor, clamped) so a "partial" drag stays partial no
+    // matter how the range factor or fold geometry evolves.
+    const rangePx = await page.evaluate(() => {
+      const card = document.querySelector('.work-experience')
+      if (!card) return 0
+      const mobile = window.matchMedia('(max-width: 760px)').matches
+      const expandedTop = mobile ? 0 : 64
+      const travel = card.getBoundingClientRect().top - expandedTop
+      return Math.max(travel * (mobile ? 0.48 : 1), 96)
+    })
+    const dragUpTotal = (total) => {
+      const steps = 6
+      const pts = []
+      for (let i = 0; i <= steps; i += 1) {
+        pts.push([scrollInfo.x, scrollInfo.y - (total * i) / steps])
+      }
+      return touchDrag(page, pts, { holdMs: 70 })
+    }
     const before = await impulseCount(page)
-    // Phase 1: a partial upward drag scrubs expansion; content must not scroll.
-    await dragUp(100)
+    // Phase 1: a partial upward drag (~40% of the range) scrubs expansion;
+    // content must not scroll.
+    await dragUpTotal(Math.max(40, Math.round(rangePx * 0.4)))
     await sleep(400)
     let scrub = await readScrub()
     check(
