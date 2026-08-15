@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, KeyboardEvent, RefObject, useEffect, useId, useRef, useState } from 'react'
+import { FormEvent, KeyboardEvent, MouseEvent, RefObject, useEffect, useId, useRef, useState } from 'react'
 import { BorderBeam } from 'border-beam'
 import {
   COLLABORATE_GUIDE_ANSWERED_ANNOUNCEMENT,
@@ -9,11 +9,12 @@ import {
   COLLABORATE_GUIDE_COMPOSER_PLACEHOLDER,
   COLLABORATE_GUIDE_CONTACT,
   COLLABORATE_GUIDE_NAME,
+  COLLABORATE_GUIDE_OPEN_FULL_LABEL,
   COLLABORATE_GUIDE_PENDING_HEADING,
   COLLABORATE_GUIDE_SEND_LABEL,
   COLLABORATE_GUIDE_VISITOR_LABEL,
 } from '../../content/collaborate'
-import { BackArrowIcon, LinkIcon, SendIcon } from '../icons'
+import { BackArrowIcon, CondenseIcon, ExpandIcon, LinkIcon, MinimizeIcon, SendIcon } from '../icons'
 import GuideShareFlow from './GuideShareFlow'
 import {
   GUIDE_MAX_MESSAGE_CHARS,
@@ -22,6 +23,7 @@ import {
   isGuideLimitReached,
   latestAssistantTurn,
 } from './guideConversation'
+import { isUnmodifiedPrimaryClick, resolveGuideSourceTarget } from './guideNavigation'
 
 /** The composer's auto-grow ceiling (px) — bounded so long drafts never push
  *  the rail/transcript out of reach. */
@@ -38,7 +40,21 @@ type ChatShellProps = {
   onRetry: () => void
   onDraftChange: (draft: string) => void
   onShare: (replyEmail: string) => void
-  onBack: () => void
+  /** Page variant only: back to the collaborate landing. */
+  onBack?: () => void
+  /** Where the shell is presented: the full chat page, the docked desktop
+   *  companion, or the narrow-viewport modal overlay. Defaults to 'page'. */
+  variant?: 'page' | 'companion' | 'modal'
+  /** Upper-right presentation control: pop out (page, wide), or minimize
+   *  (page narrow / companion / modal). The owner provides the label because
+   *  it knows the viewport. */
+  onMinimize?: () => void
+  minimizeLabel?: string
+  /** Companion-only control: open the full conversation page. */
+  onExpand?: () => void
+  /** Intentional internal Work source navigation (story id already validated
+   *  against the slide list). Absent = source links keep plain anchor behavior. */
+  onSourceNavigate?: (storyId: string) => void
 }
 
 function formatTurnTime(at: number): string {
@@ -47,16 +63,37 @@ function formatTurnTime(at: number): string {
   )
 }
 
-function SourceChips({ turn }: { turn: GuideAssistantTurn }) {
+function SourceChips({
+  turn,
+  onSourceNavigate,
+}: {
+  turn: GuideAssistantTurn
+  onSourceNavigate?: (storyId: string) => void
+}) {
   // Only functional links are shown: pack entries without an evidenceUrl are
   // provenance metadata (model sourceIds), not destinations, so rendering
   // them would present a dead, link-looking affordance.
   const linked = turn.sourceCards.filter((card) => card.url)
   if (linked.length === 0) return null
+  // Intercept only intentional (unmodified primary) clicks on curated
+  // #work/<storyId> links — modified clicks, external links, and unknown ids
+  // keep the native anchor behavior.
+  const handleClick = (event: MouseEvent<HTMLAnchorElement>, url: string | undefined) => {
+    if (!onSourceNavigate || !isUnmodifiedPrimaryClick(event)) return
+    const target = resolveGuideSourceTarget(url)
+    if (!target) return
+    event.preventDefault()
+    onSourceNavigate(target.storyId)
+  }
   return (
     <div className="guide-sources" role="group" aria-label="Sources">
       {linked.map((card) => (
-        <a key={card.id} className="guide-source" href={card.url}>
+        <a
+          key={card.id}
+          className="guide-source"
+          href={card.url}
+          onClick={(event) => handleClick(event, card.url)}
+        >
           <LinkIcon />
           {card.label}
         </a>
@@ -66,11 +103,15 @@ function SourceChips({ turn }: { turn: GuideAssistantTurn }) {
 }
 
 /**
- * The dedicated chat view: a header (back + generated heading), an
- * independently scrolling transcript, and a fixed bottom area — the latest
- * answer's follow-up pills in a rail above the composer, with the consented
- * share control directly below it. Each answer keeps its own source chips
- * attached (they never duplicate into the rail).
+ * The conversation surface, in three presentations: the dedicated full chat
+ * page (header back button + pop-out/minimize control), the docked desktop
+ * companion, and the narrow-viewport modal overlay. All variants share the
+ * controller-owned state (transcript, composer, follow-ups, sources, share
+ * flow, error and session-limit states), an independently scrolling
+ * transcript, and a fixed bottom area — the latest answer's follow-up pills
+ * in a rail above the composer, with the consented share control directly
+ * below it. Each answer keeps its own source chips attached (they never
+ * duplicate into the rail).
  *
  * Accessibility: turn timestamps are client-only presentation (never sent to
  * any endpoint or analytics); newly arrived answers are announced by a single
@@ -86,6 +127,11 @@ export default function ChatShell({
   onDraftChange,
   onShare,
   onBack,
+  variant = 'page',
+  onMinimize,
+  minimizeLabel,
+  onExpand,
+  onSourceNavigate,
 }: ChatShellProps) {
   const inputId = useId()
   const beamId = useId().replace(/:/g, '-')
@@ -217,19 +263,51 @@ export default function ChatShell({
   }
 
   return (
-    <section className="chat-shell" aria-label="Conversation with Joel’s guide" ref={shellRef}>
+    <section
+      className={`chat-shell${variant === 'page' ? '' : ` chat-shell--${variant}`}`}
+      aria-label="Conversation with Joel’s guide"
+      ref={shellRef}
+    >
       <header className="chat-header" ref={headerElRef}>
-        <button
-          type="button"
-          className="chat-back"
-          aria-label={COLLABORATE_GUIDE_BACK_LABEL}
-          onClick={onBack}
-        >
-          <BackArrowIcon />
-        </button>
+        {variant === 'page' && onBack && (
+          <button
+            type="button"
+            className="chat-back"
+            aria-label={COLLABORATE_GUIDE_BACK_LABEL}
+            onClick={onBack}
+          >
+            <BackArrowIcon />
+          </button>
+        )}
         <h2 ref={headingRef as RefObject<HTMLHeadingElement>} tabIndex={-1} className="chat-heading">
           {heading ?? COLLABORATE_GUIDE_PENDING_HEADING}
         </h2>
+        {(onMinimize || onExpand) && (
+          <div className="chat-present">
+            {onExpand && (
+              <button
+                type="button"
+                className="chat-expand"
+                aria-label={COLLABORATE_GUIDE_OPEN_FULL_LABEL}
+                title={COLLABORATE_GUIDE_OPEN_FULL_LABEL}
+                onClick={onExpand}
+              >
+                <ExpandIcon />
+              </button>
+            )}
+            {onMinimize && (
+              <button
+                type="button"
+                className="chat-popout"
+                aria-label={minimizeLabel}
+                title={minimizeLabel}
+                onClick={onMinimize}
+              >
+                {variant === 'page' ? <CondenseIcon /> : <MinimizeIcon />}
+              </button>
+            )}
+          </div>
+        )}
       </header>
       <div className="chat-transcript" ref={transcriptRef} onScroll={handleTranscriptScroll}>
         <ol className="chat-turns">
@@ -258,7 +336,7 @@ export default function ChatShell({
                     {COLLABORATE_GUIDE_NAME} | {formatTurnTime(turn.at)}
                   </p>
                   <p className="chat-answer-text">{turn.content}</p>
-                  <SourceChips turn={turn} />
+                  <SourceChips turn={turn} onSourceNavigate={onSourceNavigate} />
                 </article>
               </li>
             ),

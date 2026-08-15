@@ -18,6 +18,12 @@ import {
   COLLABORATE_AI_GUIDE,
   COLLABORATE_CONTACT,
   COLLABORATE_ENERGIZING_STATEMENT,
+  COLLABORATE_GUIDE_MINIMIZE_LABEL,
+  COLLABORATE_GUIDE_PENDING_HEADING,
+  COLLABORATE_GUIDE_POP_OUT_LABEL,
+  COLLABORATE_GUIDE_RESUME,
+  COLLABORATE_GUIDE_RESUME_PENDING_STATUS,
+  COLLABORATE_GUIDE_RESUME_UNSEEN_STATUS,
   COLLABORATE_HEADLINE,
   COLLABORATE_SHOW_STARTERS,
   CONVERSATION_STARTERS,
@@ -31,6 +37,15 @@ import {
   parseExperienceHashTarget,
   shouldCanonicalizeCollaborateChat,
 } from '../engine/experienceHash'
+import {
+  GUIDE_COMPANION_MIN_WIDTH_PX,
+  GuidePresentation,
+  resolveGuideExitPresentation,
+  resolveGuideMinimizedStatus,
+  resolveGuideSourceTarget,
+  resolveGuideViewportCrossing,
+} from './collaborate/guideNavigation'
+import ChatShell from './collaborate/ChatShell'
 import {
   beginGuideShare,
   beginTurn,
@@ -301,6 +316,46 @@ export default function PortfolioExperience() {
     guideStateRef.current = next
     setGuideState(next)
   }
+
+  // Guide presentation: how the conversation appears while the visitor
+  // browses. 'page' = the full chat view (#collaborate/chat); 'companion' =
+  // docked panel alongside Work/Vibe (wide viewports); 'minimized' = resume
+  // bar/pill. Page memory only — no storage, no new URLs. The narrow-viewport
+  // modal overlay is a flag on top of 'minimized', not a fourth presentation.
+  const [guidePresentation, setGuidePresentation] = useState<GuidePresentation>('page')
+  const [guideOverlayOpen, setGuideOverlayOpen] = useState(false)
+  // An answer that arrived while the transcript was out of view (minimized).
+  const [guideUnseenAnswer, setGuideUnseenAnswer] = useState(false)
+  const guideResumeRef = useRef<HTMLButtonElement | null>(null)
+  const guideOverlayRef = useRef<HTMLDivElement | null>(null)
+  // Focus-restore flags: set by the user action, consumed by the effect that
+  // runs once the destination control is mounted.
+  const guideResumeFocusRef = useRef(false)
+  const guideMinimizeFocusRef = useRef(false)
+  const guideOverlayRestoreFocusRef = useRef(false)
+
+  // Companion breakpoint (960px): drives the pop-out/minimize labels and the
+  // resume target, and the crossing effect below minimizes an open companion.
+  const [guideWideViewport, setGuideWideViewport] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      window.matchMedia(`(min-width: ${GUIDE_COMPANION_MIN_WIDTH_PX}px)`).matches,
+  )
+  useEffect(() => {
+    const query = window.matchMedia(`(min-width: ${GUIDE_COMPANION_MIN_WIDTH_PX}px)`)
+    const update = () => setGuideWideViewport(query.matches)
+    update()
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
+
+  // Viewport crossing: an open companion minimizes below the breakpoint (and
+  // any open overlay closes) — widening never reopens a minimized chat.
+  useEffect(() => {
+    const width = window.innerWidth
+    setGuidePresentation((current) => resolveGuideViewportCrossing(current, width))
+    if (width >= GUIDE_COMPANION_MIN_WIDTH_PX) setGuideOverlayOpen(false)
+  }, [guideWideViewport])
 
   // Sealed analytics client (Stage 5): no-op until the visitor opts in via
   // the consent UI; every track call is silent on failure.
@@ -843,6 +898,20 @@ export default function PortfolioExperience() {
 
   const navigateTo = (key: ExperienceSceneKey) => {
     const doNavigate = () => {
+      // Leaving the full chat page via the nav retains the conversation as
+      // the companion (wide) or the minimized resume bar (narrow); entering
+      // Collaborate itself returns to the landing, which has its own resume.
+      const leavingChatPage =
+        COLLABORATE_AI_GUIDE && displayed === 'collaborate' && collaborateView === 'chat'
+      const hasConversation = (guideStateRef.current?.turns.length ?? 0) > 0
+      if (leavingChatPage && hasConversation && key !== 'collaborate') {
+        setGuidePresentation(resolveGuideExitPresentation(window.innerWidth))
+        setGuideOverlayOpen(false)
+      }
+      if (key === 'collaborate') {
+        setGuidePresentation('page')
+        setGuideOverlayOpen(false)
+      }
       setSelected(key)
       setExperience(key)
       // Selecting Collaborate from Work/Vibe ALWAYS opens the landing, even
@@ -894,6 +963,12 @@ export default function PortfolioExperience() {
           } else {
             setCollaborateView(target.subview === 'chat' ? 'chat' : 'landing')
           }
+          // Back/forward into Collaborate (incl. #collaborate/chat) returns
+          // the conversation to the full page — the companion/minimized
+          // chrome belongs to Work/Vibe browsing only.
+          setGuidePresentation('page')
+          setGuideOverlayOpen(false)
+          setGuideUnseenAnswer(false)
         }
       }
     }
@@ -973,6 +1048,9 @@ export default function PortfolioExperience() {
   // --- Guide conversation actions (chat view; controller is pure) -----------
 
   const navigateToCollaborateChat = () => {
+    setGuidePresentation('page')
+    setGuideOverlayOpen(false)
+    setGuideUnseenAnswer(false)
     setCollaborateView('chat')
     if (typeof window !== 'undefined' && window.location.hash !== COLLABORATE_CHAT_HASH) {
       // pushState (not location.hash assignment) so no hashchange event fires;
@@ -991,6 +1069,129 @@ export default function PortfolioExperience() {
     }
   }
 
+  // --- Guide presentation actions (companion / minimized / overlay) ---------
+
+  /** Full-chat header control: "Pop chat out" (wide) / "Minimize chat"
+   *  (narrow). Returns to the collaborate landing — the last place the
+   *  visitor was before the conversation — with the chat docked (wide) or
+   *  minimized (narrow) alongside it. Back from there restores
+   *  #collaborate/chat. */
+  const exitGuideChatPage = () => {
+    setGuidePresentation(resolveGuideExitPresentation(window.innerWidth))
+    setGuideOverlayOpen(false)
+    setSelected('collaborate')
+    setExperience('collaborate')
+    setCollaborateView('landing')
+    if (
+      typeof window !== 'undefined' &&
+      window.location.hash !== formatExperienceHash('collaborate')
+    ) {
+      window.history.pushState(null, '', formatExperienceHash('collaborate'))
+    }
+  }
+
+  /** Intentional internal source navigation: a validated `#work/<storyId>`
+   *  source card clicked with an unmodified primary click. Selects the story,
+   *  updates the hash, and docks (wide) or minimizes (narrow) the chat. From
+   *  the narrow overlay this also restores the resume bar. */
+  const handleGuideSourceNavigate = (storyId: string) => {
+    const target = resolveGuideSourceTarget(`#work/${storyId}`)
+    if (!target) return
+    const doNavigate = () => {
+      const nextPresentation = resolveGuideExitPresentation(window.innerWidth)
+      setGuidePresentation(nextPresentation)
+      setGuideOverlayOpen(false)
+      setSelected('work')
+      setExperience('work')
+      setWorkSlideIndex(target.slideIndex)
+      // Same-story re-click while Work is already settled: the slide-change
+      // focus effect will not fire, so move focus to the Work heading here.
+      if (target.slideIndex === workSlideIndex && displayed === 'work') {
+        modeHeadingRef.current?.focus({ preventScroll: true })
+      }
+      const hash = `#work/${target.storyId}`
+      if (typeof window !== 'undefined' && window.location.hash !== hash) {
+        window.history.pushState(null, '', hash)
+      }
+      trackEvent({
+        name: 'collaborate_guide_navigation',
+        params: { story_id: target.storyId, presentation: nextPresentation },
+      })
+    }
+    // Leaving vibe with paint on the field asks before discarding it.
+    if (displayed === 'vibe') {
+      withPaintConfirmation(() => {
+        sceneCanvasRef.current?.clearPaint()
+        doNavigate()
+      })
+      return
+    }
+    doNavigate()
+  }
+
+  /** Companion "Open full conversation" (and any path back to the chat page):
+   *  the hash returns to #collaborate/chat so Back restores the page. */
+  const openGuideFullConversation = () => {
+    const doOpen = () => {
+      setGuidePresentation('page')
+      setGuideOverlayOpen(false)
+      setGuideUnseenAnswer(false)
+      setSelected('collaborate')
+      setExperience('collaborate')
+      setCollaborateView('chat')
+      if (typeof window !== 'undefined' && window.location.hash !== COLLABORATE_CHAT_HASH) {
+        window.history.pushState(null, '', COLLABORATE_CHAT_HASH)
+      }
+    }
+    if (displayed === 'vibe') {
+      withPaintConfirmation(() => {
+        sceneCanvasRef.current?.clearPaint()
+        doOpen()
+      })
+      return
+    }
+    doOpen()
+  }
+
+  /** Companion "Minimize": collapse to the resume pill and return focus to
+   *  it once mounted. */
+  const minimizeGuideCompanion = () => {
+    guideMinimizeFocusRef.current = true
+    setGuidePresentation('minimized')
+  }
+
+  /** Resume control: wide viewports reopen the docked companion (focus moves
+   *  to its heading); narrow viewports open the full-viewport modal overlay
+   *  over the current site without changing its hash. */
+  const handleGuideResume = () => {
+    setGuideUnseenAnswer(false)
+    if (window.innerWidth >= GUIDE_COMPANION_MIN_WIDTH_PX) {
+      guideResumeFocusRef.current = true
+      setGuidePresentation('companion')
+    } else {
+      setGuideOverlayOpen(true)
+    }
+  }
+
+  /** Overlay minimize control / Escape: back to the resume bar with focus. */
+  const closeGuideOverlay = () => {
+    guideOverlayRestoreFocusRef.current = true
+    setGuideOverlayOpen(false)
+  }
+
+  // Focus delivery for the companion/minimize transitions above: the flags
+  // are set by the user action and consumed once the destination is mounted.
+  useEffect(() => {
+    if (guidePresentation === 'companion' && guideResumeFocusRef.current) {
+      guideResumeFocusRef.current = false
+      chatHeadingRef.current?.focus({ preventScroll: true })
+    }
+    if (guidePresentation === 'minimized' && guideMinimizeFocusRef.current) {
+      guideMinimizeFocusRef.current = false
+      guideResumeRef.current?.focus({ preventScroll: true })
+    }
+  }, [guidePresentation])
+
   /** Optimistically append the visitor message, navigate to the chat, and
    *  send the full transcript. A starter id also applies its canvas glyph
    *  treatment (existing behavior). */
@@ -1001,7 +1202,9 @@ export default function PortfolioExperience() {
     if (!begun.ok) return
     applyGuideState(begun.state)
     if (starterId) setCollaborateStarterId(starterId)
-    navigateToCollaborateChat()
+    // Sending from the docked companion or the narrow overlay keeps the
+    // visitor where they are; only a page-context send opens the chat view.
+    if (guidePresentation === 'page') navigateToCollaborateChat()
     void completeGuideTurn(begun.state)
   }
 
@@ -1045,6 +1248,9 @@ export default function PortfolioExperience() {
         name: 'collaborate_guide_answered',
         params: { topic: resolved.topic, model_class: payload.modelClass },
       })
+      // If the transcript isn't on screen (minimized), flag the new answer
+      // for the resume chrome — never transcript text, just the status.
+      if (!guideTranscriptVisibleRef.current) setGuideUnseenAnswer(true)
     } catch {
       // Roll the optimistic visitor turn back so nothing is lost; the typed
       // draft is restored and the error card offers retry + email.
@@ -1067,6 +1273,9 @@ export default function PortfolioExperience() {
     applyGuideState(resetGuideConversation(current, guideDepsRef.current))
     setCollaborateStarterId(null)
     setCollaborateGuideTopic(null)
+    setGuidePresentation('page')
+    setGuideOverlayOpen(false)
+    setGuideUnseenAnswer(false)
   }
 
   const handleGuideDraftChange = (draft: string) => {
@@ -1629,8 +1838,85 @@ export default function PortfolioExperience() {
   const collaborateChatActive =
     COLLABORATE_AI_GUIDE && displayed === 'collaborate' && collaborateView === 'chat'
 
+  // Guide companion chrome: the conversation off the full chat page. The
+  // docked companion (wide), the minimized resume bar/pill, and the narrow
+  // modal overlay are mutually exclusive; each requires a live conversation
+  // and none appears on the chat page itself.
+  const guideConversationActive =
+    COLLABORATE_AI_GUIDE && !!guideState && guideState.turns.length > 0
+  const guideChromeOffPage = guideConversationActive && !collaborateChatActive
+  const guideCompanionVisible = guideChromeOffPage && guidePresentation === 'companion'
+  const guideOverlayVisible =
+    guideChromeOffPage && guidePresentation === 'minimized' && guideOverlayOpen
+  const guideMinimizedVisible =
+    guideChromeOffPage && guidePresentation === 'minimized' && !guideOverlayOpen
+  const guideResumeStatus = guideMinimizedVisible
+    ? resolveGuideMinimizedStatus(guideState, guideUnseenAnswer)
+    : null
+
+  // Whether the transcript is on screen (page, companion, or overlay) —
+  // answers arriving while it is hidden flag the resume chrome instead.
+  const guideTranscriptVisibleRef = useRef(true)
+  useEffect(() => {
+    guideTranscriptVisibleRef.current =
+      collaborateChatActive || guideCompanionVisible || guideOverlayVisible
+  })
+
+  // Narrow modal overlay: focus containment, Escape back to the resume bar,
+  // and inert background content (nav, canvas, foreground) while it is open.
+  useEffect(() => {
+    if (!guideOverlayVisible) return
+    const overlay = guideOverlayRef.current
+    const shell = overlay?.parentElement
+    if (!overlay || !shell) return
+    const background = Array.from(shell.children).filter((el) => el !== overlay)
+    background.forEach((el) => el.setAttribute('inert', ''))
+    chatHeadingRef.current?.focus({ preventScroll: true })
+    const focusableSelector =
+      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        guideOverlayRestoreFocusRef.current = true
+        setGuideOverlayOpen(false)
+        return
+      }
+      if (event.key !== 'Tab') return
+      const focusables = Array.from(
+        overlay.querySelectorAll<HTMLElement>(focusableSelector),
+      ).filter((el) => el.getClientRects().length > 0)
+      if (focusables.length === 0) {
+        event.preventDefault()
+        return
+      }
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      const active = document.activeElement
+      if (event.shiftKey && (active === first || !overlay.contains(active))) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && (active === last || !overlay.contains(active))) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      background.forEach((el) => el.removeAttribute('inert'))
+      document.removeEventListener('keydown', onKeyDown, true)
+      if (guideOverlayRestoreFocusRef.current) {
+        guideOverlayRestoreFocusRef.current = false
+        guideResumeRef.current?.focus({ preventScroll: true })
+      }
+    }
+  }, [guideOverlayVisible])
+
   return (
-    <div className="portfolio-shell">
+    <div
+      className={`portfolio-shell${guideCompanionVisible ? ' portfolio-shell--guide-companion' : ''}${
+        guideMinimizedVisible ? ' portfolio-shell--guide-minimized' : ''
+      }${guideOverlayVisible ? ' portfolio-shell--guide-overlay' : ''}`}
+    >
       {/* Static branded layer behind the canvas: visible only while the
           canvas has not painted (no JS / no 2D context). */}
       <CanvasFallback />
@@ -1740,6 +2026,11 @@ export default function PortfolioExperience() {
                         onDraftChange: handleGuideDraftChange,
                         onNavigateToChat: navigateToCollaborateChat,
                         onNavigateToLanding: navigateToCollaborateLanding,
+                        onPopOut: exitGuideChatPage,
+                        popOutLabel: guideWideViewport
+                          ? COLLABORATE_GUIDE_POP_OUT_LABEL
+                          : COLLABORATE_GUIDE_MINIMIZE_LABEL,
+                        onSourceNavigate: handleGuideSourceNavigate,
                       }
                     : undefined
                 }
@@ -1757,6 +2048,79 @@ export default function PortfolioExperience() {
           </div>
         </ExperienceTransition>
       </main>
+      {/* Docked companion (wide viewports): a nonmodal complementary region
+          alongside Work/Vibe. Rendered at the shell level — inside the
+          foreground layers a fixed panel would be trapped by the work panel's
+          backdrop-filter containing block (same trap as the media lightbox). */}
+      {guideCompanionVisible && guideState && (
+        <aside className="guide-companion" role="complementary" aria-label="Joel’s guide conversation">
+          <ChatShell
+            variant="companion"
+            heading={guideState.heading}
+            state={guideState}
+            headingRef={chatHeadingRef}
+            onSend={(content) => sendGuideMessage(content)}
+            onRetry={retryGuideMessage}
+            onDraftChange={handleGuideDraftChange}
+            onShare={shareGuideConversation}
+            onMinimize={minimizeGuideCompanion}
+            minimizeLabel={COLLABORATE_GUIDE_MINIMIZE_LABEL}
+            onExpand={openGuideFullConversation}
+            onSourceNavigate={handleGuideSourceNavigate}
+          />
+        </aside>
+      )}
+      {/* Narrow modal overlay: the full-viewport conversation over the current
+          site (hash untouched). Focus is contained and the background is inert
+          while it is open (effect above). */}
+      {guideOverlayVisible && guideState && (
+        <div
+          className="guide-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Conversation with Joel’s guide"
+          ref={guideOverlayRef}
+        >
+          <ChatShell
+            variant="modal"
+            heading={guideState.heading}
+            state={guideState}
+            headingRef={chatHeadingRef}
+            onSend={(content) => sendGuideMessage(content)}
+            onRetry={retryGuideMessage}
+            onDraftChange={handleGuideDraftChange}
+            onShare={shareGuideConversation}
+            onMinimize={closeGuideOverlay}
+            minimizeLabel={COLLABORATE_GUIDE_MINIMIZE_LABEL}
+            onSourceNavigate={handleGuideSourceNavigate}
+          />
+        </div>
+      )}
+      {/* Minimized chrome: the guide title plus pending/new-answer status —
+          never transcript text. A bottom bar on narrow screens (safe-area
+          aware), a compact pill on desktop. */}
+      {guideMinimizedVisible && guideState && (
+        <div className="guide-resume">
+          <button
+            type="button"
+            className="guide-resume-button"
+            ref={guideResumeRef}
+            onClick={handleGuideResume}
+          >
+            <span className="guide-resume-title">
+              {guideState.heading ?? COLLABORATE_GUIDE_PENDING_HEADING}
+            </span>
+            {guideResumeStatus && (
+              <span className="guide-resume-status" role="status">
+                {guideResumeStatus === 'pending'
+                  ? COLLABORATE_GUIDE_RESUME_PENDING_STATUS
+                  : COLLABORATE_GUIDE_RESUME_UNSEEN_STATUS}
+              </span>
+            )}
+            <span className="visually-hidden"> — {COLLABORATE_GUIDE_RESUME}</span>
+          </button>
+        </div>
+      )}
       {/* Crawlable work digest: the interactive work surface only mounts after
           client-side hash/navigation state resolves, so the static export
           carries the full story content here instead. Visually hidden but

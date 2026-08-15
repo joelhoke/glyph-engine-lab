@@ -154,6 +154,13 @@ export const COLLABORATE_GUIDE_COMPOSER_LABEL = 'Message Joel’s guide'
 export const COLLABORATE_GUIDE_COMPOSER_PLACEHOLDER = 'Ask about Joel’s work…'
 export const COLLABORATE_GUIDE_SEND_LABEL = 'Send message'
 
+/** Guide presentation chrome (companion dock / minimized resume / overlay). */
+export const COLLABORATE_GUIDE_POP_OUT_LABEL = 'Pop chat out'
+export const COLLABORATE_GUIDE_MINIMIZE_LABEL = 'Minimize chat'
+export const COLLABORATE_GUIDE_OPEN_FULL_LABEL = 'Open full conversation'
+export const COLLABORATE_GUIDE_RESUME_PENDING_STATUS = 'Thinking…'
+export const COLLABORATE_GUIDE_RESUME_UNSEEN_STATUS = 'New answer'
+
 /** Announced (visually hidden, polite) when a guide answer arrives; focus is
  *  NOT moved to the answer. */
 export const COLLABORATE_GUIDE_ANSWERED_ANNOUNCEMENT = 'Joel’s Guide answered'
