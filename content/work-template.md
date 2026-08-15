@@ -37,19 +37,29 @@ render in array order — there is no fixed count.
 
 ## Narrative (expanded case study — public stories only)
 
-Ordered sections; each becomes a `details` entry. Suggested flow:
+The narrative is always rendered — the card's expanded reading panel is the
+reveal (there is no in-story disclosure). Ordered sections; each becomes a
+`details` entry. The standardized rhythm is:
 
-1. **Challenge** — the problem space, users, stakes.
-2. **Constraints** — technical, organizational, budgetary limits.
-3. **Responsibilities** — what you personally owned.
-4. **Process** — research, iterations, how decisions were reached.
-5. **Decisions** — the pivotal calls and their trade-offs.
-6. **Outcome** — what shipped, what changed.
-7. **Metrics** — concrete numbers you may share publicly.
-8. **Reflection** — what you'd keep or do differently.
+1. **Outcome** — authored via the story's `outcome` + `outcomeParagraphs`
+   (rendered first automatically; do not repeat it as a details section).
+2. **Challenge** — the problem space, users, stakes.
+3. **Approach** — research, iterations, how decisions were reached.
+4. **Contributions** — what you personally owned; the shipped outcome.
+
+Target roughly 350–550 words per public story (outcome + narrative copy,
+excluding metadata and links) — `scripts/verify-work-content.js` enforces the
+range and the rhythm.
 
 Each section may attach: paragraphs, bullet lists, a callout line,
 attachments (label + URL), and media references (media IDs, see below).
+
+## Links
+
+`links` render as the final **Related links** section — after all narrative,
+inline media, and gallery content. Never place external links mid-story. The
+protected-case-study CTA is an access action, not a related resource, and
+keeps its own position.
 
 ## Canvas treatment
 

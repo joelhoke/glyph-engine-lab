@@ -180,6 +180,49 @@ for (const slide of WORK_SLIDES) {
   )
 }
 
+// declared dimensions match the real pixel dimensions of every local image
+// (sips is macOS-only; skip silently elsewhere)
+if (process.platform === 'darwin') {
+  for (const story of WORK_STORIES) {
+    for (const entry of story.media ?? []) {
+      if (entry.kind !== 'image' || !entry.src.startsWith('/')) continue
+      const file = path.join(projectRoot, 'public', entry.src)
+      if (!fs.existsSync(file)) continue
+      const out = execSync(`sips -g pixelWidth -g pixelHeight "${file}"`).toString()
+      const width = Number(out.match(/pixelWidth:\s*(\d+)/)?.[1])
+      const height = Number(out.match(/pixelHeight:\s*(\d+)/)?.[1])
+      assert(
+        width === entry.width && height === entry.height,
+        `${story.id}/${entry.id}: declared ${entry.width}x${entry.height} matches the file's real ${width}x${height}`,
+      )
+    }
+  }
+}
+
+// provenance: every externally downloaded asset is recorded in
+// docs/work-media-sources.md with its source page, original asset URL,
+// retrieval date, and displayed caption (feature/work-expanding-case-study)
+const ADDED_ASSETS = [
+  'EmployeeExperience-MyHub-AppStore.png',
+  'EmployeeExperience-VivaConnections.jpg',
+  'GlobalCompensation-TotalRewards-Employee.png',
+  'GlobalCompensation-TotalRewards-Manager.png',
+]
+const manifestPath = path.join(projectRoot, 'docs', 'work-media-sources.md')
+assert(fs.existsSync(manifestPath), 'the work-media provenance manifest exists')
+const manifest = fs.existsSync(manifestPath) ? fs.readFileSync(manifestPath, 'utf8') : ''
+for (const basename of ADDED_ASSETS) {
+  const blockStart = manifest.indexOf(`## ${basename}`)
+  assert(blockStart >= 0, `manifest records ${basename}`)
+  const block = blockStart >= 0 ? manifest.slice(blockStart, manifest.indexOf('\n## ', blockStart + 1) === -1 ? undefined : manifest.indexOf('\n## ', blockStart + 1)) : ''
+  for (const field of ['Story:', 'Local path:', 'Source page:', 'Original asset URL:', 'Retrieval date:', 'Caption:']) {
+    assert(
+      block.includes(field),
+      `manifest entry for ${basename} includes ${field.replace(':', '').toLowerCase()}`,
+    )
+  }
+}
+
 if (failures > 0) {
   console.error(`\n${failures} verification(s) failed.`)
   process.exit(1)

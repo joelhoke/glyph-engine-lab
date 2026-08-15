@@ -1520,23 +1520,68 @@ button:focus-visible {
 
 /* --- Work experience (M4) --- */
 
-/* Fixed outer frame: border/background/height stay stationary while the
-   inner viewport (BoundedScrollPanel) scrolls the slide content. */
+/* Fixed outer frame: border/background stay stationary while the inner
+   viewport (BoundedScrollPanel) scrolls the slide content. The card is
+   absolutely anchored to the bottom of .work-layout in the compact state;
+   expansion is scroll-scrubbed — WorkExperience drives fixed-position
+   interpolated geometry inline from the measured compact rect, so there is
+   NO CSS transition here (input scrubs both directions without easing).
+   The grid rows keep the scrolling viewport above the non-scrolling footer:
+   minmax(0, 1fr) lets the viewport shrink without pushing the footer out. */
 .work-experience {
-  position: relative;
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
   /* Interactive surface over the pointer-transparent foreground column: the
      card owns its gestures (bounded scrolling, buttons, links); the layout
      gaps around it fall through to the canvas. */
   pointer-events: auto;
-  width: min(100%, 40rem);
+  /* Compact state: on desktop the card rests at the expanded panel's width
+     and horizontal position (centered, min(60rem, 100vw - 4rem)), so the
+     scrubbed expansion interpolates only top and height; mobile keeps its
+     available-width card near the viewport bottom. */
+  width: min(60rem, calc(100vw - 4rem));
+  max-height: min(68%, calc(100vh - 10rem));
+  max-height: min(
+    68%,
+    calc(100dvh - 10rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))
+  );
   text-align: left;
   color: var(--color-text);
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   border-radius: 12px;
   border: 1px solid var(--color-border-subtle);
   background: var(--color-surface-panel-soft);
   backdrop-filter: blur(8px);
+}
+
+/* The scrubbed expansion (0..1) is exposed to CSS as --work-expansion on the
+   card; geometry itself is inline (measured compact rect → expanded target).
+   Mobile expanded padding: lifts the content below the persistent nav as the
+   card approaches the edge-to-edge reading surface. */
+@media (max-width: 760px) {
+  /* Mobile compact keeps the available-width card (it still widens to the
+     edge-to-edge reading surface during the scrub). */
+  .work-experience {
+    width: 100%;
+  }
+  .work-experience-viewport {
+    padding-top: calc(
+      1.25rem + (3rem + env(safe-area-inset-top, 0px)) * var(--work-expansion, 0)
+    );
+  }
+}
+
+/* Readable body text keeps a 44–46rem measure in every state. */
+.work-story-thesis,
+.work-story-outcome,
+.work-story-section-copy,
+.work-story-section-list,
+.work-story-section-callout,
+.work-mode-intro {
+  max-width: 45rem;
 }
 
 /* The scrolling viewport: carries the padding and content layout the card
@@ -1544,8 +1589,16 @@ button:focus-visible {
 .work-experience-viewport {
   display: flex;
   flex-direction: column;
-  gap: 1.1rem;
   padding: 1.75rem 2rem;
+}
+
+/* Content wrapper inside the viewport: WorkExperience measures ITS
+   scrollHeight against the compact viewport's clientHeight to decide whether
+   the slide overflows (and can expand at all). */
+.work-experience-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
 }
 
 .work-mode-heading {
@@ -1657,7 +1710,6 @@ button:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-top: 0.25rem;
 }
 
 .work-nav-button {
@@ -1691,78 +1743,45 @@ button:focus-visible {
   .work-experience-viewport {
     padding: 1.25rem 1.25rem;
   }
+
+  .work-experience .bounded-scroll-footer {
+    padding: 0.6rem 1.25rem calc(0.6rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 
-/* Work mode scrolls vertically inside its panel while the canvas stays
-   fixed behind it. The 100dvh + safe-area variant wins where supported so
-   the panel clears the iOS browser chrome and home-indicator insets; the
-   100vh line is the fallback for older engines. Height constraints live on
-   the frame; the inner viewport owns the actual scrolling. */
-.work-experience {
-  max-height: calc(100vh - 9rem);
-  max-height: calc(
-    100dvh - 9rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
-  );
-}
-
-/* Work glyph stage (mobile): the stage reserves real layout space so the
-   region-bound glyph field renders above/beside the panel instead of behind
-   it. Desktop hides the stage and keeps the full-scene background
-   treatment. The stage itself never intercepts pointer input — the fixed
-   canvas beneath stays interactive. */
+/* Work layout: fills the foreground area so the glyph stage can occupy the
+   top and the card can anchor to the bottom. The stage is absolutely
+   positioned with a FIXED share of the layout — its rect (measured by
+   PortfolioExperience as the canvas target region) never changes when the
+   card expands, so expansion causes no canvas morph. The stage never
+   intercepts pointer input: gestures inside it stay dedicated to the canvas
+   beneath. */
 .work-layout {
-  display: contents;
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
 }
 
 .work-glyph-stage {
-  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 46%;
   pointer-events: none;
 }
 
-/* Portrait mobile: stage above the scrollable Work panel (column layout). */
-@media (max-width: 760px) {
-  .work-layout {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1rem;
-    width: 100%;
-  }
-  .work-glyph-stage {
-    display: block;
-    width: 100%;
-    height: 38vh;
-  }
-  .work-experience {
-    max-height: calc(100vh - 38vh - 6rem);
-    max-height: calc(
-      100dvh - 38vh - 6rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
-    );
-  }
+/* Non-scrolling panel footer (BoundedScrollPanel): sits below the viewport
+   inside the frame, so the prev/next controls never cover scrolling
+   content. */
+.bounded-scroll-footer {
+  flex: 0 0 auto;
 }
 
-/* Short landscape mobile: stage beside the panel (row layout). */
-@media (max-height: 520px) and (orientation: landscape) {
-  .work-layout {
-    display: flex;
-    flex-direction: row;
-    align-items: stretch;
-    gap: 1rem;
-    width: 100%;
-  }
-  .work-glyph-stage {
-    display: block;
-    flex: 0 0 36vw;
-    height: auto;
-  }
-  .work-layout .work-experience {
-    flex: 1 1 auto;
-    min-width: 0;
-    max-height: calc(100vh - 6rem);
-    max-height: calc(
-      100dvh - 6rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
-    );
-  }
+.work-experience .bounded-scroll-footer {
+  padding: 0.75rem 2rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--color-border-subtle);
 }
 
 .work-mode-intro {
@@ -1814,25 +1833,8 @@ button:focus-visible {
   max-width: calc(100% - 40px);
 }
 
-.work-story-disclosure {
-  align-self: flex-start;
-  font: inherit;
-  font-size: 0.85rem;
-  color: var(--color-accent);
-  background: none;
-  border: none;
-  border-bottom: 1px solid var(--color-accent-border);
-  padding: 0 0 2px;
-  cursor: pointer;
-  transition: color 180ms ease, border-color 180ms ease;
-}
-
-.work-story-disclosure:hover,
-.work-story-disclosure:focus-visible {
-  color: var(--color-accent-strong);
-  border-color: var(--color-accent-strong);
-}
-
+/* The narrative is always rendered (no disclosure) — the card's expanded
+   reading panel is the reveal. */
 .work-story-sections {
   display: flex;
   flex-direction: column;
@@ -1874,6 +1876,22 @@ button:focus-visible {
   color: var(--color-accent-vivid);
   border-left: 2px solid var(--color-accent-vivid);
   padding-left: 0.9rem;
+}
+
+/* Related links: always the final story content. */
+.work-story-related {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.work-story-related-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
 }
 
 .work-gallery {
@@ -1940,6 +1958,33 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  /* Scrubbed expansion narrows inline figures toward 40% of the content
+     width on desktop (full width while compact); mobile stays full width. */
+  margin-inline: auto;
+}
+
+@media (min-width: 761px) {
+  .work-inline-media--image {
+    width: calc(100% - 60% * var(--work-expansion, 0));
+  }
+}
+
+@media (max-width: 760px) {
+  .work-inline-media--image {
+    width: 100%;
+  }
+}
+
+/* Inline images open the lightbox — the button is the zoom target; it shares
+   the figure's width and centering. */
+.work-inline-media-button {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+  display: block;
+  width: 100%;
+  max-width: 100%;
 }
 
 .work-inline-media img,

@@ -1,6 +1,6 @@
 'use client'
 
-import { KeyboardEvent, ReactNode, RefObject } from 'react'
+import { KeyboardEvent, ReactNode, RefObject, TouchEvent, UIEvent, WheelEvent } from 'react'
 
 type BoundedScrollPanelProps = {
   /** Accessible name for the scrollable region (the frame's aria-label). */
@@ -16,6 +16,17 @@ type BoundedScrollPanelProps = {
   viewportRef?: RefObject<HTMLDivElement | null>
   /** Keyboard handlers attach to the frame (e.g. Work's arrow navigation). */
   onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void
+  /** Optional non-scrolling footer, rendered below the viewport inside the
+   *  frame (Work's prev/next controls). The viewport keeps the remaining
+   *  height, so footer controls never cover scrolling content. */
+  footer?: ReactNode
+  /** Optional viewport scroll/input callbacks (Work's expansion state
+   *  machine). All optional: consumers that omit them get the exact same
+   *  behavior as before (Collaborate). */
+  onViewportScroll?: (event: UIEvent<HTMLDivElement>) => void
+  onViewportWheel?: (event: WheelEvent<HTMLDivElement>) => void
+  onViewportTouchStart?: (event: TouchEvent<HTMLDivElement>) => void
+  onViewportTouchMove?: (event: TouchEvent<HTMLDivElement>) => void
   children: ReactNode
 }
 
@@ -24,7 +35,8 @@ type BoundedScrollPanelProps = {
  * the inner viewport owns vertical scrolling (bounded height, overscroll
  * containment, stable scrollbar gutter, momentum touch scrolling). Swiping
  * inside scrolls only the viewport; reaching either end never chains into
- * the page or drags the frame. Used by the Work case-study card and the
+ * the page or drags the frame. An optional footer sits outside the viewport
+ * so it never scrolls away. Used by the Work case-study card and the
  * Collaborate landing card.
  */
 export default function BoundedScrollPanel({
@@ -33,6 +45,11 @@ export default function BoundedScrollPanel({
   viewportClassName,
   viewportRef,
   onKeyDown,
+  footer,
+  onViewportScroll,
+  onViewportWheel,
+  onViewportTouchStart,
+  onViewportTouchMove,
   children,
 }: BoundedScrollPanelProps) {
   return (
@@ -40,9 +57,14 @@ export default function BoundedScrollPanel({
       <div
         className={`bounded-scroll-viewport${viewportClassName ? ` ${viewportClassName}` : ''}`}
         ref={viewportRef as RefObject<HTMLDivElement>}
+        onScroll={onViewportScroll}
+        onWheel={onViewportWheel}
+        onTouchStart={onViewportTouchStart}
+        onTouchMove={onViewportTouchMove}
       >
         {children}
       </div>
+      {footer && <div className="bounded-scroll-footer">{footer}</div>}
     </section>
   )
 }
