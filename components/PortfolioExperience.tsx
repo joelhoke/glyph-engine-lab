@@ -1076,16 +1076,13 @@ export default function PortfolioExperience() {
     const doNavigate = () => {
       // Leaving the full chat page via the nav retains the conversation as
       // the companion (wide) or the minimized resume bar (narrow); entering
-      // Collaborate itself returns to the landing, which has its own resume.
+      // Collaborate keeps that chrome too — the landing's resume view
+      // coexists with the docked conversation.
       const leavingChatPage =
         COLLABORATE_AI_GUIDE && displayed === 'collaborate' && collaborateView === 'chat'
       const hasConversation = (guideStateRef.current?.turns.length ?? 0) > 0
       if (leavingChatPage && hasConversation && key !== 'collaborate') {
         setGuidePresentation(resolveGuideExitPresentation(window.innerWidth))
-        setGuideOverlayOpen(false)
-      }
-      if (key === 'collaborate') {
-        setGuidePresentation('page')
         setGuideOverlayOpen(false)
       }
       setSelected(key)
@@ -1139,12 +1136,14 @@ export default function PortfolioExperience() {
           } else {
             setCollaborateView(target.subview === 'chat' ? 'chat' : 'landing')
           }
-          // Back/forward into Collaborate (incl. #collaborate/chat) returns
-          // the conversation to the full page — the companion/minimized
-          // chrome belongs to Work/Vibe browsing only.
-          setGuidePresentation('page')
-          setGuideOverlayOpen(false)
-          setGuideUnseenAnswer(false)
+          // Back/forward into the chat deep link returns the conversation to
+          // the full page; a bare #collaborate keeps the companion/minimized
+          // chrome alongside the landing's resume view.
+          if (target.subview === 'chat') {
+            setGuidePresentation('page')
+            setGuideOverlayOpen(false)
+            setGuideUnseenAnswer(false)
+          }
         }
       }
     }

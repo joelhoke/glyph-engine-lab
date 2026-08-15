@@ -337,6 +337,59 @@ async function scenarioDesktop(browser) {
   await context.close()
 }
 
+async function scenarioCollaborateTabKeepsDock(browser) {
+  section('Desktop — collaborate tab keeps the dock open')
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+  await seedConsent(context)
+  const page = await context.newPage()
+  page.on('pageerror', (err) => console.log(`  [pageerror] ${err.message}`))
+  await stubCollaborateApi(page)
+  await startConversation(page)
+
+  // Dock over Work first, then press the Collaborate tab.
+  await clickSource(page, 'Employee experience')
+  await waitFor(async () => await visible(page, '.guide-companion'), { label: 'companion over work' })
+  await page.locator('.experience-nav-button', { hasText: 'Collaborate' }).click()
+  await waitFor(async () => (await hash(page)) === '#collaborate', { label: 'collaborate hash' })
+  check('collaborate tab keeps the dock open', await visible(page, '.guide-companion'))
+  await waitFor(async () => await visible(page, '.guide-preview'), { label: 'landing resume view' })
+  check('landing shows the resume conversation view', true)
+  check(
+    'resume view carries the conversation heading',
+    (await page.locator('.guide-preview-heading').textContent()) === 'Guided navigation test conversation',
+  )
+
+  // Continue interacting via the dock — sends stay docked over the landing.
+  await page.locator('.guide-companion .chat-input').fill('still docked?')
+  await page.locator('.guide-companion .chat-send').click()
+  await waitFor(async () => (await count(page, '.guide-companion .chat-turn')) === 4, {
+    label: 'docked answer over the landing',
+  })
+  check(
+    'companion interaction continues over the landing',
+    (await hash(page)) === '#collaborate' && (await visible(page, '.guide-companion')),
+  )
+
+  // Go full screen from the landing's resume control.
+  await page.locator('.guide-preview-resume').click()
+  await waitFor(async () => (await hash(page)) === '#collaborate/chat', { label: 'chat hash from landing resume' })
+  check(
+    'landing resume opens the full conversation',
+    await visible(page, '.foreground-content-chat .chat-shell'),
+  )
+
+  // Dock again, then start a new chat from the landing: dock closes with it.
+  await page.locator('.foreground-content-chat .chat-popout').click()
+  await waitFor(async () => await visible(page, '.guide-companion'), { label: 'companion re-docked over landing' })
+  await page.locator('button.guide-preview-new', { hasText: 'Start new conversation' }).click()
+  await page.locator('button.guide-preview-new', { hasText: 'Yes, start new' }).click()
+  await waitFor(async () => !(await visible(page, '.guide-preview')), { label: 'preview cleared' })
+  check('start new closes the dock', !(await visible(page, '.guide-companion')))
+  check('start new clears the resume view', true)
+
+  await context.close()
+}
+
 async function scenarioModifiedAndExternal(browser) {
   section('Desktop — modified clicks / external sources stay native')
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
@@ -461,7 +514,9 @@ async function scenarioMobile(browser) {
     () => document.getElementById('main-content')?.hasAttribute('inert') === true,
   ))
 
-  // Focus containment: Tab never leaves the dialog.
+  // Focus containment: Tab never leaves the dialog. Wait for the overlay's
+  // mount effect to place focus inside first (it also attaches the trap).
+  await waitFor(async () => (await activeInfo(page)).inOverlay, { label: 'overlay initial focus' })
   let contained = true
   for (let i = 0; i < 18; i += 1) {
     await page.keyboard.press('Tab')
@@ -576,6 +631,7 @@ async function main() {
 
     const scenarios = [
       ['desktop companion', scenarioDesktop],
+      ['collaborate tab keeps dock', scenarioCollaborateTabKeepsDock],
       ['modified/external sources', scenarioModifiedAndExternal],
       ['pending/unseen', scenarioPendingAndUnseen],
       ['mobile modal', scenarioMobile],
