@@ -4938,9 +4938,10 @@ a.guide-source:focus-visible {
 
 .vibe-pond-control {
   position: fixed;
-  /* ~40% of the way from the right edge toward the center toolbar. */
+  /* ~40% of the way from the right edge toward the center toolbar. The
+     bottom offset keeps the 66px toggle centered on the capsule row. */
   right: calc(20vw + env(safe-area-inset-right, 0px));
-  bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
+  bottom: calc(5.0625rem + env(safe-area-inset-bottom, 0px));
   z-index: 30;
   display: flex;
   flex-direction: column;
@@ -4957,8 +4958,8 @@ a.guide-source:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 66px;
+  height: 66px;
   padding: 0;
   border: 1px solid var(--color-border-subtle);
   border-radius: 999px;
@@ -4983,8 +4984,8 @@ a.guide-source:focus-visible {
 
 /* CSS mask over currentColor, same idiom as .vibe-toolbar-icon. */
 .vibe-pond-toggle-icon {
-  width: 24px;
-  height: 24px;
+  width: 36px;
+  height: 36px;
   display: block;
   background-color: currentColor;
   -webkit-mask-position: center;
@@ -5102,9 +5103,10 @@ a.guide-source:focus-visible {
 
 .vibe-sound-control {
   position: fixed;
-  /* ~40% of the way from the left edge toward the center toolbar. */
+  /* ~40% of the way from the left edge toward the center toolbar. The
+     bottom offset keeps the 66px toggle centered on the capsule row. */
   left: calc(20vw + env(safe-area-inset-left, 0px));
-  bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
+  bottom: calc(5.0625rem + env(safe-area-inset-bottom, 0px));
   z-index: 30;
   display: flex;
   flex-direction: column;
@@ -5121,8 +5123,8 @@ a.guide-source:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 66px;
+  height: 66px;
   padding: 0;
   border: 1px solid var(--color-border-subtle);
   border-radius: 999px;
@@ -5148,8 +5150,8 @@ a.guide-source:focus-visible {
 
 /* Note glyph as a CSS mask over currentColor (toolbar icon idiom). */
 .vibe-sound-toggle-icon {
-  width: 20px;
-  height: 24px;
+  width: 30px;
+  height: 36px;
   display: block;
   background-color: currentColor;
   -webkit-mask-position: center;
@@ -5285,13 +5287,16 @@ a.guide-source:focus-visible {
    0.5rem). */
 @media (max-width: 640px) {
   /* Collapsed toggles keep the corner inset (20vw would collide with the
-     nearly full-width toolbar capsule). */
+     nearly full-width toolbar capsule) and align with the mobile capsule
+     row (center ≈ 3.2rem + 33px above the bottom). */
   .vibe-sound-control:not(:has(.vibe-sound-pill)) {
     left: calc(0.75rem + env(safe-area-inset-left, 0px));
+    bottom: calc(3.2rem + env(safe-area-inset-bottom, 0px));
   }
 
   .vibe-pond-control:not(:has(.vibe-pond-pill)) {
     right: calc(0.75rem + env(safe-area-inset-right, 0px));
+    bottom: calc(3.2rem + env(safe-area-inset-bottom, 0px));
   }
 
   .vibe-sound-control:has(.vibe-sound-pill) {
