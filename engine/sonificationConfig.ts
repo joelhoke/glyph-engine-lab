@@ -31,8 +31,10 @@ export const SONIFICATION_STEPS = 24
 export const SONIFICATION_BANDS = 12
 /** Maximum active pitch bands a single step may voice. */
 export const SONIFICATION_MAX_NOTES_PER_STEP = 3
-/** Hard oscillator-voice ceiling (drone + note pool) for the audio engine. */
-export const SONIFICATION_MAX_VOICES = 8
+/** Hard oscillator-voice ceiling (the reusable note-voice pool) for the
+ *  audio engine. There is no drone or noise source — voices are gated note
+ *  events only. */
+export const SONIFICATION_MAX_VOICES = 6
 
 export const SONIFICATION_SWEEP_DURATION_MIN = 4
 export const SONIFICATION_SWEEP_DURATION_MAX = 20

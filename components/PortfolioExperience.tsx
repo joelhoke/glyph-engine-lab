@@ -92,10 +92,16 @@ import {
 } from '../content/vibe'
 import {
   DEFAULT_UPLOADED_SVG_FILENAME,
+  createSvgObjectUrl,
   readUploadedSvg,
 } from '../engine/svgUpload'
-import { RASTER_MIME_TYPES, readUploadedRaster } from '../engine/rasterUpload'
+import { readUploadedRaster } from '../engine/rasterUpload'
 import { UNSUPPORTED_SOURCE_TYPE_ERROR, VisualSourceKind } from '../engine/visualSource'
+import {
+  createSourceUrlRegistry,
+  resolveSourcePromotion,
+  resolveUploadRoute,
+} from '../engine/sourcePromotion'
 import {
   PAINT_BRUSH_DIAMETER_DEFAULT,
   PAINT_BRUSH_DIAMETER_MAX,
@@ -117,7 +123,6 @@ import {
   canUndoVibe,
   clearVibeHistory,
   cloneVibeConfig,
-  collectRetainedUrls,
   createVibeHistory,
   pushTransaction,
   redoTransaction,
@@ -128,7 +133,7 @@ import {
   APPROVED_SOURCE_LAYOUT_DEFAULTS,
   SceneConfig,
 } from './tuning/tuningConfig'
-import { SourceLayoutConfig } from '../engine/svgTargetSource'
+import { loadSvgTargets, SourceLayoutConfig } from '../engine/svgTargetSource'
 import {
   evaluateIntroSequence,
   getPhaseStartTime,
@@ -194,8 +199,8 @@ type SequenceController = {
 
 const BASE_DOCUMENT_TITLE = 'joel hoke design'
 
-/** The visitor-supplied source for the vibe field: an uploaded SVG (data URL),
- *  an uploaded raster image (object URL), or a preset's built-in SVG. */
+/** The visitor-supplied source for the vibe field: an uploaded SVG or raster
+ *  image (registry-owned blob: URL), or a preset's built-in SVG. */
 type UploadedSourceState = {
   kind: VisualSourceKind
   url: string
@@ -577,32 +582,36 @@ export default function PortfolioExperience() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayed, paintTool.enabled])
 
-  // Object-URL lifecycle: raster uploads hold a blob: URL. URLs referenced by
-  // any retained vibe-history entry (or the live source) must stay valid, so
-  // revocation happens only when history entries are trimmed/cleared, on
-  // reset, or on unmount — never when a source is replaced (the replacing
+  // Object-URL lifecycle: SVG and raster uploads hold blob: URLs, all owned
+  // by one registry (engine/sourcePromotion) so every revocation is
+  // exactly-once. URLs referenced by any retained vibe-history entry (or the
+  // live source) must stay valid, so revocation happens only when a candidate
+  // fails or goes stale, when history entries are trimmed/cleared, on reset,
+  // or on unmount — never when a source is replaced (the replacing
   // transaction's before-snapshot still references it).
   const uploadedSourceRef = useRef<UploadedSourceState | null>(null)
+  const urlRegistryRef = useRef(
+    createSourceUrlRegistry((url) => URL.revokeObjectURL(url)),
+  )
+  // Upload request generation: only the newest attempt may promote a source
+  // or touch the pending/error state; stale attempts release their candidate
+  // URL and exit without disturbing the winner.
+  const uploadRequestRef = useRef(0)
   useEffect(() => {
     uploadedSourceRef.current = uploadedSource
   }, [uploadedSource])
   useEffect(() => {
     return () => {
-      const current = uploadedSourceRef.current
-      if (current && current.url.startsWith('blob:')) {
-        URL.revokeObjectURL(current.url)
-      }
-      collectRetainedUrls(vibeHistoryRef.current).forEach((url) => {
-        if (url.startsWith('blob:')) URL.revokeObjectURL(url)
-      })
+      urlRegistryRef.current.releaseOrphans(new Set())
     }
   }, [])
 
   // Release guard handed to the history module: never revoke the live source
-  // (trimming can surface an URL the field still samples).
+  // (trimming can surface an URL the field still samples). The registry
+  // no-ops on URLs it does not own (preset /assets paths, data: URLs).
   const releaseOrphanedUrl = (url: string) => {
     if (uploadedSourceRef.current?.url === url) return
-    if (url.startsWith('blob:')) URL.revokeObjectURL(url)
+    urlRegistryRef.current.release(url)
   }
 
   // --- Unified vibe history (launch item 6) --------------------------------
@@ -1508,17 +1517,12 @@ export default function PortfolioExperience() {
     }
     setPaintTool(defaultPaintTool)
     paintToolRef.current = defaultPaintTool
-    const orphaned = collectRetainedUrls(vibeHistoryRef.current)
+    // History is dropped without per-entry release; the registry revokes
+    // every owned URL at once (history-retained and live alike), exactly once.
     clearVibeHistory(vibeHistoryRef.current)
-    orphaned.forEach((url) => {
-      if (url.startsWith('blob:')) URL.revokeObjectURL(url)
-    })
-    const current = uploadedSourceRef.current
-    if (current && current.url.startsWith('blob:')) {
-      URL.revokeObjectURL(current.url)
-    }
     setUploadedSource(null)
     uploadedSourceRef.current = null
+    urlRegistryRef.current.releaseOrphans(new Set())
     setUploadError(null)
     syncVibeHistoryFlags()
   }
@@ -1655,54 +1659,110 @@ export default function PortfolioExperience() {
     })
   }
 
-  const handleUploadSource = async (file: File) => {
+  const handleUploadSource = (file: File) => {
     withPaintConfirmation(() => {
-      // Capture the pre-upload state BEFORE the confirmed paint discard so
-      // undo restores the paint and the previous source together.
+      // Capture the pre-upload state up front so a promoted candidate's undo
+      // restores the paint and the previous source together. The confirmed
+      // paint discard itself is DEFERRED to promotion: a failed upload is a
+      // no-op transaction that leaves the field (and its paint) untouched.
       const before = captureVibeSnapshot()
-      sceneCanvasRef.current?.clearPaint()
-      lastPaintSnapshotRef.current =
-        sceneCanvasRef.current?.capturePaintState() ?? createEmptyPaintSnapshot()
       void performUploadSource(file, before)
     })
   }
 
+  // Transactional upload (mobile SVG-loading hardening): the current artwork
+  // stays on the field while the candidate validates (phase 1) and proves it
+  // decodes to a field with visible targets (phase 2); only then is it
+  // promoted and recorded in history (phase 3). Any failure retains the prior
+  // source and field, revokes the candidate's Blob URL exactly once
+  // (registry), stops the pending state, and shows the friendly error copy.
   const performUploadSource = async (file: File, before: VibeStateSnapshot) => {
     vibeTouchedRef.current = true
+    const requestId = ++uploadRequestRef.current
     setUploadPending(true)
     setUploadError(null)
 
-    let result:
-      | { ok: true; kind: VisualSourceKind; url: string; filename: string }
-      | { ok: false; error: string }
-    if (file.type === 'image/svg+xml') {
+    // Phase 1 — validate. Routing never trusts an exact MIME match (mobile
+    // pickers report empty/generic values); the SVG parse or the raster
+    // magic-byte sniff is the real check. The Blob URL is minted from the
+    // sanitized, size-normalized markup and registry-owned from creation.
+    const route = resolveUploadRoute(file)
+    let candidate: UploadedSourceState | null = null
+    let candidateOwnedUrl: string | null = null
+    let failure: string | null = null
+
+    if (route === 'svg') {
       const svgResult = await readUploadedSvg(file)
-      result = svgResult.ok
-        ? { ok: true, kind: 'svg', url: svgResult.url, filename: svgResult.filename }
-        : svgResult
-    } else if ((RASTER_MIME_TYPES as readonly string[]).includes(file.type)) {
-      result = await readUploadedRaster(file)
+      if (svgResult.ok) {
+        const url = createSvgObjectUrl(svgResult.markup)
+        urlRegistryRef.current.own(url)
+        candidate = { kind: 'svg', url, filename: svgResult.filename }
+        candidateOwnedUrl = url
+      } else {
+        failure = svgResult.error
+      }
+    } else if (route === 'raster') {
+      const rasterResult = await readUploadedRaster(file)
+      if (rasterResult.ok) {
+        urlRegistryRef.current.own(rasterResult.url)
+        candidate = { kind: 'raster', url: rasterResult.url, filename: rasterResult.filename }
+        candidateOwnedUrl = rasterResult.url
+      } else {
+        failure = rasterResult.error
+      }
     } else {
-      result = { ok: false, error: UNSUPPORTED_SOURCE_TYPE_ERROR }
+      failure = UNSUPPORTED_SOURCE_TYPE_ERROR
     }
 
-    if (result.ok) {
-      const nextSource: UploadedSourceState = {
-        kind: result.kind,
-        url: result.url,
-        filename: result.filename,
-      }
-      setUploadedSource(nextSource)
-      uploadedSourceRef.current = nextSource
+    // Phase 2 — probe: decode and sample the candidate BEFORE promoting it.
+    // The decode cache (engine/svgTargetSource) dedupes this with the
+    // renderer's own rebuild, so promotion never triggers a second decode
+    // that could fail or flash the fallback.
+    if (candidate && !failure) {
+      const probe = await loadSvgTargets({
+        url: candidate.url,
+        kind: candidate.kind,
+        bounds: {
+          width: Math.max(1, window.innerWidth),
+          height: Math.max(1, window.innerHeight),
+        },
+        samplingStep: sourceLayout.samplingStep,
+        alphaThreshold: sourceLayout.alphaThreshold,
+        margin: sourceLayout.margin,
+        fit: sourceLayout.fit,
+      })
+      const decision = resolveSourcePromotion(
+        { ok: probe.ok, targetCount: probe.x.length, error: probe.error },
+        candidate.kind,
+      )
+      if (!decision.promote) failure = decision.error
+    }
+
+    if (requestId !== uploadRequestRef.current) {
+      // A newer upload took over mid-flight: release this attempt's URL and
+      // leave the pending/error state (and the field) to the winner.
+      if (candidateOwnedUrl) urlRegistryRef.current.release(candidateOwnedUrl)
+      return
+    }
+
+    if (candidate && !failure) {
+      // Phase 3 — promote: only now does the source swap, the confirmed paint
+      // discard happen, and history record the transaction (undo restores the
+      // previous source and paint together).
+      sceneCanvasRef.current?.clearPaint()
+      lastPaintSnapshotRef.current =
+        sceneCanvasRef.current?.capturePaintState() ?? createEmptyPaintSnapshot()
+      setUploadedSource(candidate)
+      uploadedSourceRef.current = candidate
       setUploadError(null)
-      // Only successful uploads create history; failures leave state (and
-      // the undo stack) untouched.
       recordVibeTransaction('source', null, before, captureVibeSnapshot())
       trackEvent({ name: 'upload_result', params: { mime_type: file.type || 'unknown', ok: true } })
       trackEvent({ name: 'source_change', params: { source: 'upload' } })
     } else {
-      // Map the sanitizer's messages to friendly copy (content/vibe.ts).
-      setUploadError(getFriendlyUploadError(result.error))
+      // Rejection: the prior source and field stay live; the failed
+      // candidate's URL is released exactly once.
+      if (candidateOwnedUrl) urlRegistryRef.current.release(candidateOwnedUrl)
+      setUploadError(getFriendlyUploadError(failure ?? UNSUPPORTED_SOURCE_TYPE_ERROR))
       trackEvent({ name: 'upload_result', params: { mime_type: file.type || 'unknown', ok: false } })
     }
     setUploadPending(false)

@@ -194,8 +194,10 @@ async function scenarioProduction(page) {
   )
 
   // Pond: the toggle expands the character pill (session-only, no audio).
+  // The pill is persistent DOM now — wait for the explicit open state.
   await page.click('button.vibe-pond-toggle')
-  await page.waitForSelector('.vibe-pond-pill', { timeout: 8000 })
+  await page.waitForSelector('.vibe-pond-control[data-state="open"]', { timeout: 8000 })
+  await sleep(450) // let the clip-path reveal finish before hit-testing inside
   const pond = await page.evaluate(() => ({
     choices: Array.from(document.querySelectorAll('.vibe-pond-pill [role="radio"]')).map(
       (button) => button.textContent,
@@ -221,7 +223,8 @@ async function scenarioProduction(page) {
 
   // Sound: expanding never starts audio.
   await page.click('button.vibe-sound-toggle')
-  await page.waitForSelector('.vibe-sound-pill', { timeout: 8000 })
+  await page.waitForSelector('.vibe-sound-control[data-state="open"]', { timeout: 8000 })
+  await sleep(450) // let the clip-path reveal finish before hit-testing inside
   check(
     'production: expanding Sound still creates no AudioContext',
     (await audioContextCount(page)) === 0,
@@ -279,21 +282,24 @@ async function scenarioProduction(page) {
     `count ${await audioContextCount(page)}`,
   )
 
-  // Disable collapses the control and stops playback.
-  await page.click('button.vibe-sound-badge[aria-label="Turn sound off"]')
-  await page.waitForSelector('button.vibe-sound-toggle', { timeout: 8000 })
-  const disabled = await page.evaluate(() => ({
-    pill: document.querySelectorAll('.vibe-sound-pill').length,
-    overlay: document.querySelectorAll('.sonification-scan-overlay').length,
-  }))
-  check('production: Disable collapses the pill', disabled.pill === 0)
+  // Disable runs the close transition and stops playback; the anchored FAB
+  // carries the "Turn sound off" label while open (it IS the badge).
+  await page.click('button.vibe-sound-toggle[aria-label="Turn sound off"]')
+  await page.waitForSelector('.vibe-sound-control[data-state="closed"]', { timeout: 8000 })
+  const disabled = await page.evaluate(() => {
+    const pill = document.querySelector('.vibe-sound-pill')
+    return {
+      pillHidden: !!pill && getComputedStyle(pill).visibility === 'hidden',
+      overlay: document.querySelectorAll('.sonification-scan-overlay').length,
+    }
+  })
+  check('production: Disable hides the pill (persistent DOM, collapsed state)', disabled.pillHidden)
   check('production: Disable removes the scan line', disabled.overlay === 0)
 
   // Leaving Vibe stops playback; returning requires Play again.
   await page.click('button.vibe-sound-toggle')
-  await page.waitForSelector('button.vibe-sound-transport[aria-label="Play sound"]', {
-    timeout: 8000,
-  })
+  await page.waitForSelector('.vibe-sound-control[data-state="open"]', { timeout: 8000 })
+  await sleep(450)
   await page.click('button.vibe-sound-transport[aria-label="Play sound"]')
   await page.waitForSelector('button.vibe-sound-transport[aria-label="Pause sound"]', {
     timeout: 8000,
@@ -307,13 +313,13 @@ async function scenarioProduction(page) {
   await page.click('.vibe-cta')
   await page.waitForSelector('.vibe-toolbar', { timeout: 15000 })
   const replay = await page.evaluate(() => ({
-    collapsed: document.querySelectorAll('button.vibe-sound-toggle').length,
-    expandedPill: document.querySelectorAll('.vibe-sound-pill').length,
+    toggle: document.querySelectorAll('button.vibe-sound-toggle').length,
+    state: document.querySelector('.vibe-sound-control')?.getAttribute('data-state'),
     overlay: document.querySelectorAll('.sonification-scan-overlay').length,
   }))
   check(
     'production: leaving Vibe stops playback (control collapsed, Play required again)',
-    replay.collapsed === 1 && replay.expandedPill === 0,
+    replay.toggle === 1 && replay.state === 'closed',
     JSON.stringify(replay),
   )
   check('production: scan line gone after leaving Vibe', replay.overlay === 0)

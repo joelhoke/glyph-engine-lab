@@ -3,20 +3,31 @@
  *
  * Resource model: ONE lazily created AudioContext (created only inside the
  * Play action — never at module load, engine construction, or panel open),
- * a master gain + DynamicsCompressor limiter, and a small fixed voice pool:
- * 2 drone oscillators + 6 reusable note voices (8 total, the
- * SONIFICATION_MAX_VOICES ceiling) plus one seeded looping noise source.
- * Note voices are never stopped per note — their oscillators run
- * continuously and a gain envelope gates them, so there is never one node
- * per glyph/pixel and no node churn per sweep.
+ * a master gain → transition-fade gain → 120 Hz high-pass → DynamicsCompressor
+ * limiter chain, and a small fixed voice pool: 6 reusable note voices (the
+ * SONIFICATION_MAX_VOICES ceiling). Note voices are never stopped per note —
+ * their oscillators run continuously and a gain envelope gates them, so there
+ * is never one node per glyph/pixel and no node churn per sweep.
+ *
+ * There is NO continuous bed by design: no root/fifth drone and no looping
+ * noise texture. Between gated events every voice gain is EXACTLY 0 (never a
+ * 0.0001 "almost zero"), every envelope begins and ends at exactly 0, and a
+ * silent or below-threshold scene renders as exact digital silence. The
+ * 120 Hz master high-pass sits before the limiter to strip DC and
+ * low-frequency buildup from stacked envelopes (the melody floor is 220 Hz,
+ * so nothing musical is lost).
  *
  * A short look-ahead scheduler (25ms interval, ~0.18s horizon) schedules the
  * 24 scan steps against the audio clock; the scan-line overlay derives its
  * position from audioContext.currentTime via getSweepPosition(), never rAF.
  * Volume applies immediately; direction/duration changes begin on the next
- * sweep. Hidden tabs suspend the context (the audio clock freezes, so the
- * sweep resumes exactly where it paused); stop() ends playback entirely and
- * the next Play starts a fresh sweep.
+ * sweep. Every audible transition — Play, Pause, Stop, hidden-tab suspension,
+ * and the capture stop/start cycle — ramps a dedicated transition-fade gain
+ * (30ms) so context suspends never chop a sounding envelope into a click;
+ * the suspend itself is deferred until the fade completes. Hidden tabs
+ * suspend the context (the audio clock freezes, so the sweep resumes exactly
+ * where it paused); stop() ends playback entirely and the next Play starts a
+ * fresh sweep.
  *
  * DOM-free by design: the context comes from an injected factory and every
  * node is a minimal structural interface, so scripts/verify-sonification-audio.js
@@ -30,12 +41,9 @@ import {
   SONIFICATION_STEPS,
 } from './sonificationConfig'
 import type {
-  SonificationDrone,
-  SonificationNoiseTexture,
   SonificationPulseTexture,
   SonificationStepOutput,
 } from './sonificationMapper'
-import { createSeededRandom } from './random'
 
 // --- Minimal structural Web Audio interfaces (stub-friendly) ----------------
 
@@ -76,17 +84,6 @@ export type SonificationCompressorLike = NodeLike & {
   release: SonificationAudioParamLike
 }
 
-export type SonificationBufferLike = {
-  getChannelData: (channel: number) => Float32Array
-}
-
-export type SonificationBufferSourceLike = NodeLike & {
-  buffer: SonificationBufferLike | null
-  loop: boolean
-  start: (when?: number) => void
-  stop: (when?: number) => void
-}
-
 export type SonificationAudioContextLike = {
   currentTime: number
   state: string
@@ -95,12 +92,6 @@ export type SonificationAudioContextLike = {
   createGain: () => SonificationGainLike
   createDynamicsCompressor: () => SonificationCompressorLike
   createBiquadFilter: () => SonificationBiquadLike
-  createBuffer: (
-    channels: number,
-    length: number,
-    sampleRate: number,
-  ) => SonificationBufferLike
-  createBufferSource: () => SonificationBufferSourceLike
   /** Optional: MediaStreamAudioDestinationNode factory for clip capture.
    *  Absent = sonification capture unavailable. */
   createMediaStreamDestination?: () => SonificationCaptureDestinationLike
@@ -127,8 +118,8 @@ export type SonificationCaptureSession = {
 export type SonificationPlaybackState = 'idle' | 'playing' | 'paused' | 'error'
 
 export type SonificationEngineTextures = {
-  drone: SonificationDrone
-  noise: SonificationNoiseTexture | null
+  /** Matrix pulse texture; null = no pulses. There is deliberately no drone
+   *  or noise texture — continuous beds may not ship. */
   pulses: SonificationPulseTexture | null
 }
 
@@ -149,15 +140,19 @@ export type SonificationEngineOptions = {
   /** Timer injection for non-DOM runtimes (defaults to global setInterval). */
   setIntervalFn?: (fn: () => void, ms: number) => unknown
   clearIntervalFn?: (id: unknown) => void
+  /** Timeout injection for the deferred post-fade suspend (defaults to
+   *  global setTimeout/clearTimeout). */
+  setTimeoutFn?: (fn: () => void, ms: number) => unknown
+  clearTimeoutFn?: (id: unknown) => void
   /** Called by the scheduler ~LOOKAHEAD before each scan step sounds; the
    *  host re-reads the current strip, re-maps, and returns the step's notes
-   *  (null = drone/ambient only). */
+   *  (null = silence this step). */
   onScheduleStep: (
     playbackStep: number,
     stepTime: number,
     stepDuration: number,
   ) => SonificationStepOutput | null
-  /** Drone/noise/pulse params, re-queried at every sweep start. */
+  /** Pulse texture params, re-queried at every sweep start. */
   getTextures?: () => SonificationEngineTextures | null
   onPlaybackChange?: (state: SonificationPlaybackState) => void
   onError?: (message: string) => void
@@ -198,9 +193,17 @@ const LOOKAHEAD_S = 0.18
 const START_OFFSET_S = 0.1
 /** A step whose start time fell this far behind the audio clock is dropped. */
 const DROP_SLOP_S = 0.05
-const NOTE_VOICE_COUNT = 6 // + 2 drone oscillators = SONIFICATION_MAX_VOICES
+const NOTE_VOICE_COUNT = 6 // = SONIFICATION_MAX_VOICES
 const NOTE_LEVEL = 0.5
+/** Pulse events are short and fully gated: 60ms total, ending at exactly 0,
+ *  so there is real silence between pulses even at the fastest matrix rate. */
 const PULSE_DURATION_S = 0.06
+/** Master high-pass cutoff: strips DC and low-frequency buildup before the
+ *  limiter. The musical floor is A3 = 220 Hz, so nothing scored is lost. */
+const HIGHPASS_CUTOFF_HZ = 120
+/** Transition-fade duration. 30ms is long enough to de-click any context
+ *  suspend/resume boundary, short enough to feel immediate. */
+const TRANSITION_FADE_S = 0.03
 
 const volumeToGain = (volume: number): number =>
   Math.pow(Math.min(100, Math.max(0, volume)) / 100, 2) * 0.9
@@ -225,6 +228,10 @@ export function createSonificationEngine(
   const setTimer = options.setIntervalFn ?? ((fn: () => void, ms: number) => setInterval(fn, ms))
   const clearTimer =
     options.clearIntervalFn ?? ((id: unknown) => clearInterval(id as Parameters<typeof clearInterval>[0]))
+  const setTimeoutFn =
+    options.setTimeoutFn ?? ((fn: () => void, ms: number) => setTimeout(fn, ms))
+  const clearTimeoutFn =
+    options.clearTimeoutFn ?? ((id: unknown) => clearTimeout(id as Parameters<typeof clearTimeout>[0]))
 
   let ctx: SonificationAudioContextLike | null = null
   let state: SonificationPlaybackState = 'idle'
@@ -245,17 +252,16 @@ export function createSonificationEngine(
 
   // Graph (built once per context).
   let masterGain: SonificationGainLike | null = null
-  let droneGain: SonificationGainLike | null = null
-  let droneFilter: SonificationBiquadLike | null = null
-  let droneOsc: SonificationOscillatorLike | null = null
-  let droneFifthOsc: SonificationOscillatorLike | null = null
-  let noiseGain: SonificationGainLike | null = null
-  let noiseFilter: SonificationBiquadLike | null = null
-  let noiseSource: SonificationBufferSourceLike | null = null
+  /** Dedicated fade stage for Play/Pause/Stop/visibility/capture transitions;
+   *  separate from the volume stage so fades never fight user volume. */
+  let transitionGain: SonificationGainLike | null = null
+  let highpassFilter: SonificationBiquadLike | null = null
   let pulseTexture: SonificationPulseTexture | null = null
   /** Single reusable capture tap (after master gain + limiter). */
   let captureDest: SonificationCaptureDestinationLike | null = null
   let captureUnavailable = false
+  /** Pending deferred suspend (fires only after the fade-out completes). */
+  let suspendTimeoutId: unknown = null
   type Voice = {
     osc: SonificationOscillatorLike
     filter: SonificationBiquadLike
@@ -292,9 +298,25 @@ export function createSonificationEngine(
     compressor.release.value = 0.24
     compressor.connect(context.destination)
 
+    // Master high-pass BEFORE the limiter: keeps 20–120 Hz buildup out of
+    // both the speakers and the capture mix.
+    const highpass = context.createBiquadFilter()
+    highpass.type = 'highpass'
+    highpass.frequency.value = HIGHPASS_CUTOFF_HZ
+    highpass.Q.value = 0.707 // Butterworth: maximally flat passband
+    highpass.connect(compressor)
+    highpassFilter = highpass
+
+    // Transition-fade stage: Play/Pause/Stop/visibility/capture ramps live
+    // here so they never rewrite (or fight) the visitor's volume setting.
+    const transition = context.createGain()
+    transition.gain.value = 0 // every playback begins with a fade-in
+    transition.connect(highpass)
+    transitionGain = transition
+
     const master = context.createGain()
     master.gain.value = volumeToGain(config?.volume ?? 35)
-    master.connect(compressor)
+    master.connect(transition)
     masterGain = master
 
     // Clip capture: ONE reusable MediaStream destination tapped after the
@@ -312,52 +334,8 @@ export function createSonificationEngine(
       captureUnavailable = true
     }
 
-    // Drone: root + fifth sines through a soft lowpass.
-    const dFilter = context.createBiquadFilter()
-    dFilter.type = 'lowpass'
-    dFilter.frequency.value = 800
-    const dGain = context.createGain()
-    dGain.gain.value = 0
-    const dOsc = context.createOscillator()
-    dOsc.type = 'sine'
-    const dFifth = context.createOscillator()
-    dFifth.type = 'sine'
-    dOsc.connect(dFilter)
-    dFifth.connect(dFilter)
-    dFilter.connect(dGain)
-    dGain.connect(master)
-    dOsc.start(0)
-    dFifth.start(0)
-    droneFilter = dFilter
-    droneGain = dGain
-    droneOsc = dOsc
-    droneFifthOsc = dFifth
-
-    // Seeded noise texture (deterministic buffer, reused for the session).
-    const nFilter = context.createBiquadFilter()
-    nFilter.type = 'lowpass'
-    nFilter.frequency.value = 600
-    const nGain = context.createGain()
-    nGain.gain.value = 0
-    const source = context.createBufferSource()
-    const length = 44100 * 2
-    const buffer = context.createBuffer(1, length, 44100)
-    const data = buffer.getChannelData(0)
-    const random = createSeededRandom(0x5eed)
-    for (let i = 0; i < length; i += 1) {
-      data[i] = random() * 2 - 1
-    }
-    source.buffer = buffer
-    source.loop = true
-    source.connect(nFilter)
-    nFilter.connect(nGain)
-    nGain.connect(master)
-    source.start(0)
-    noiseFilter = nFilter
-    noiseGain = nGain
-    noiseSource = source
-
-    // Reusable note voices: always-running oscillators gated by gain.
+    // Reusable note voices: always-running oscillators gated by gain. Every
+    // idle gate is EXACTLY 0 — no 0.0001 leaks, no continuous bed.
     voices = []
     for (let i = 0; i < NOTE_VOICE_COUNT; i += 1) {
       const osc = context.createOscillator()
@@ -400,10 +378,11 @@ export function createSonificationEngine(
     voice.filter.frequency.setValueAtTime(300 + brightness * 3400, when)
     const gain = voice.gain.gain
     gain.cancelScheduledValues(when)
-    gain.setValueAtTime(0.0001, when)
-    gain.linearRampToValueAtTime(Math.max(0.0001, peak), when + 0.015)
-    gain.setValueAtTime(Math.max(0.0001, peak), when + duration * 0.6)
-    gain.linearRampToValueAtTime(0.0001, when + duration * 0.95)
+    // Every envelope begins AND ends at exactly 0.
+    gain.setValueAtTime(0, when)
+    gain.linearRampToValueAtTime(peak, when + 0.015)
+    gain.setValueAtTime(peak, when + duration * 0.6)
+    gain.linearRampToValueAtTime(0, when + duration)
     voice.busyUntil = when + duration
   }
 
@@ -435,33 +414,7 @@ export function createSonificationEngine(
     )
   }
 
-  const rampParam = (param: SonificationAudioParamLike, value: number, now: number, ramp: number) => {
-    param.cancelScheduledValues(now)
-    param.setValueAtTime(param.value, now)
-    param.linearRampToValueAtTime(value, now + ramp)
-  }
-
   const applyTextures = (textures: SonificationEngineTextures | null) => {
-    if (!ctx || !droneGain || !droneFilter || !droneOsc || !droneFifthOsc) return
-    const now = ctx.currentTime
-    const drone = textures?.drone ?? null
-    if (drone) {
-      droneOsc.frequency.setValueAtTime(drone.rootFrequency, now)
-      droneFifthOsc.frequency.setValueAtTime(drone.fifthFrequency, now)
-      droneFilter.frequency.setValueAtTime(drone.cutoff, now)
-      rampParam(droneGain.gain, drone.gain, now, 0.5)
-    } else {
-      rampParam(droneGain.gain, 0, now, 0.3)
-    }
-    if (noiseGain && noiseFilter) {
-      const noise = textures?.noise ?? null
-      if (noise && noise.gain > 0) {
-        noiseFilter.frequency.setValueAtTime(noise.cutoff, now)
-        rampParam(noiseGain.gain, noise.gain, now, 0.5)
-      } else {
-        rampParam(noiseGain.gain, 0, now, 0.3)
-      }
-    }
     pulseTexture = textures?.pulses ?? null
   }
 
@@ -473,14 +426,47 @@ export function createSonificationEngine(
       voice.gain.gain.setValueAtTime(0, now)
       voice.busyUntil = 0
     }
-    if (droneGain) {
-      droneGain.gain.cancelScheduledValues(now)
-      droneGain.gain.setValueAtTime(0, now)
+  }
+
+  const clearSuspendTimeout = () => {
+    if (suspendTimeoutId !== null) {
+      clearTimeoutFn(suspendTimeoutId)
+      suspendTimeoutId = null
     }
-    if (noiseGain) {
-      noiseGain.gain.cancelScheduledValues(now)
-      noiseGain.gain.setValueAtTime(0, now)
-    }
+  }
+
+  /** Ramp the transition-fade stage (30ms) so no transition chops a sounding
+   *  envelope into a click. */
+  const fadeTransition = (target: 0 | 1) => {
+    if (!ctx || !transitionGain) return
+    const now = ctx.currentTime
+    const gain = transitionGain.gain
+    gain.cancelScheduledValues(now)
+    gain.setValueAtTime(gain.value, now)
+    gain.linearRampToValueAtTime(target, now + TRANSITION_FADE_S)
+  }
+
+  /** Fade out first; suspend only after the fade has completed. A stale
+   *  pending suspend is cancelled by any resume/play that lands first. */
+  const suspendAfterFade = () => {
+    if (!ctx) return
+    fadeTransition(0)
+    clearSuspendTimeout()
+    suspendTimeoutId = setTimeoutFn(() => {
+      suspendTimeoutId = null
+      try {
+        ctx?.suspend()
+      } catch {}
+    }, TRANSITION_FADE_S * 1000)
+  }
+
+  const resumeWithFade = () => {
+    if (!ctx) return
+    clearSuspendTimeout()
+    try {
+      ctx.resume()
+    } catch {}
+    fadeTransition(1)
   }
 
   const advanceSweep = () => {
@@ -563,9 +549,7 @@ export function createSonificationEngine(
       } catch {}
     }
     setState('playing')
-    try {
-      ctx.resume()
-    } catch {}
+    resumeWithFade()
     startTimer()
   }
 
@@ -573,9 +557,7 @@ export function createSonificationEngine(
     if (state !== 'playing' || !ctx) return
     stopTimer()
     setState('paused')
-    try {
-      ctx.suspend()
-    } catch {}
+    suspendAfterFade()
   }
 
   const stop = () => {
@@ -585,11 +567,7 @@ export function createSonificationEngine(
     silenceNow()
     nextStep = 0
     setState('idle')
-    if (ctx) {
-      try {
-        ctx.suspend()
-      } catch {}
-    }
+    suspendAfterFade()
   }
 
   const setConfig = (next: SonificationConfig) => {
@@ -608,18 +586,14 @@ export function createSonificationEngine(
       if (state === 'playing' && ctx && !hiddenSuspended) {
         hiddenSuspended = true
         stopTimer()
-        try {
-          ctx.suspend()
-        } catch {}
+        suspendAfterFade()
       }
       return
     }
     if (hiddenSuspended) {
       hiddenSuspended = false
       if (state === 'playing' && ctx) {
-        try {
-          ctx.resume()
-        } catch {}
+        resumeWithFade()
         startTimer()
       }
     }
@@ -627,6 +601,7 @@ export function createSonificationEngine(
 
   const dispose = () => {
     stopTimer()
+    clearSuspendTimeout()
     hiddenSuspended = false
     if (ctx) {
       silenceNow()
@@ -636,16 +611,6 @@ export function createSonificationEngine(
           voice.osc.disconnect()
         } catch {}
       }
-      for (const osc of [droneOsc, droneFifthOsc]) {
-        try {
-          osc?.stop(0)
-          osc?.disconnect()
-        } catch {}
-      }
-      try {
-        noiseSource?.stop(0)
-        noiseSource?.disconnect()
-      } catch {}
       try {
         captureDest?.disconnect()
       } catch {}
@@ -657,13 +622,8 @@ export function createSonificationEngine(
     }
     ctx = null
     masterGain = null
-    droneGain = null
-    droneFilter = null
-    droneOsc = null
-    droneFifthOsc = null
-    noiseGain = null
-    noiseFilter = null
-    noiseSource = null
+    transitionGain = null
+    highpassFilter = null
     pulseTexture = null
     voices = []
     setState('idle')
@@ -687,7 +647,9 @@ export function createSonificationEngine(
   const beginCapture = (): SonificationCaptureSession | null => {
     const prior = state
     // Fresh sweep from step zero: stop() resets the scan position, play()
-    // (re)creates/resumes the single context and starts from step 0.
+    // (re)creates/resumes the single context and starts from step 0. Both
+    // transitions are faded (stop fades out, play fades in), so the capture
+    // boundary never clicks.
     if (state === 'playing' || state === 'paused') stop()
     play()
     if (state !== 'playing') {

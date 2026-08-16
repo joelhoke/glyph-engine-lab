@@ -3,8 +3,21 @@
  *
  * This module is intentionally small and focused: it reads a user-selected
  * file, validates the markup with a browser DOMParser, rejects unsafe or
- * external content, and returns a self-contained data-URL representation that
- * the existing SVG target pipeline can consume directly.
+ * external content, and returns the validated markup plus its resolved
+ * intrinsic size. Validation is deliberately split from URL creation
+ * (createSvgObjectUrl) so the caller owns the Blob-URL lifecycle — the URL is
+ * minted only for a candidate that passed validation and is revoked by the
+ * caller's registry when the candidate fails or is superseded.
+ *
+ * Size normalization: mobile file pickers deliver SVGs that rely on viewBox
+ * alone or on percentage width/height, which several mobile engines decode as
+ * 0×0 (or a 300×150 default) in an <img>. When the root lacks fixed numeric
+ * dimensions but they can be resolved (numeric width/height first, viewBox as
+ * fallback), the resolved size is injected into the returned markup so the
+ * decoded image always reports real intrinsic dimensions.
+ *
+ * Error messages are literal strings; content/vibe.ts maps them to friendly
+ * copy and scripts/verify-vibe-content.js fails if the two drift apart.
  */
 
 export const MAX_UPLOAD_SIZE_BYTES = 1024 * 1024
@@ -18,8 +31,13 @@ const DATA_URL_RE = /^data:/i
 
 export type SvgUploadSuccessResult = {
   ok: true
-  url: string
+  /** Validated, size-normalized SVG markup — safe to hand to a Blob. */
+  markup: string
   filename: string
+  /** Intrinsic CSS-pixel width resolved from width/height or viewBox; null when unknown. */
+  intrinsicWidth: number | null
+  /** Intrinsic CSS-pixel height resolved from width/height or viewBox; null when unknown. */
+  intrinsicHeight: number | null
 }
 
 export type SvgUploadErrorResult = {
@@ -33,9 +51,102 @@ export function isUploadTooLarge(sizeInBytes: number): boolean {
   return sizeInBytes > MAX_UPLOAD_SIZE_BYTES
 }
 
+/** Fixed numeric length (plain number or px); percentages and other units
+ *  return null — they are not usable intrinsic dimensions. */
+function parseFixedLength(raw: string | null): number | null {
+  if (!raw) return null
+  const match = /^\s*(\d+(?:\.\d+)?)\s*(px)?\s*$/i.exec(raw)
+  if (!match) return null
+  const value = Number.parseFloat(match[1])
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+/** viewBox width/height when the attribute holds four finite numbers with a
+ *  positive size; null otherwise. */
+function parseViewBoxSize(raw: string | null): { width: number; height: number } | null {
+  if (!raw) return null
+  const parts = raw
+    .trim()
+    .split(/[\s,]+/)
+    .map((part) => Number(part))
+  if (parts.length !== 4 || parts.some((part) => !Number.isFinite(part))) return null
+  if (parts[2] <= 0 || parts[3] <= 0) return null
+  return { width: parts[2], height: parts[3] }
+}
+
 /**
- * Validate an already-parsed SVG Document and, if safe, turn the original
- * markup into a base64 data URL for the renderer.
+ * Resolve the intrinsic size of a validated SVG root: fixed numeric
+ * width/height win, a missing axis falls back to the viewBox (preserving its
+ * aspect ratio when the other axis is fixed), and a viewBox-only root yields
+ * the viewBox size itself. Either axis is null when nothing resolves it.
+ */
+export function resolveSvgIntrinsicSize(root: Element): {
+  width: number | null
+  height: number | null
+} {
+  const viewBox = parseViewBoxSize(root.getAttribute('viewBox'))
+  let width = parseFixedLength(root.getAttribute('width'))
+  let height = parseFixedLength(root.getAttribute('height'))
+  if (width === null && height !== null && viewBox) {
+    width = height * (viewBox.width / viewBox.height)
+  } else if (height === null && width !== null && viewBox) {
+    height = width * (viewBox.height / viewBox.width)
+  }
+  if (width === null && viewBox) width = viewBox.width
+  if (height === null && viewBox) height = viewBox.height
+  return { width, height }
+}
+
+const SVG_ROOT_OPEN_RE = /<svg(?=[\s/>])/i
+const WIDTH_ATTR_RE = /\s+width\s*=\s*("[^"]*"|'[^']*')/i
+const HEIGHT_ATTR_RE = /\s+height\s*=\s*("[^"]*"|'[^']*')/i
+
+/**
+ * Set the root <svg> tag's width/height to the resolved values, replacing any
+ * existing (percentage or stale) attributes. String-level so it needs no DOM
+ * serializer: the markup is already known to be valid XML, where attribute
+ * values are always quoted. Returns the input unchanged when no root tag is
+ * found (defensive — validation has already guaranteed one).
+ */
+export function upsertSvgRootSize(markup: string, width: number, height: number): string {
+  const match = SVG_ROOT_OPEN_RE.exec(markup)
+  if (!match) return markup
+  const tagStart = match.index
+  // Scan to the end of the opening tag, respecting quoted attribute values.
+  let tagEnd = tagStart + 4
+  let quote: string | null = null
+  while (tagEnd < markup.length) {
+    const ch = markup[tagEnd]
+    if (quote) {
+      if (ch === quote) quote = null
+    } else if (ch === '"' || ch === "'") {
+      quote = ch
+    } else if (ch === '>') {
+      break
+    }
+    tagEnd += 1
+  }
+  if (tagEnd >= markup.length) return markup
+  let tag = markup.slice(tagStart, tagEnd + 1)
+  tag = tag.replace(WIDTH_ATTR_RE, '').replace(HEIGHT_ATTR_RE, '')
+  const closing = tag.endsWith('/>') ? '/>' : '>'
+  const head = tag.slice(0, tag.length - closing.length)
+  const sized = `${head} width="${width}" height="${height}"${closing}`
+  return markup.slice(0, tagStart) + sized + markup.slice(tagEnd + 1)
+}
+
+/**
+ * Mint the renderer-facing Blob URL for validated markup. Split from
+ * validation so the caller owns the URL's lifecycle (registry-tracked,
+ * revoked exactly once on failure/replacement — see engine/sourcePromotion).
+ */
+export function createSvgObjectUrl(markup: string): string {
+  return URL.createObjectURL(new Blob([markup], { type: 'image/svg+xml' }))
+}
+
+/**
+ * Validate an already-parsed SVG Document and, if safe, return the normalized
+ * markup plus the resolved intrinsic size for the renderer.
  */
 export function validateSvgDocument(
   doc: Document,
@@ -116,15 +227,30 @@ export function validateSvgDocument(
     }
   }
 
+  // Normalize root sizing so mobile engines decode real intrinsic dimensions:
+  // a root lacking fixed numeric width/height gets the resolved size injected.
+  const size = resolveSvgIntrinsicSize(root)
+  let markup = content
+  const widthFixed = parseFixedLength(root.getAttribute('width')) !== null
+  const heightFixed = parseFixedLength(root.getAttribute('height')) !== null
+  if (size.width !== null && size.height !== null && (!widthFixed || !heightFixed)) {
+    markup = upsertSvgRootSize(content, size.width, size.height)
+  }
+
   return {
     ok: true,
-    url: svgContentToDataUrl(content),
+    markup,
     filename,
+    intrinsicWidth: size.width,
+    intrinsicHeight: size.height,
   }
 }
 
 /**
- * Read and validate a user-selected File object.
+ * Read and validate a user-selected File object. The MIME type is NOT trusted
+ * here (mobile pickers report empty or generic values): the DOM parse above
+ * is what confirms a valid SVG root — routing by name/type lives in
+ * engine/sourcePromotion (resolveUploadRoute).
  */
 export function readUploadedSvg(file: File): Promise<SvgUploadResult> {
   if (isUploadTooLarge(file.size)) {
@@ -180,13 +306,4 @@ function checkStyle(text: string): string | null {
   }
 
   return null
-}
-
-function svgContentToDataUrl(content: string): string {
-  const bytes = new TextEncoder().encode(content)
-  let binary = ''
-  for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i])
-  }
-  return `data:image/svg+xml;base64,${btoa(binary)}`
 }

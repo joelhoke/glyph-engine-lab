@@ -217,9 +217,7 @@ export function useSonification({
         onScheduleStep: (playbackStep) => handleScheduleStep(playbackStep),
         getTextures: () => {
           const score = scoreRef.current
-          return score
-            ? { drone: score.drone, noise: score.noise, pulses: score.pulses }
-            : null
+          return score ? { pulses: score.pulses } : null
         },
         onPlaybackChange: (state) => {
           setPlayback(state)

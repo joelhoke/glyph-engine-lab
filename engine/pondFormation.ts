@@ -97,6 +97,32 @@ export function resetPondFormationTracker(tracker: PondFormationTracker): void {
   tracker.normalSpeedSums.fill(0)
 }
 
+/**
+ * Hard-clamp the swimming body into the given bounds, killing any outward
+ * velocity component (same semantics as stepPondBody's containment fallback).
+ * Applied when a new source field becomes ready and when the mobile viewport
+ * changes: the pond formation state is re-fit against the new source bounds
+ * so Source mode never begins partially offscreen.
+ */
+export function containPondBody(body: PondBody, width: number, height: number): void {
+  const maxX = Math.max(0, width)
+  const maxY = Math.max(0, height)
+  if (body.x < 0) {
+    body.x = 0
+    if (body.vx < 0) body.vx = 0
+  } else if (body.x > maxX) {
+    body.x = maxX
+    if (body.vx > 0) body.vx = 0
+  }
+  if (body.y < 0) {
+    body.y = 0
+    if (body.vy < 0) body.vy = 0
+  } else if (body.y > maxY) {
+    body.y = maxY
+    if (body.vy > 0) body.vy = 0
+  }
+}
+
 /** Unique-contact threshold for the current visible glyph population. */
 export function pondFormationContactThreshold(
   visibleGlyphCount: number,

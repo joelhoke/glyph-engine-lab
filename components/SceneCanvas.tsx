@@ -117,6 +117,7 @@ import {
 } from '../engine/pondTransform'
 import { applyPondBoundary } from '../engine/pondBoundaries'
 import {
+  containPondBody,
   createPondFormationTracker,
   ensurePondFormationCapacity,
   PondFormationTracker,
@@ -511,6 +512,11 @@ function SceneCanvasInternal(
   const animatedLastNowRef = useRef(0)
   const animatedLastSampleRef = useRef(0)
   const animatedHasValidFieldRef = useRef(false)
+  // Static twin of the animated rule above: once any static source (built-in,
+  // work, collaborate, or upload) has produced a valid field, a transient
+  // re-decode failure (resize/orientation rebuild) keeps the last valid field
+  // — the JH logo fallback is reserved for scenes with no valid field at all.
+  const staticHasValidFieldRef = useRef(false)
   const viewportSizeRef = useRef({ width: 0, height: 0 })
   // Capped render pixel ratio (see engine/displayBudget); refreshed on resize
   // and read by the draw functions instead of the raw global.
@@ -2478,6 +2484,7 @@ function SceneCanvasInternal(
     }
     const decision = resolveSourceFieldDecision({ ok: result.ok, targetCount: result.x.length, error: result.error })
     if (decision.use === 'source') {
+      staticHasValidFieldRef.current = true
       // Region-bound: shift the region-local sample coordinates by the
       // stage's viewport-relative offset so the targets land on the stage on
       // the full-viewport canvas.
@@ -2511,9 +2518,21 @@ function SceneCanvasInternal(
         sourceDecodeMs,
         targetRebuildCount: diagnosticsRef.current.targetRebuildCount + 1,
       })
+    } else if (staticHasValidFieldRef.current) {
+      // Transient failure on a rebuild (resize/orientation) with a valid
+      // field in hand: keep the last sampled field live — the JH fallback is
+      // reserved for initial scenes with no previous valid field (mirrors
+      // the animated path's rule).
+      patchDiagnostics({
+        sourceStatus: 'error',
+        sourceError: decision.reason,
+        sourceDecodeMs,
+      })
+      return
     } else {
-      // Missing, invalid, or zero-alpha source: fall back to the logo field
-      // so the scene stays readable instead of going blank.
+      // Initial scene with no valid field yet (missing, invalid, or
+      // zero-alpha source): fall back to the logo field so the scene stays
+      // readable instead of going blank.
       const fallback = buildLogoTargets()
       setBaseField(fallback.x, fallback.y, fallback.colors, fallback.normX, fallback.normY)
       patchDiagnostics({
@@ -2527,9 +2546,12 @@ function SceneCanvasInternal(
     // Population, assignment, paint replay, counts, and renderOnce all run in
     // the required order inside applyMotionField. The quality controller
     // ignores the evaluation window this rebuild lands in. A rebuilt source
-    // field restarts pond formation accumulation.
+    // field restarts pond formation accumulation, and the swimming body is
+    // re-clamped into the current bounds so Source mode never begins
+    // partially offscreen after a source/viewport change.
     qualityRebuildPendingRef.current = true
     if (pondFormationRef.current) resetPondFormationTracker(pondFormationRef.current)
+    if (pondBodyRef.current) containPondBody(pondBodyRef.current, W, H)
     applyMotionField()
   }
 

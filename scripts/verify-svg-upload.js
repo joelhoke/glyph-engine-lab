@@ -4,8 +4,10 @@
  *
  * Compiles the sanitizer to a temporary CommonJS module and exercises the
  * validation rules with a small DOM mock. This is not a browser integration
- * test; it proves the sanitizer rejects the documented unsafe patterns and
- * accepts normal SVG geometry/fragment references.
+ * test; it proves the sanitizer rejects the documented unsafe patterns,
+ * accepts normal SVG geometry/fragment references, and — for the mobile
+ * upload hardening — returns normalized markup plus resolved intrinsic
+ * dimensions (viewBox-only and percentage-sized roots no longer collapse).
  */
 
 const { execSync } = require('child_process')
@@ -113,13 +115,27 @@ function svgRoot(...children) {
   return makeElement('svg', { xmlns: 'http://www.w3.org/2000/svg' }, children)
 }
 
-// 1. Valid path-based SVG.
+function svgRootAttrs(attrs, ...children) {
+  return makeElement('svg', { xmlns: 'http://www.w3.org/2000/svg', ...attrs }, children)
+}
+
+// 1. Valid path-based SVG: validated markup is returned (no data URL — the
+// caller mints a Blob URL from the markup after validation).
+const SIMPLE_CONTENT = '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h10v10H0z"/></svg>'
 let doc = makeDocument(svgRoot(makeElement('path', { d: 'M0 0h10v10H0z' })))
-let result = validateSvgDocument(doc, '<svg></svg>', 'path.svg')
+let result = validateSvgDocument(doc, SIMPLE_CONTENT, 'path.svg')
 assert(result.ok, 'valid path-based SVG is accepted')
 assert(
-  result.ok && result.url.startsWith('data:image/svg+xml;base64,'),
-  'valid SVG produces a base64 data URL',
+  result.ok && result.markup === SIMPLE_CONTENT,
+  'valid SVG returns the validated markup unchanged when sizing is already fine',
+)
+assert(
+  result.ok && !('url' in result),
+  'validation no longer creates a URL (split from URL creation)',
+)
+assert(
+  result.ok && result.intrinsicWidth === null && result.intrinsicHeight === null,
+  'root without any sizing resolves null intrinsic dimensions',
 )
 
 // 2. Valid internal gradient.
@@ -149,6 +165,120 @@ doc = makeDocument(
 )
 result = validateSvgDocument(doc, '<svg></svg>', 'clip.svg')
 assert(result.ok, 'valid internal clip-path reference is accepted')
+
+// 3b. Valid internal mask.
+doc = makeDocument(
+  svgRoot(
+    makeElement('defs', {}, [
+      makeElement('mask', { id: 'fade' }, [
+        makeElement('rect', { width: '10', height: '10', fill: 'url(#grad)' }),
+      ]),
+    ]),
+    makeElement('rect', { width: '10', height: '10', mask: 'url(#fade)' }),
+  ),
+)
+result = validateSvgDocument(doc, '<svg></svg>', 'mask.svg')
+assert(result.ok, 'valid internal mask reference is accepted')
+
+// 3c. Valid internal use fragment.
+doc = makeDocument(
+  svgRoot(
+    makeElement('defs', {}, [makeElement('path', { id: 'shape', d: 'M0 0h4v4H0z' })]),
+    makeElement('use', { href: '#shape' }),
+  ),
+)
+result = validateSvgDocument(doc, '<svg></svg>', 'use-internal.svg')
+assert(result.ok, 'internal use fragment reference is accepted')
+
+// 3d. UTF-8 filename and markup survive validation byte-for-byte.
+const UTF8_CONTENT =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><text>标志 — café</text></svg>'
+doc = makeDocument(
+  svgRootAttrs({ width: '24', height: '24' }, makeElement('text', {}, [], '标志 — café')),
+)
+result = validateSvgDocument(doc, UTF8_CONTENT, '标志.svg')
+assert(result.ok, 'UTF-8 markup is accepted')
+assert(result.ok && result.filename === '标志.svg', 'UTF-8 filename is preserved')
+assert(result.ok && result.markup === UTF8_CONTENT, 'UTF-8 markup is preserved byte-for-byte')
+
+// 3e. viewBox-only sizing: intrinsic size resolves from the viewBox and is
+// injected into the normalized markup (mobile decode hardening).
+const VIEWBOX_CONTENT =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120"><rect width="240" height="120"/></svg>'
+doc = makeDocument(
+  svgRootAttrs({ viewBox: '0 0 240 120' }, makeElement('rect', { width: '240', height: '120' })),
+)
+result = validateSvgDocument(doc, VIEWBOX_CONTENT, 'viewbox.svg')
+assert(result.ok, 'viewBox-only SVG is accepted')
+assert(
+  result.ok && result.intrinsicWidth === 240 && result.intrinsicHeight === 120,
+  'viewBox-only SVG resolves intrinsic dimensions from the viewBox',
+)
+assert(
+  result.ok && /<svg[^>]*width="240"/.test(result.markup) && /<svg[^>]*height="120"/.test(result.markup),
+  'viewBox-only SVG markup is normalized with concrete root width/height',
+)
+assert(
+  result.ok && result.markup.includes('viewBox="0 0 240 120"'),
+  'normalization keeps the viewBox attribute intact',
+)
+
+// 3f. Percentage sizing: resolved against the viewBox, percentages replaced.
+const PERCENT_CONTENT =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 100 50"><rect width="100" height="50"/></svg>'
+doc = makeDocument(
+  svgRootAttrs(
+    { width: '100%', height: '100%', viewBox: '0 0 100 50' },
+    makeElement('rect', { width: '100', height: '50' }),
+  ),
+)
+result = validateSvgDocument(doc, PERCENT_CONTENT, 'percent.svg')
+assert(result.ok, 'percentage-sized SVG is accepted')
+assert(
+  result.ok && result.intrinsicWidth === 100 && result.intrinsicHeight === 50,
+  'percentage-sized SVG resolves intrinsic dimensions from the viewBox',
+)
+assert(
+  result.ok &&
+    /<svg[^>]*width="100"/.test(result.markup) &&
+    /<svg[^>]*height="50"/.test(result.markup) &&
+    !/<svg[^>]*100%/.test(result.markup),
+  'percentage root dimensions are replaced with resolved values',
+)
+
+// 3g. Fixed numeric sizing: metadata returned, markup untouched.
+doc = makeDocument(svgRootAttrs({ width: '10', height: '20' }, makeElement('rect')))
+const FIXED_CONTENT = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="20"><rect/></svg>'
+result = validateSvgDocument(doc, FIXED_CONTENT, 'fixed.svg')
+assert(
+  result.ok && result.intrinsicWidth === 10 && result.intrinsicHeight === 20,
+  'fixed numeric root dimensions resolve directly',
+)
+assert(result.ok && result.markup === FIXED_CONTENT, 'already-sized markup is left unchanged')
+
+// 3h. One fixed axis + viewBox: the missing axis derives from the aspect.
+doc = makeDocument(svgRootAttrs({ width: '200', viewBox: '0 0 100 50' }, makeElement('rect')))
+const ONE_AXIS_CONTENT =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="200" viewBox="0 0 100 50"><rect/></svg>'
+result = validateSvgDocument(doc, ONE_AXIS_CONTENT, 'one-axis.svg')
+assert(
+  result.ok && result.intrinsicWidth === 200 && result.intrinsicHeight === 100,
+  'missing axis derives from the viewBox aspect ratio',
+)
+assert(
+  result.ok && /<svg[^>]*height="100"/.test(result.markup),
+  'derived missing axis is injected into the markup',
+)
+
+// 3i. Degenerate viewBox: no usable size, markup untouched.
+doc = makeDocument(svgRootAttrs({ viewBox: '0 0 0 0' }, makeElement('rect')))
+const DEGEN_CONTENT = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0"><rect/></svg>'
+result = validateSvgDocument(doc, DEGEN_CONTENT, 'degenerate.svg')
+assert(
+  result.ok && result.intrinsicWidth === null && result.intrinsicHeight === null,
+  'degenerate viewBox resolves null intrinsic dimensions',
+)
+assert(result.ok && result.markup === DEGEN_CONTENT, 'unresolvable sizing leaves markup unchanged')
 
 // 4. Missing SVG root.
 doc = makeDocument(makeElement('div', {}, [makeElement('path')]))

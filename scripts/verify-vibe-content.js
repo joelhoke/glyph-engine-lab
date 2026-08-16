@@ -267,6 +267,14 @@ assert(
   'invitation, button label, dock invitation, privacy note, pending label, and error fallback are non-empty strings',
 )
 
+// --- invitation copy (exact, user-authored) ---------------------------------
+
+assert(
+  VIBE_INVITATION ===
+    'Welcome to the playground. It’s tuned to my preferences—until you change them, of course. Bend the type, color, and shape, or bring your own. Everything stays in your browser.',
+  'invitation matches the exact authored playground copy',
+)
+
 // --- privacy note ----------------------------------------------------------
 
 assert(

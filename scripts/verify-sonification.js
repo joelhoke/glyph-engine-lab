@@ -5,8 +5,10 @@
  * engine/sonificationAnalysis.ts (tier raster sizing, hex→HSL, strip feature
  * extraction on both axes, strip copy), and engine/sonificationMapper.ts
  * (four directions, reverse ordering, root/scale mapping from background
- * hues, note caps, silent-frame behavior, determinism, scene sensitivity,
- * register from background luminance).
+ * hues, note caps, silent-frame behavior — a silent scene produces a silent
+ * score: no drone, no noise bed — weather as event-note modulation only,
+ * gated matrix pulses, determinism, scene sensitivity, register from
+ * background luminance).
  */
 
 const { execSync } = require('child_process')
@@ -126,7 +128,7 @@ const stepsJson = (score) => JSON.stringify(score.steps)
   assert(nan.volume === 0, 'non-finite volume falls to the minimum')
   assert(SONIFICATION_STEPS === 24 && SONIFICATION_BANDS === 12, 'grid is 24 steps × 12 bands')
   assert(SONIFICATION_MAX_NOTES_PER_STEP === 3, 'at most 3 active bands per step')
-  assert(SONIFICATION_MAX_VOICES === 8, 'voice ceiling is 8')
+  assert(SONIFICATION_MAX_VOICES === 6, 'voice ceiling is 6 (gated note voices only)')
   assert(
     isHorizontalSonificationDirection('left-to-right') &&
       isHorizontalSonificationDirection('right-to-left') &&
@@ -293,8 +295,8 @@ const stepsJson = (score) => JSON.stringify(score.steps)
   assert(capped, 'no step voices more than 3 bands even when all 12 are hot')
   assert(notes === SONIFICATION_STEPS * 3, 'a fully hot scene voices 3 notes per step')
 
-  // Every note quantizes to minor pentatonic relative to the drone root.
-  const rootMidi = 69 + 12 * Math.log2(score.drone.rootFrequency / 440)
+  // Every note quantizes to minor pentatonic relative to the reference root.
+  const rootMidi = 69 + 12 * Math.log2(score.rootFrequency / 440)
   let quantized = true
   for (const step of score.steps) {
     for (const note of step.notes) {
@@ -305,18 +307,22 @@ const stepsJson = (score) => JSON.stringify(score.steps)
   }
   assert(quantized, 'all notes quantize to minor pentatonic around the root')
 
-  // Below the activity threshold: drone only.
+  // Below the activity threshold: silence (no drone, no ambient bed).
   const quiet = gridWith(() => ({ contrast: 0.02, density: 0.01, luminance: 0.5 }))
   const quietScore = mapSonification(quiet, PARAMS, 'left-to-right')
   const quietNotes = quietScore.steps.reduce((sum, step) => sum + step.notes.length, 0)
   assert(quietNotes === 0, 'a scene below the activity threshold voices no notes')
-  assert(quietScore.drone.gain > 0, 'the drone still sounds under a silent frame')
+  assert(quietScore.pulses === null, 'a below-threshold scene without matrix has no pulses either')
 
   const silent = gridWith(() => ({}))
   const silentScore = mapSonification(silent, PARAMS, 'left-to-right')
   assert(
     silentScore.steps.every((step) => step.notes.length === 0 && step.activity === 0),
-    'an empty grid is drone/ambient only',
+    'an empty grid is a fully silent score',
+  )
+  assert(
+    !('drone' in silentScore) && !('noise' in silentScore),
+    'the score carries no drone or noise fields at all',
   )
   assert(SONIFICATION_ACTIVITY_THRESHOLD > 0, 'activity threshold is exported and positive')
 }
@@ -328,43 +334,66 @@ const stepsJson = (score) => JSON.stringify(score.steps)
   const atHue90 = mapSonification(grid, { ...PARAMS, backgroundHue1: 90, backgroundHue2: 90 }, 'left-to-right')
   const expectedRatio = Math.pow(2, 3 / 12) // hue 0 → semitone 0, hue 90 → semitone 3
   assert(
-    Math.abs(atHue90.drone.rootFrequency / atHue0.drone.rootFrequency - expectedRatio) < 1e-9,
+    Math.abs(atHue90.rootFrequency / atHue0.rootFrequency - expectedRatio) < 1e-9,
     'background hue selects the chromatic root (90° → +3 semitones)',
-  )
-  assert(
-    Math.abs(atHue90.drone.fifthFrequency / atHue90.drone.rootFrequency - Math.pow(2, 7 / 12)) < 1e-9,
-    'the drone carries a perfect fifth above the root',
   )
   assert(resolveRootSemitone(350, 10) === 0, 'hues wrapping past 360° average correctly')
 
   const dark = mapSonification(grid, { ...PARAMS, backgroundLuminance: 0.1 }, 'left-to-right')
   const bright = mapSonification(grid, { ...PARAMS, backgroundLuminance: 0.9 }, 'left-to-right')
   assert(
-    Math.abs(dark.drone.rootFrequency / PARAMS.backgroundLuminance - dark.drone.rootFrequency) > 0 &&
-      Math.abs(dark.drone.rootFrequency * 4 - bright.drone.rootFrequency) < 0.001,
+    Math.abs(dark.rootFrequency * 4 - bright.rootFrequency) < 0.001,
     'background luminance shifts the register (dark −1 octave, bright +1)',
   )
   assert(resolveRegisterShift(0.5) === 0, 'mid luminance keeps the base register')
-  assert(
-    bright.drone.cutoff > dark.drone.cutoff,
-    'brighter backgrounds open the drone filter',
-  )
 }
 
-// (9) mapper: weather and matrix textures
+// (9) mapper: weather reshapes event notes only; matrix pulses stay gated
 {
   const grid = gridWith(() => ({}))
   const calm = mapSonification(grid, PARAMS, 'left-to-right')
-  assert(calm.noise === null && calm.pulses === null, 'no ambient layer → no textures')
-  const weather = mapSonification(
+  assert(calm.pulses === null, 'no ambient layer → no pulses')
+  assert(!('noise' in calm), 'the score has no noise texture field')
+
+  // Weather on an empty grid: still fully silent — weather must never
+  // create continuous noise or voice notes on its own.
+  const weatherSilent = mapSonification(
     grid,
     { ...PARAMS, weather: { intensity: 200, wind: 100 } },
     'left-to-right',
   )
   assert(
-    weather.noise && weather.noise.gain > 0 && weather.noise.cutoff > 2000,
-    'weather adds a filtered-noise texture shaped by intensity/wind',
+    weatherSilent.steps.every((step) => step.notes.length === 0),
+    'weather on a silent scene voices nothing (no continuous noise bed)',
   )
+
+  // Weather on an active scene: event-note timbre (brightness) and rhythm
+  // (per-step gain gusts) change, but note pitches/counts do not.
+  const hot = gridWith(() => ({ contrast: 0.8, density: 0.5, luminance: 0.5, hue: 120, saturation: 0.8 }))
+  const dry = mapSonification(hot, PARAMS, 'left-to-right')
+  const wet = mapSonification(
+    hot,
+    { ...PARAMS, weather: { intensity: 200, wind: 100 } },
+    'left-to-right',
+  )
+  const samePitches = dry.steps.every(
+    (step, i) =>
+      step.notes.length === wet.steps[i].notes.length &&
+      step.notes.every((note, j) => note.frequency === wet.steps[i].notes[j].frequency),
+  )
+  assert(samePitches, 'weather never changes which notes sound (event-driven only)')
+  const gustsVary = dry.steps.some(
+    (step, i) =>
+      step.notes.length > 0 &&
+      Math.abs(step.notes[0].gain - wet.steps[i].notes[0].gain) > 1e-9,
+  )
+  assert(gustsVary, 'weather intensity carves a deterministic gust rhythm into note gains')
+  const brighter = wet.steps.every(
+    (step, i) =>
+      step.notes.length === 0 || step.notes[0].brightness >= dry.steps[i].notes[0].brightness,
+  )
+  assert(brighter, 'weather wind lifts note-filter brightness (timbre)')
+
   const matrix = mapSonification(
     grid,
     { ...PARAMS, matrix: { speed: 400, volume: 100, trailStrength: 100 } },
@@ -374,9 +403,13 @@ const stepsJson = (score) => JSON.stringify(score.steps)
     matrix.pulses &&
       matrix.pulses.rateHz > 3 &&
       matrix.pulses.gain > 0 &&
-      matrix.pulses.delaySeconds > 0.5 &&
-      matrix.pulses.frequency > matrix.drone.rootFrequency * 6,
-    'matrix adds restrained high pulses with a trail-shaped echo',
+      matrix.pulses.frequency > matrix.rootFrequency * 6,
+    'matrix adds restrained high pulses',
+  )
+  assert(
+    matrix.pulses.delaySeconds > 0 &&
+      matrix.pulses.delaySeconds + 0.06 < 1 / matrix.pulses.rateHz,
+    'the pulse echo always fits inside the pulse slot (silence between pulses)',
   )
   const matrixQuiet = mapSonification(
     grid,

@@ -555,6 +555,114 @@ assert(
   'enabling paint never clears the existing paint overlay',
 )
 
+// --- anchored corner controls: persistent DOM, no swap, no :has() relocation ---
+
+const soundControlSource = fs.readFileSync(
+  path.join(projectRoot, 'components', 'vibe', 'SoundControl.tsx'),
+  'utf8',
+)
+const pondControlSource = fs.readFileSync(
+  path.join(projectRoot, 'components', 'vibe', 'PondControl.tsx'),
+  'utf8',
+)
+const globalsSource = fs.readFileSync(path.join(projectRoot, 'app', 'globals.css'), 'utf8')
+
+for (const [name, source] of [
+  ['SoundControl', soundControlSource],
+  ['PondControl', pondControlSource],
+]) {
+  assert(
+    source.includes('data-state={state}'),
+    `${name}: the control carries an explicit data-state (open/closing/closed)`,
+  )
+  assert(
+    !/if \(!(expanded|enabled)\) return/.test(source),
+    `${name}: no collapsed/expanded early-return swap — one persistent tree`,
+  )
+  assert(
+    source.includes("event.propertyName === 'clip-path'") &&
+      source.includes('setTimeout(finish, CLOSE_FALLBACK_MS)'),
+    `${name}: the pill hides on the clip-path transitionend with a timeout fallback`,
+  )
+  assert(
+    source.includes("window.matchMedia('(prefers-reduced-motion: reduce)')"),
+    `${name}: reduced motion hides the pill immediately (no transition wait)`,
+  )
+  assert(
+    source.includes("toggleAttribute('inert', state !== 'open')") &&
+      source.includes("aria-hidden={state !== 'open'}"),
+    `${name}: descendants go inert + aria-hidden the moment the control is not fully open`,
+  )
+}
+
+assert(
+  soundControlSource.includes('vibe-sound-rotor') &&
+    !soundControlSource.includes('vibe-sound-shell') &&
+    !soundControlSource.includes('vibe-sound-badge'),
+  'SoundControl: the FAB carries the rotor (note + gradient) — the artwork shell/badge layers are gone',
+)
+assert(
+  /vibe-sound-rotor[\s\S]*?vibe-sound-note/.test(soundControlSource),
+  'SoundControl: the rotor contains the music note (one composited spinning layer)',
+)
+assert(
+  soundControlSource.includes('onClick={expanded ? onDisable : onExpand}'),
+  'SoundControl: the anchored FAB toggles expand/disable',
+)
+assert(
+  pondControlSource.includes('viewBox="0 0 53 50"') &&
+    !pondControlSource.includes('maskImage') &&
+    !pondControlSource.includes('url(/toolbar/AmbientPond.png)'),
+  'PondControl: the FAB glyph is an inline SVG (no external mask asset)',
+)
+assert(
+  pondControlSource.includes('role="radiogroup"') && pondControlSource.includes('role="radio"'),
+  'PondControl: the character choices stay a radiogroup',
+)
+
+assert(
+  !globalsSource.includes(':has(.vibe-sound-pill)') &&
+    !globalsSource.includes(':has(.vibe-pond-pill)'),
+  'globals.css: no :has()-driven relocation of the expanded controls remains',
+)
+assert(
+  !globalsSource.includes('.vibe-sound-shell') && !globalsSource.includes('.vibe-pond-badge'),
+  'globals.css: the rasterized shell/badge styles are gone (CSS-built shells)',
+)
+assert(
+  /\.vibe-sound-toggle,\s*\n\.vibe-pond-toggle \{[\s\S]*?border: 2px solid/.test(globalsSource),
+  'globals.css: the FAB structural stroke is exactly 2px',
+)
+assert(
+  /\.vibe-sound-pill,\s*\n\.vibe-pond-pill \{[\s\S]*?border: 2px solid rgba\(255, 255, 255/.test(
+    globalsSource,
+  ),
+  'globals.css: the expanded pill ring is exactly 2px',
+)
+assert(
+  globalsSource.includes('clip-path 340ms cubic-bezier(0.22, 1, 0.36, 1)') &&
+    globalsSource.includes('clip-path 280ms cubic-bezier(0.32, 0, 0.67, 1) 60ms'),
+  'globals.css: the pill opens over 340ms ease-out and retracts over 280ms ease-in',
+)
+assert(
+  globalsSource.includes('vibe-sound-rotor-spin 6s linear infinite') &&
+    globalsSource.includes('.vibe-sound-control.is-playing .vibe-sound-rotor') &&
+    globalsSource.includes('conic-gradient('),
+  'globals.css: the rotor spins note+conic-gradient over 6s, gated by .is-playing play-state',
+)
+assert(
+  /@media \(prefers-reduced-motion: reduce\) \{\s*\.vibe-sound-rotor \{\s*animation: none;/.test(
+    globalsSource,
+  ),
+  'globals.css: reduced motion disables the rotor spin entirely',
+)
+assert(
+  /@media \(max-width: 640px\) \{[\s\S]*?clip-path: inset\(100% 0 0 0 round 999px\)[\s\S]*?column-reverse/.test(
+    globalsSource,
+  ),
+  'globals.css: ≤640px both pills expand vertically upward with anchor-outward ordering',
+)
+
 if (failures > 0) {
   console.error(`\n${failures} verification(s) failed.`)
   process.exit(1)

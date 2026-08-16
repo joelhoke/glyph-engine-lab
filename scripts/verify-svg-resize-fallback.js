@@ -27,6 +27,16 @@
  *    recalcs re-fit the ACTIVE source — never a stale closure, never the JH
  *    fallback on a mere recalc — and region updates route through
  *    resizeScene, the same rebuild path as a viewport resize.
+ *
+ * 5. The last-good-field rule (mobile SVG-loading hardening): once any static
+ *    source has produced a valid field (staticHasValidFieldRef), a transient
+ *    re-decode failure on a resize/orientation rebuild keeps that field live;
+ *    the JH fallback is reserved for initial scenes with no valid field.
+ *
+ * 6. The Pond re-clamp (mobile SVG-loading hardening): a rebuilt source field
+ *    resets formation accumulation AND re-clamps the swimming body into the
+ *    current bounds (containPondBody) so Source mode never begins partially
+ *    offscreen after a source or viewport change.
  */
 
 const { execSync } = require('child_process')
@@ -167,6 +177,36 @@ assert(sampleBody.length > 0, 'sampleAnimatedProviderFrame exists in SceneCanvas
 assert(
   sampleBody.includes('resolveAnimatedStagingSize(') && sampleBody.includes('getImageData'),
   'animated sampling downscales into the tier-sized staging surface before getImageData',
+)
+
+// --- Structural guard: the static last-good-field rule (no fallback flash) ---
+
+assert(
+  buildBody.includes('staticHasValidFieldRef.current = true'),
+  'a successful static decode marks the valid-field latch',
+)
+assert(
+  /else if \(staticHasValidFieldRef\.current\)[\s\S]{0,600}return/.test(buildBody),
+  'a transient static re-decode failure keeps the last valid field (no fallback flash)',
+)
+assert(
+  buildBody.indexOf('staticHasValidFieldRef.current = true') <
+    buildBody.indexOf('else if (staticHasValidFieldRef.current)'),
+  'the valid-field latch is set before the keep-last-field branch reads it',
+)
+
+// --- Structural guard: source-ready re-clamps the pond body ------------------
+
+assert(
+  sceneCanvasSource.includes("from '../engine/pondFormation'") &&
+    /import \{[^}]*containPondBody/.test(sceneCanvasSource),
+  'SceneCanvas imports containPondBody from engine/pondFormation',
+)
+assert(
+  /resetPondFormationTracker\(pondFormationRef\.current\)\s*\n\s*if \(pondBodyRef\.current\) containPondBody\(/.test(
+    buildBody,
+  ),
+  'a rebuilt source field resets formation accumulation and re-clamps the pond body into the current bounds',
 )
 
 if (failures > 0) {

@@ -4932,60 +4932,125 @@ a.guide-source:focus-visible {
   white-space: nowrap;
 }
 
-/* Pond control: round fish button, lower-right; expanding swaps it for the
-   teal gradient pill (badge + choices), mirroring the Sound control. Colors
-   sampled from the supplied pond pill artwork (Group 1010109912.png). */
+/* =============================================================================
+   Vibe corner controls: Sound (lower-left) + Pond (lower-right)
 
+   One persistent, anchored DOM tree per control — no collapsed/expanded
+   swapping. The 66px circular FAB is the anchor: it keeps the exact same
+   screen position in every state (data-state="closed|open|closing" on
+   .vibe-sound-control / .vibe-pond-control). The pill stays mounted behind
+   the FAB (z-index 1 vs 2) and reveals via a clip-path transition, so it
+   visually grows out from behind the FAB and retracts back into it:
+
+     closed → open    clip-path opens over 340ms ease-out; the inner controls
+                      fade + translate in after the shell starts moving
+                      (140ms delay)
+     open  → closing  descendants are inert + pointer-events:none at once
+                      (React), the inner controls fade out fast (120ms), then
+                      the shell retracts over 280ms ease-in (60ms delay);
+                      visibility flips to hidden at 340ms — matching the
+                      component's transitionend listener + 600ms fallback
+     closing → closed pill stays mounted, visibility:hidden
+
+   Every visible structural stroke is exactly 2px: the collapsed FAB border,
+   the expanded pill ring, and the active badge ring (the FAB border again —
+   the badge IS the FAB). :focus-visible outlines are separate 2px
+   accessibility indicators. No :has()-driven relocation: desktop expands
+   horizontally inward (Sound rightward, Pond leftward); ≤640px both expand
+   vertically upward from their lower corners. Pill shells are pure CSS
+   (border + gradient + box-shadow) so the 2px weight is exact; the supplied
+   artwork (public/toolbar/vibe-sound-*.png, AmbientPond.png) is kept as
+   reference — the gradient stops below are sampled from it.
+   ========================================================================== */
+
+.vibe-sound-control,
 .vibe-pond-control {
   position: fixed;
-  /* ~40% of the way from the right edge toward the center toolbar. The
-     bottom offset keeps the 66px toggle centered on the capsule row. */
-  right: calc(20vw + env(safe-area-inset-right, 0px));
+  /* The container IS the 66px anchor box; the pill overflows it. The bottom
+     offset keeps the FAB centered on the toolbar capsule row. */
+  width: 66px;
+  height: 66px;
   bottom: calc(5.0625rem + env(safe-area-inset-bottom, 0px));
   z-index: 30;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.5rem;
   pointer-events: none;
 }
 
+.vibe-sound-control {
+  /* ~40% of the way from the left edge toward the center toolbar. */
+  left: calc(20vw + env(safe-area-inset-left, 0px));
+}
+
+.vibe-pond-control {
+  /* ~40% of the way from the right edge toward the center toolbar. */
+  right: calc(20vw + env(safe-area-inset-right, 0px));
+}
+
+.vibe-sound-control > *,
 .vibe-pond-control > * {
   pointer-events: auto;
 }
 
+/* --- Anchored FAB (collapsed toggle AND active badge) ---------------------- */
+
+.vibe-sound-toggle,
 .vibe-pond-toggle {
+  position: relative;
+  z-index: 2; /* above the pill: the pill grows out from behind it */
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 66px;
   height: 66px;
   padding: 0;
-  border: 1px solid var(--color-border-subtle);
+  /* 2px structural stroke (collapsed FAB; active badge ring while open). */
+  border: 2px solid var(--color-border-subtle);
   border-radius: 999px;
   background: var(--color-capsule-bg);
   color: var(--color-text-muted);
   cursor: pointer;
   backdrop-filter: blur(8px);
-  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease,
-    color 160ms ease;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
 }
 
-.vibe-pond-toggle:not(:disabled):hover {
+.vibe-sound-control[data-state='closed'] .vibe-sound-toggle:not(:disabled):hover,
+.vibe-pond-control[data-state='closed'] .vibe-pond-toggle:not(:disabled):hover {
   background: var(--color-input-bg);
   color: var(--color-accent);
 }
 
+.vibe-sound-toggle:focus-visible,
 .vibe-pond-toggle:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
   color: var(--color-accent);
 }
 
-/* CSS mask over currentColor, same idiom as .vibe-toolbar-icon. */
-.vibe-pond-toggle-icon {
-  width: 36px;
+/* Active badge (open + closing): Sound gets the artwork's white ring — the
+   button border stays stationary while the rotor spins inside it. */
+.vibe-sound-control[data-state='open'] .vibe-sound-toggle,
+.vibe-sound-control[data-state='closing'] .vibe-sound-toggle {
+  border-color: rgba(255, 255, 255, 0.92);
+  background: transparent;
+  color: #ffffff;
+}
+
+/* Active badge (open + closing): Pond's navy→teal gradient circle with the
+   white 2px ring, matching the supplied "toggle on" artwork
+   (Group 1010109920.png, kept as reference). */
+.vibe-pond-control[data-state='open'] .vibe-pond-toggle,
+.vibe-pond-control[data-state='closing'] .vibe-pond-toggle {
+  border-color: rgba(255, 255, 255, 0.85);
+  background: linear-gradient(140deg, #001430 0%, #01313d 50%, #015f66 100%);
+  color: #ffffff;
+}
+
+/* Collapsed note glyph: CSS mask over currentColor (toolbar icon idiom).
+   The glyph's visual weight leans right (note head), so it is nudged 2px
+   left for optical centering. */
+.vibe-sound-toggle-icon {
+  width: 30px;
   height: 36px;
+  transform: translateX(-2px);
   display: block;
   background-color: currentColor;
   -webkit-mask-position: center;
@@ -4996,76 +5061,220 @@ a.guide-source:focus-visible {
   mask-size: contain;
 }
 
-/* Expanded pill: deep teal gradient + white ring, badge circle on the left
-   (matches the supplied artwork). Height matches the toolbar capsule
-   (~72px) so opening never "shrinks". */
-.vibe-pond-pill {
+/* Pond glyph: inline SVG (see PondControl.tsx) in currentColor — no external
+   mask asset, so the icon cannot disappear while other assets load. 53:50
+   viewBox, rendered at the same 36px (collapsed) / 32px (badge) sizes the
+   mask version used. */
+.vibe-pond-toggle-icon {
+  display: block;
+  width: 36px;
+  height: 34px;
+}
+
+.vibe-pond-control[data-state='open'] .vibe-pond-toggle-icon,
+.vibe-pond-control[data-state='closing'] .vibe-pond-toggle-icon {
+  width: 32px;
+  height: 30px;
+}
+
+.vibe-pond-toggle-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* --- Sound rotor: ONE composited layer with note + gradient ---------------- */
+
+/* The rotor fills the FAB's padding box (inside the stationary 2px border
+   ring). The conic gradient is sampled from the supplied vibe-sound-on.png
+   badge (pink top → orange sides → yellow bottom); rotating the whole layer
+   moves note AND gradient together — no per-frame JS, no gradient repaint.
+   The animation is always applied while the badge is shown; .is-playing only
+   flips animation-play-state, so pausing freezes note+gradient mid-rotation
+   and resuming continues from that angle. The rotor unmounts when the pill
+   finishes hiding, which resets the rotation after closing completes. */
+.vibe-sound-rotor {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  height: 72px;
-  padding: 0 0.6rem 0 0;
-  border: 3px solid rgba(255, 255, 255, 0.92);
+  justify-content: center;
   border-radius: 999px;
+  background: conic-gradient(
+    from 0deg,
+    #cb5b66 0deg,
+    #cd8158 90deg,
+    #d0a74a 180deg,
+    #cd8158 270deg,
+    #cb5b66 360deg
+  );
+  animation: vibe-sound-rotor-spin 6s linear infinite;
+  animation-play-state: paused;
+  will-change: transform;
+}
+
+.vibe-sound-control.is-playing .vibe-sound-rotor {
+  animation-play-state: running;
+}
+
+.vibe-sound-note {
+  width: 56%;
+  height: auto;
+  display: block;
+}
+
+@keyframes vibe-sound-rotor-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --- Pill shells (persistent; clip-path reveal from behind the FAB) -------- */
+
+/* Base styles are the CLOSED state: fully clipped toward the FAB and
+   visibility:hidden. The visibility transition delay (340ms) keeps the pill
+   visible for the whole retraction even before React flips data-state to
+   'closed'. */
+.vibe-sound-pill,
+.vibe-pond-pill {
+  position: absolute;
+  top: 0;
+  height: 66px;
+  z-index: 1;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  visibility: hidden;
+  transition:
+    clip-path 280ms cubic-bezier(0.32, 0, 0.67, 1) 60ms,
+    visibility 0s linear 340ms;
+}
+
+/* Sound: anchored at the left, grows rightward out from behind the FAB.
+   Body gradient sampled from the supplied pill artwork (yellow-green →
+   orange → pink). */
+.vibe-sound-pill {
+  left: 0;
+  clip-path: inset(0 100% 0 0 round 999px);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.1)),
+    linear-gradient(95deg, #cebb51 0%, #ce935e 45%, #d04e77 100%);
+}
+
+/* Pond: anchored at the right, grows leftward (mirror of Sound). Deep teal
+   gradient sampled from the supplied pond pill artwork
+   (Group 1010109912.png, kept as reference). */
+.vibe-pond-pill {
+  right: 0;
+  clip-path: inset(0 0 0 100% round 999px);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.1)),
     linear-gradient(105deg, #022938 0%, #01343e 45%, #00474a 100%);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 }
 
-/* Pond badge (pond ON): dark navy→teal gradient circle with a white ring,
-   matching the supplied "toggle on" artwork (Group 1010109920.png); clicking
-   it disables the pond and collapses the pill (like the sound note badge). */
-.vibe-pond-badge {
+.vibe-sound-control[data-state='open'] .vibe-sound-pill,
+.vibe-pond-control[data-state='open'] .vibe-pond-pill {
+  visibility: visible;
+  clip-path: inset(0 0 0 0 round 999px);
+  transition:
+    clip-path 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear;
+}
+
+/* During the exit the descendants leave pointer/keyboard interaction
+   immediately (React also sets inert + aria-hidden); the clip-path then
+   shrinks the hit area as the shell retracts. */
+.vibe-sound-control[data-state='closing'] .vibe-sound-pill,
+.vibe-pond-control[data-state='closing'] .vibe-pond-pill {
+  pointer-events: none;
+}
+
+/* --- Pill contents (fade/translate in AFTER the shell starts, out before) -- */
+
+/* Base styles are the closing/closed treatment: fast fade + slight drift
+   back toward the FAB, no delay — the reverse of the opening sequence. */
+.vibe-sound-pill-inner,
+.vibe-pond-pill-inner {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  gap: 4px;
+  opacity: 0;
+  transition:
+    opacity 120ms ease-in,
+    transform 140ms ease-in;
+}
+
+.vibe-sound-pill-inner {
+  /* 66px FAB + 8px gap reserved on the anchor (left) side. */
+  padding: 0 12px 0 74px;
+  transform: translateX(-8px);
+}
+
+.vibe-pond-pill-inner {
+  /* row-reverse puts Source adjacent to the FAB (right), Ray farthest —
+     the same anchor-outward order as the mobile column. */
+  flex-direction: row-reverse;
+  padding: 0 74px 0 12px;
+  transform: translateX(8px);
+}
+
+.vibe-sound-control[data-state='open'] .vibe-sound-pill-inner,
+.vibe-pond-control[data-state='open'] .vibe-pond-pill-inner {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 200ms ease-out 140ms,
+    transform 260ms ease-out 140ms;
+}
+
+/* Sound pill buttons: 44px minimum round targets over the pill gradient. */
+.vibe-sound-transport,
+.vibe-sound-direction {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: none;
-  width: 64px;
-  height: 64px;
-  margin: 0 0.2rem 0 1px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
   border: none;
   border-radius: 999px;
-  background: linear-gradient(140deg, #001430 0%, #01313d 50%, #015f66 100%);
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
+  background: transparent;
   color: #ffffff;
   cursor: pointer;
-  transition: box-shadow 160ms ease;
 }
 
-.vibe-pond-badge:not(:disabled):hover {
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.65);
-}
-
-.vibe-pond-badge:focus-visible {
-  outline: 2px solid #ffffff;
+.vibe-sound-transport:focus-visible,
+.vibe-sound-direction:focus-visible {
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
-.vibe-pond-badge-icon {
-  width: 32px;
-  height: 32px;
+.vibe-sound-play-icon {
+  /* Artwork triangle is 21x27 in a 103px-tall pill: ~25px at 66px. */
+  height: 25px;
+  width: auto;
   display: block;
-  background-color: currentColor;
-  -webkit-mask-position: center;
-  mask-position: center;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-  mask-size: contain;
 }
 
-.vibe-pond-choices {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
+.vibe-sound-pause-icon {
+  display: block;
+}
+
+.vibe-sound-direction-arrow {
+  /* Artwork arrow is 24x30: ~26px at the 66px pill. */
+  height: 26px;
+  width: auto;
+  display: block;
+  transition: transform 200ms ease;
 }
 
 .vibe-pond-choice {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: none;
   min-height: 44px;
   padding: 0.45rem 1rem;
   border: 2px solid transparent;
@@ -5098,181 +5307,12 @@ a.guide-source:focus-visible {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
 }
 
-/* Sound control: round note button, lower-left; expanded artwork pill.
-   Both corner controls sit on the toolbar capsule's vertical center
-   (capsule center ≈ 5.75rem + 22px above the toolbar's bottom offset). */
-
-.vibe-sound-control {
-  position: fixed;
-  /* ~40% of the way from the left edge toward the center toolbar. The
-     bottom offset keeps the 66px toggle centered on the capsule row. */
-  left: calc(20vw + env(safe-area-inset-left, 0px));
-  bottom: calc(5.0625rem + env(safe-area-inset-bottom, 0px));
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.4rem;
-  pointer-events: none;
-}
-
-.vibe-sound-control > * {
-  pointer-events: auto;
-}
-
-.vibe-sound-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 66px;
-  height: 66px;
-  padding: 0;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 999px;
-  /* Off state shares the toolbar beam capsule background. */
-  background: var(--color-capsule-bg);
-  color: var(--color-text-muted);
-  cursor: pointer;
-  backdrop-filter: blur(8px);
-  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease,
-    color 160ms ease;
-}
-
-.vibe-sound-toggle:not(:disabled):hover {
-  background: var(--color-input-bg);
-  color: var(--color-accent);
-}
-
-.vibe-sound-toggle:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-  color: var(--color-accent);
-}
-
-/* Note glyph as a CSS mask over currentColor (toolbar icon idiom). The
-   glyph's visual weight leans right (note head), so it is nudged 2px left
-   for optical centering. */
-.vibe-sound-toggle-icon {
-  width: 30px;
-  height: 36px;
-  transform: translateX(-2px);
-  display: block;
-  background-color: currentColor;
-  -webkit-mask-position: center;
-  mask-position: center;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-  mask-size: contain;
-}
-
-/* The pill composes the derived artwork layers (vibe-sound-*.png) at the
-   source artwork's aspect ratio; glyph buttons sit on their artwork spots.
-   Height matches the toolbar capsule (~72px) so opening never "shrinks". */
-.vibe-sound-pill {
-  position: relative;
-  height: 72px;
-  aspect-ratio: 232 / 103;
-}
-
-.vibe-sound-shell {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-  pointer-events: none;
-}
-
-.vibe-sound-badge,
-.vibe-sound-transport,
-.vibe-sound-direction {
-  position: absolute;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  cursor: pointer;
-}
-
-.vibe-sound-badge:focus-visible,
-.vibe-sound-transport:focus-visible,
-.vibe-sound-direction:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-/* Circular note badge occupies the left ~103/232 of the artwork. */
-.vibe-sound-badge {
-  left: 0;
-  top: 0;
-  height: 100%;
-  width: calc(100% * 103 / 232);
-}
-
-/* Note spins in place around the badge centre. The animation is always
-   applied while expanded; .is-playing only flips the play state, so pausing
-   freezes the note mid-rotation instead of resetting it. Collapsing the
-   pill unmounts the layer, which resets the rotation. */
-.vibe-sound-note {
-  width: 56%;
-  height: auto;
-  display: block;
-  animation: vibe-sound-note-spin 6s linear infinite;
-  animation-play-state: paused;
-}
-
-.vibe-sound-pill.is-playing .vibe-sound-note {
-  animation-play-state: running;
-}
-
-@keyframes vibe-sound-note-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Play/pause glyph centre in the artwork: x=137/232, y=53/103. */
-.vibe-sound-transport {
-  left: calc(100% * 137 / 232);
-  top: calc(100% * 53 / 103);
-  transform: translate(-50%, -50%);
-  color: #ffffff;
-}
-
-.vibe-sound-play-icon {
-  /* Artwork triangle is 21x27 (29x35 with pad) in a 103px-tall pill:
-     ~25px at the pill's rendered 72px height. */
-  height: 25px;
-  width: auto;
-  display: block;
-}
-
-.vibe-sound-pause-icon {
-  display: block;
-}
-
-/* Direction arrow centre in the artwork: x=188.5/232, y=51.5/103. */
-.vibe-sound-direction {
-  left: calc(100% * 188.5 / 232);
-  top: calc(100% * 51.5 / 103);
-  transform: translate(-50%, -50%);
-}
-
-.vibe-sound-direction-arrow {
-  /* Artwork arrow is 24x30 (32x38 with pad): ~26px at the 72px pill. */
-  height: 26px;
-  width: auto;
-  display: block;
-  transition: transform 200ms ease;
-}
-
+/* Sonification error: floats above the anchored control so it never shifts
+   the FAB. */
 .vibe-sound-control-error {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 0;
   margin: 0;
   max-width: 16rem;
   padding: 0.35rem 0.7rem;
@@ -5286,51 +5326,75 @@ a.guide-source:focus-visible {
   color: var(--color-text-muted);
 }
 
-/* Collision guards: an expanded pill that no longer fits beside the center
-   toolbar moves ABOVE it (centered, staggered sound lower / pond higher —
-   the same pattern as narrow screens). The 72px pond pill (~24rem wide at
-   the 20vw inset) collides with the toolbar capsule below ~1728px; the
-   72px sound pill (~10rem) below ~990px. */
-@media (max-width: 1728px) {
-  .vibe-pond-control:has(.vibe-pond-pill) {
-    right: auto;
-    left: 50%;
-    transform: translateX(-50%);
-    /* sound pill bottom (9.6rem) + pill height (4.5rem) + 0.5rem gap */
-    bottom: calc(14.6rem + env(safe-area-inset-bottom, 0px));
-    align-items: center;
-  }
-}
-
-@media (max-width: 990px) {
-  .vibe-sound-control:has(.vibe-sound-pill) {
-    left: 50%;
-    right: auto;
-    transform: translateX(-50%);
-    bottom: calc(9.6rem + env(safe-area-inset-bottom, 0px));
-    align-items: center;
-  }
-}
-
-/* Narrow screens: the collapsed toggles keep the corner inset (20vw would
-   collide with the nearly full-width toolbar capsule) and align with the
-   mobile capsule row (center ≈ 3.2rem + 33px above the bottom). */
+/* Narrow screens (≤640px): both FABs keep the lower corners (20vw would
+   collide with the nearly full-width toolbar capsule; row center ≈ 3.2rem +
+   33px above the bottom) and each pill expands vertically UPWARD from behind
+   its FAB. The inner column-reverses so the DOM order reads from the anchor
+   outward: Sound = Play/Pause then Direction; Pond = Source, Fish, Jelly,
+   Ray. */
 @media (max-width: 640px) {
-  .vibe-sound-control:not(:has(.vibe-sound-pill)) {
+  .vibe-sound-control {
     left: calc(0.75rem + env(safe-area-inset-left, 0px));
     bottom: calc(3.2rem + env(safe-area-inset-bottom, 0px));
   }
 
-  .vibe-pond-control:not(:has(.vibe-pond-pill)) {
+  .vibe-pond-control {
     right: calc(0.75rem + env(safe-area-inset-right, 0px));
     bottom: calc(3.2rem + env(safe-area-inset-bottom, 0px));
   }
+
+  .vibe-sound-pill,
+  .vibe-pond-pill {
+    top: auto;
+    bottom: 0;
+    width: 66px;
+    height: auto;
+    clip-path: inset(100% 0 0 0 round 999px);
+  }
+
+  .vibe-sound-pill {
+    left: 0;
+  }
+
+  /* Flush with the FAB's right edge so the pill never overflows the
+     viewport's right side. */
+  .vibe-pond-pill {
+    right: 0;
+  }
+
+  .vibe-sound-control[data-state='open'] .vibe-sound-pill,
+  .vibe-pond-control[data-state='open'] .vibe-pond-pill {
+    clip-path: inset(0 0 0 0 round 999px);
+  }
+
+  .vibe-sound-pill-inner,
+  .vibe-pond-pill-inner {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    height: auto;
+    gap: 6px;
+    /* 66px FAB + 8px gap reserved at the anchor (bottom) side. */
+    padding: 12px 6px 74px;
+    transform: translateY(8px);
+  }
+
+  .vibe-sound-control[data-state='open'] .vibe-sound-pill-inner,
+  .vibe-pond-control[data-state='open'] .vibe-pond-pill-inner {
+    transform: none;
+  }
+
+  /* Narrower padding keeps "Source" inside the 66px-wide pill while the
+     stretched buttons keep ≥44px on both axes. */
+  .vibe-pond-choice {
+    width: 100%;
+    padding: 0.45rem 0.5rem;
+  }
 }
 
-/* Explicit note-spin kill switch (the global reduce block above also
-   covers this, but the spin must never run under reduced motion). */
+/* Explicit rotor kill switch (the global reduce block above also covers
+   this, but the spin must never run under reduced motion). */
 @media (prefers-reduced-motion: reduce) {
-  .vibe-sound-note {
+  .vibe-sound-rotor {
     animation: none;
   }
 }

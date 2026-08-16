@@ -30,14 +30,15 @@ async function main() {
   await page.waitForSelector('.vibe-cta', { timeout: 30000 })
   await page.click('.vibe-cta')
   await page.waitForSelector('.vibe-toolbar', { timeout: 15000 })
-  // Expand sound and pond
+  // Expand sound and pond (persistent DOM: wait for the explicit open state)
   await page.click('.vibe-sound-toggle')
-  await page.waitForSelector('.vibe-sound-pill')
+  await page.waitForSelector('.vibe-sound-control[data-state="open"]')
   await page.click('.vibe-pond-toggle')
-  await page.waitForSelector('.vibe-pond-pill')
+  await page.waitForSelector('.vibe-pond-control[data-state="open"]')
   await page.waitForTimeout(1200)
   await page.screenshot({ path: OUT, fullPage: false })
-  // Zoomed crops of the two controls
+  // Zoomed crops of the two controls: the container is the anchored 66px FAB
+  // box, so extend the crop toward each pill's expansion direction.
   const sound = await page.locator('.vibe-sound-control').boundingBox()
   const pond = await page.locator('.vibe-pond-control').boundingBox()
   if (sound) {
@@ -46,7 +47,7 @@ async function main() {
       clip: {
         x: Math.max(0, sound.x - 12),
         y: Math.max(0, sound.y - 12),
-        width: sound.width + 24,
+        width: sound.width + 260,
         height: sound.height + 24,
       },
     })
@@ -55,9 +56,9 @@ async function main() {
     await page.screenshot({
       path: 'tmp-media/controls-pond.png',
       clip: {
-        x: Math.max(0, pond.x - 12),
+        x: Math.max(0, pond.x - 380),
         y: Math.max(0, pond.y - 12),
-        width: pond.width + 24,
+        width: pond.width + 392,
         height: pond.height + 24,
       },
     })

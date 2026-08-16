@@ -194,8 +194,10 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
     onClient(client)
     const stored = readConsent(window.localStorage, Date.now())
     setRecord(stored)
-    // First visit: no stored decision — open the panel on the Privacy view.
-    if (!stored) setPanelOpen(true)
+    // The panel never opens automatically — not on a first visit, not when
+    // consent is missing, expired, denied, or granted. Only the explicit
+    // Privacy FAB opens it. Analytics stay blocked unless a valid stored
+    // grant exists (or the user explicitly grants from the panel).
     if (stored?.decision === 'granted') client.grant()
     setMounted(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps

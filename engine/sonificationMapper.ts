@@ -10,13 +10,17 @@
  *    reversed (right-to-left = reverse of left-to-right, etc.) because each
  *    step's output depends only on that step's own cells.
  *  - Perpendicular position = pitch; band 0 (top/left) maps highest.
- *  - Background hues → chromatic root + a quiet root/fifth drone.
+ *  - Background hues → chromatic root (a REFERENCE pitch for the scale only —
+ *    no drone is ever voiced).
  *  - Background luminance → register and filter brightness.
  *  - Cell contrast/density → note selection and loudness (activity
- *    threshold; below it only the drone/ambient texture sounds).
+ *    threshold; below it the step is silent — there is no ambient bed).
  *  - Cell hue/saturation → harmonic brightness and the sine/triangle blend.
- *  - Weather → a seeded filtered-noise texture shaped by intensity/wind.
- *  - Matrix → restrained high pulses and an echo shaped by speed/volume/trail.
+ *  - Weather → reshapes event notes ONLY: wind lifts note-filter brightness
+ *    (timbre) and intensity carves a deterministic gust pattern across the
+ *    sweep (rhythm). It never creates continuous noise.
+ *  - Matrix → short, fully gated high pulses with an echo that always fits
+ *    inside the pulse slot, so there is silence between pulse events.
  *  - Melody notes quantize to minor pentatonic across ~3 octaves.
  *
  * Verified by scripts/verify-sonification.js.
@@ -46,13 +50,13 @@ export type SonificationSceneParams = {
 export type SonificationNoteEvent = {
   /** Quantized minor-pentatonic frequency in Hz. */
   frequency: number
-  /** Pre-master loudness 0..1 from cell contrast/density. */
+  /** Pre-master loudness 0..1 from cell contrast/density (and weather gusts). */
   gain: number
   /** Source band (0 = top/left, highest). */
   band: number
   /** Sine/triangle blend 0..1 from cell saturation. */
   blend: number
-  /** Harmonic brightness 0..1 from cell hue/saturation. */
+  /** Harmonic brightness 0..1 from cell hue/saturation (and weather wind). */
   brightness: number
 }
 
@@ -63,25 +67,13 @@ export type SonificationStepOutput = {
   activity: number
 }
 
-export type SonificationDrone = {
-  rootFrequency: number
-  fifthFrequency: number
-  gain: number
-  cutoff: number
-}
-
-export type SonificationNoiseTexture = {
-  gain: number
-  cutoff: number
-  /** Wind-driven stereo/filter drift 0..1. */
-  drift: number
-}
-
 export type SonificationPulseTexture = {
   rateHz: number
   frequency: number
   gain: number
-  /** Echo delay in seconds and echo level, shaped by trail strength. */
+  /** Echo delay in seconds and echo level, shaped by trail strength. The
+   *  delay is clamped into the pulse slot so each pulse + echo completes
+   *  with silence before the next pulse. */
   delaySeconds: number
   echoGain: number
 }
@@ -89,8 +81,9 @@ export type SonificationPulseTexture = {
 export type SonificationScore = {
   /** 24 steps in PLAYBACK order (direction already applied). */
   steps: SonificationStepOutput[]
-  drone: SonificationDrone
-  noise: SonificationNoiseTexture | null
+  /** Reference root pitch in Hz (from background hues). Musical metadata for
+   *  the scale only — the engine never voices a drone. */
+  rootFrequency: number
   pulses: SonificationPulseTexture | null
 }
 
@@ -103,8 +96,13 @@ const SCALE_DEGREES = PENTATONIC_MINOR.length * SCALE_OCTAVES
 const ROOT_BASE_MIDI = 45
 
 /** A band must clear this activity to voice a note; below it the step is
- *  drone/ambient only. */
+ *  silent (no drone, no ambient bed). */
 export const SONIFICATION_ACTIVITY_THRESHOLD = 0.12
+
+/** Deepest a weather gust may pull note gain down (35% at full intensity). */
+const WEATHER_GUST_DEPTH = 0.35
+/** How far full wind lifts note-filter brightness. */
+const WEATHER_BRIGHTNESS_LIFT = 0.25
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value))
 
@@ -140,7 +138,7 @@ function bandToScaleDegree(band: number): number {
 function degreeToMidi(rootMidi: number, degree: number): number {
   const octave = Math.floor(degree / PENTATONIC_MINOR.length)
   const step = PENTATONIC_MINOR[degree % PENTATONIC_MINOR.length]
-  // Melody sits one octave above the drone root.
+  // Melody sits one octave above the reference root.
   return rootMidi + 12 + octave * 12 + step
 }
 
@@ -176,6 +174,14 @@ export function mapSonification(
     return mean
   })()
 
+  // Weather: deterministic gust rhythm + timbre lift applied to event notes.
+  // The gust phase is fixed so identical weather on an identical scene gives
+  // an identical score; weather alone never voices a note.
+  const weather = params.weather
+  const gustDepth = weather ? WEATHER_GUST_DEPTH * clamp01(weather.intensity / 200) : 0
+  const gustCycles = weather ? 1 + Math.round(clamp01(weather.wind / 100) * 3) : 0
+  const brightnessLift = weather ? WEATHER_BRIGHTNESS_LIFT * clamp01(weather.wind / 100) : 0
+
   const steps: SonificationStepOutput[] = []
   const reversed = isReversedSonificationDirection(direction)
   // Scratch selection buffers reused across steps (no per-step allocation of
@@ -183,6 +189,15 @@ export function mapSonification(
   for (let playback = 0; playback < SONIFICATION_STEPS; playback += 1) {
     const step = reversed ? SONIFICATION_STEPS - 1 - playback : playback
     const base = step * SONIFICATION_BANDS
+    // Gust pattern indexed by PLAYBACK step, so the rhythm sounds identical
+    // in every direction. -π/2 phase: the calmest moment is the sweep start.
+    const gust =
+      gustDepth > 0
+        ? 1 -
+          gustDepth *
+            (0.5 +
+              0.5 * Math.sin((2 * Math.PI * gustCycles * playback) / SONIFICATION_STEPS - Math.PI / 2))
+        : 1
     // Score every band, then keep the strongest ≤ MAX_NOTES that clear the
     // activity threshold. Sort is deterministic: activity desc, band asc.
     const candidates: { band: number; activity: number }[] = []
@@ -204,10 +219,10 @@ export function mapSonification(
           : clamp01(0.25 + saturation * 0.5 + (hueDistance(hue, backgroundMeanHue) / 180) * 0.5)
       return {
         frequency: midiToFrequency(degreeToMidi(rootMidi, bandToScaleDegree(band))),
-        gain: clamp01(0.2 + activity * 0.8),
+        gain: clamp01(clamp01(0.2 + activity * 0.8) * gust),
         band,
         blend: saturation,
-        brightness,
+        brightness: clamp01(brightness + brightnessLift),
       }
     })
     steps.push({
@@ -216,30 +231,23 @@ export function mapSonification(
     })
   }
 
-  const drone: SonificationDrone = {
-    rootFrequency: midiToFrequency(rootMidi),
-    fifthFrequency: midiToFrequency(rootMidi + 7),
-    gain: 0.18,
-    cutoff: 300 + clamp01(params.backgroundLuminance) * 1200,
-  }
-
-  const noise: SonificationNoiseTexture | null = params.weather
-    ? {
-        gain: (clamp01(params.weather.intensity / 200) * 0.25),
-        cutoff: 300 + clamp01(params.weather.wind / 100) * 2200,
-        drift: clamp01(params.weather.wind / 100),
-      }
-    : null
-
   const pulses: SonificationPulseTexture | null = params.matrix
-    ? {
-        rateHz: 0.5 + clamp01(params.matrix.speed / 400) * 3.5,
-        frequency: midiToFrequency(rootMidi + 36),
-        gain: clamp01(params.matrix.volume / 100) * 0.12,
-        delaySeconds: 0.12 + clamp01(params.matrix.trailStrength / 100) * 0.5,
-        echoGain: 0.15 + clamp01(params.matrix.trailStrength / 100) * 0.4,
-      }
+    ? (() => {
+        const rateHz = 0.5 + clamp01(params.matrix.speed / 400) * 3.5
+        return {
+          rateHz,
+          frequency: midiToFrequency(rootMidi + 36),
+          gain: clamp01(params.matrix.volume / 100) * 0.12,
+          // The echo must land inside the pulse slot (with the 60ms pulse
+          // envelope), so pulses stay discrete events with silence between.
+          delaySeconds: Math.min(
+            0.12 + clamp01(params.matrix.trailStrength / 100) * 0.5,
+            0.7 / rateHz,
+          ),
+          echoGain: 0.15 + clamp01(params.matrix.trailStrength / 100) * 0.4,
+        }
+      })()
     : null
 
-  return { steps, drone, noise, pulses }
+  return { steps, rootFrequency: midiToFrequency(rootMidi), pulses }
 }

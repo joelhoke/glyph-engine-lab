@@ -14,7 +14,7 @@ import { MOTION_DEFAULTS } from '../engine/motionConfig'
 
 /** Short, direct invitation shown on the Vibe surface. */
 export const VIBE_INVITATION =
-  'An open glyph field, tuned the way I like it — until you change your mind. Bend the type, the color, the shape; nothing leaves your browser.'
+  'Welcome to the playground. It’s tuned to my preferences—until you change them, of course. Bend the type, color, and shape, or bring your own. Everything stays in your browser.'
 
 /** Label for the single entry point that opens the control dock. */
 export const VIBE_MAKE_IT_YOURS_LABEL = 'Make it yours'
@@ -82,6 +82,12 @@ export const VIBE_UPLOAD_ERROR_COPY: Record<string, string> = {
     "We couldn't decode that image — try re-saving it.",
   'The selected file type is not supported.':
     'That file type is not supported — choose an SVG, PNG, or WebP.',
+  'The uploaded SVG could not be decoded.':
+    "We couldn't render that SVG — try exporting it again.",
+  'The uploaded SVG has no visible artwork.':
+    "That SVG doesn't show any visible artwork — check its fill and opacity.",
+  'The image has no visible artwork.':
+    "That image doesn't have any visible pixels — try a different one.",
 }
 
 /** Shown when a validator produces a message with no mapped copy above. */
