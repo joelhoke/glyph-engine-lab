@@ -1,10 +1,10 @@
 'use client'
 
 /**
- * Pond control (debug-only "Private Pond" experiment): a round fish button
- * fixed at the lower-right screen corner. Clicking it toggles the pond (the
- * parent flips `enabled`); while enabled a horizontal pill above the button
- * offers the four swimming-body characters as a radiogroup.
+ * Pond control: a round fish button fixed at the lower-right screen corner.
+ * Clicking it enables the pond and expands a teal gradient pill — the same
+ * structure as the Sound control: a fish badge on the left (click it to
+ * disable/collapse) and the four swimming-body characters as a radiogroup.
  *
  * Session-only UI: nothing here persists — the parent owns the state.
  */
@@ -26,16 +26,49 @@ const POND_CHOICES: { value: PondCharacter; label: string }[] = [
   { value: 'ray', label: 'Ray' },
 ]
 
+/* Icons render as CSS masks over currentColor (same idiom as the vibe
+   toolbar) so color/hover/focus states come from CSS. */
+const FISH_MASK = {
+  WebkitMaskImage: 'url(/toolbar/Pond-icon.svg)',
+  maskImage: 'url(/toolbar/Pond-icon.svg)',
+} as const
+
 export default function PondControl({
   enabled,
   character,
   onToggle,
   onSelect,
 }: PondControlProps) {
+  if (!enabled) {
+    return (
+      <div className="vibe-pond-control">
+        <button
+          type="button"
+          className="vibe-pond-toggle"
+          aria-label="Pond"
+          aria-pressed={false}
+          aria-expanded={false}
+          onClick={onToggle}
+        >
+          <span className="vibe-pond-toggle-icon" style={FISH_MASK} aria-hidden="true" />
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="vibe-pond-control">
-      {enabled && (
-        <div className="vibe-pond-pill" role="radiogroup" aria-label="Pond character">
+      <div className="vibe-pond-pill" role="group" aria-label="Pond">
+        <button
+          type="button"
+          className="vibe-pond-badge"
+          aria-label="Turn pond off"
+          aria-expanded={true}
+          onClick={onToggle}
+        >
+          <span className="vibe-pond-badge-icon" style={FISH_MASK} aria-hidden="true" />
+        </button>
+        <div className="vibe-pond-choices" role="radiogroup" aria-label="Pond character">
           {POND_CHOICES.map((choice) => {
             const selected = choice.value === character
             return (
@@ -56,28 +89,7 @@ export default function PondControl({
             )
           })}
         </div>
-      )}
-      <button
-        type="button"
-        className={
-          enabled ? 'vibe-pond-toggle vibe-pond-toggle-active' : 'vibe-pond-toggle'
-        }
-        aria-label="Pond"
-        aria-pressed={enabled}
-        aria-expanded={enabled}
-        onClick={onToggle}
-      >
-        {/* Icons render as CSS masks over currentColor (same idiom as the
-            vibe toolbar) so color/hover/focus states come from CSS. */}
-        <span
-          className="vibe-pond-toggle-icon"
-          style={{
-            WebkitMaskImage: 'url(/toolbar/Pond-icon.svg)',
-            maskImage: 'url(/toolbar/Pond-icon.svg)',
-          }}
-          aria-hidden="true"
-        />
-      </button>
+      </div>
     </div>
   )
 }

@@ -481,9 +481,14 @@ assert(
   'the pond control drives session-only enabled/character state',
 )
 assert(
-  parentSource.includes("pond={displayed === 'vibe' && pondEnabled ? pondConfig : undefined}") &&
+  parentSource.includes(
+    "pond={displayed === 'vibe' && pondEnabled ? activePondConfig : undefined}",
+  ) &&
+    /activePondConfig = useMemo<PondConfig>\(\s*\(\) => \(\{ \.\.\.pondConfig, enabled: true \}\)/.test(
+      parentSource,
+    ) &&
     parentSource.includes('pondCharacter={pondCharacter}'),
-  'SceneCanvas receives the pond only while enabled in vibe, plus the character override',
+  'SceneCanvas receives an ENABLED pond config only while toggled on in vibe, plus the character override',
 )
 assert(
   parentSource.includes('expanded={soundExpanded}') &&

@@ -711,6 +711,13 @@ export default function PortfolioExperience() {
   const [pondConfig] = useState<PondConfig>(() => ({ ...POND_DEFAULTS }))
   const [pondEnabled, setPondEnabled] = useState(false)
   const [pondCharacter, setPondCharacter] = useState<PondCharacter>('source')
+  // POND_DEFAULTS ships disabled; the visitor toggle is the enable bit, so the
+  // canvas only ever sees an enabled config while the pond is on. Memoized:
+  // SceneCanvas re-runs its pond mirror effect on prop identity.
+  const activePondConfig = useMemo<PondConfig>(
+    () => ({ ...pondConfig, enabled: true }),
+    [pondConfig],
+  )
 
   // Visual Sonification (session-only): the scanner reads the live canvas and
   // plays a tonal score, driven by the Sound control. It never enters
@@ -1840,7 +1847,7 @@ export default function PortfolioExperience() {
         onQualityTierChange={(from, to) =>
           trackEvent({ name: 'tier_transition', params: { from_tier: from, to_tier: to } })
         }
-        pond={displayed === 'vibe' && pondEnabled ? pondConfig : undefined}
+        pond={displayed === 'vibe' && pondEnabled ? activePondConfig : undefined}
         pondCharacter={pondCharacter}
         onAmbientWipeEnd={handleAmbientWipeEnd}
         onDiagnosticsUpdate={(snapshot) => {
