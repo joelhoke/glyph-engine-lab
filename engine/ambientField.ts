@@ -210,6 +210,39 @@ export const WEATHER_PROFILES: Record<WeatherPreset, WeatherProfile> = {
   },
 }
 
+/**
+ * Heavy weather scenes: the presets whose agent density and fall speed make
+ * the per-frame render the expensive path. In SceneCanvas these render into a
+ * reduced-resolution offscreen layer (composited scaled up with smoothing)
+ * and run their physics at an extra-capped cadence; clear/wind stay direct
+ * (few slow agents — no measurable benefit) and matrix keeps its own trail
+ * layer at full resolution.
+ */
+export const HEAVY_WEATHER_PRESETS: readonly WeatherPreset[] = [
+  'rain',
+  'storm',
+  'snow',
+  'blizzard',
+  'fog',
+]
+
+export function isHeavyWeatherPreset(preset: WeatherPreset): boolean {
+  return HEAVY_WEATHER_PRESETS.indexOf(preset) >= 0
+}
+
+/** Reduced-resolution layer scale for heavy scenes: T0/T1 render at half
+ *  resolution, T2/T3 at 0.4 — soft weather reads fine scaled up, and the
+ *  composite is a single drawImage. */
+export function resolveHeavyAmbientLayerScale(tier: number): number {
+  return tier <= 1 ? 0.5 : 0.4
+}
+
+/** Extra physics cadence cap for heavy scenes on top of the tier's
+ *  ambientTickHz budget: 20 Hz on T0/T1, 15 Hz on T2/T3. */
+export function resolveHeavyAmbientTickCap(tier: number): number {
+  return tier <= 1 ? 20 : 15
+}
+
 /** Typed-array ambient pool. `count` agents are live; buffers are sized to
  *  `capacity` (the effective ambient budget). */
 export type AmbientField = {

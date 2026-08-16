@@ -191,6 +191,8 @@ export type QualityFrameSample = {
   resized?: boolean
   /** A source/target rebuild landed during this frame's window. */
   rebuilt?: boolean
+  /** An ambient scene wipe ran during this frame's window. */
+  wiped?: boolean
 }
 
 export type QualityTransition = {
@@ -306,7 +308,7 @@ export function createQualityController(options: {
       }
     }
     const w = windowState
-    if (sample.hidden || sample.resized || sample.rebuilt) w.ignored = true
+    if (sample.hidden || sample.resized || sample.rebuilt || sample.wiped) w.ignored = true
     w.frames += 1
     w.renderTotalMs += sample.renderMs
     w.lastFrameMs = sample.timestampMs

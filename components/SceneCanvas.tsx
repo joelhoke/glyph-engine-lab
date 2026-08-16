@@ -64,12 +64,15 @@ import {
   applyAmbientRadialImpulse,
   createAmbientCollisionGrid,
   createAmbientField,
+  isHeavyWeatherPreset,
   MATRIX_GLYPH_WIDTH,
   MATRIX_LINE_HEIGHT,
   normalizeAmbientField,
   rebuildAmbientCollisionGrid,
   resolveAmbientCollisions,
   resolveAmbientCount,
+  resolveHeavyAmbientLayerScale,
+  resolveHeavyAmbientTickCap,
   stepAmbientField,
   WEATHER_PROFILES,
 } from '../engine/ambientField'
@@ -97,7 +100,7 @@ import {
   MotionBaseField,
   MotionWaveParams,
 } from '../engine/motion'
-import { clampPondConfig, PondConfig } from '../engine/pondConfig'
+import { clampPondConfig, PondCharacter, PondConfig } from '../engine/pondConfig'
 import {
   applyRipple,
   createPondBody,
@@ -245,6 +248,16 @@ const LANDING_SCALE_RESTART_EPSILON = 0.001
  *  re-themed scene — 1 → 0 over exactly this long, ease-in-out. */
 const THEME_FADE_DURATION_MS = 500
 
+/** Ambient scene wipe (vibe carousel): the pre-switch frame is retained as a
+ *  CSS-pixel snapshot and clipped away directionally over the new scene. */
+const AMBIENT_WIPE_DURATION_MS = 650
+
+/** Weather render bucketing: rain/storm streaks and snow/blizzard flakes
+ *  group by quantized alpha (and size) so style/font changes happen once per
+ *  bucket instead of per particle. */
+const AMBIENT_ALPHA_BUCKETS = 8
+const AMBIENT_SIZE_BUCKETS = 8
+
 /** Built-in monogram fill per theme: white on dark; on light the mark is
  *  rasterized in the light theme's ink color so `source-colors` paints it
  *  visibly (the landing recolors the field with its own gradient anyway). */
@@ -255,6 +268,9 @@ const MONOGRAM_FILL: Record<ThemeName, string> = {
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+/** ease-in-out (quadratic): slow at both ends — theme fades and scene wipes. */
+const easeInOutQuad = (t: number) =>
+  t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
 
 function buildMeshBg(colorA: string, colorB: string, base: string, W: number, H: number) {
   const cv = document.createElement('canvas')
@@ -321,6 +337,15 @@ type SceneCanvasProps = {
    *  glyph source (drift + impact spin for all; creatures keep a fixed
    *  upright orientation). Undefined/disabled = byte-identical scene. */
   pond?: PondConfig
+  /** What the pond body carries: 'source' (default) keeps the current source
+   *  field; a creature character is a temporary render override computed from
+   *  the hidden MOTION_DEFAULTS — nothing outside SceneCanvas internals is
+   *  touched, and 'source'/disable restores the exact prior rendering. */
+  pondCharacter?: PondCharacter
+  /** Fired when an ambient scene wipe completes — and (via microtask) when
+   *  beginAmbientWipe declines to start one, so the parent can always rely on
+   *  the callback to unlock. */
+  onAmbientWipeEnd?: () => void
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -348,6 +373,14 @@ export type SceneCanvasHandle = {
    *  full requestAnimationFrame cadence. A (re)start at ~0 snaps every glyph
    *  to the logo center so the scale-in originates there. */
   setLandingLogoScale: (scale: number) => void
+  /** Ambient scene wipe (vibe carousel): snapshot the live canvas at CSS-pixel
+   *  resolution, then reveal the new scene directionally — right-to-left for
+   *  'next', left-to-right for 'prev' — over AMBIENT_WIPE_DURATION_MS. The
+   *  parent switches the ambient config in the same gesture; the live scene
+   *  underneath changes immediately through the standard rebuild path.
+   *  Returns false (no wipe started) while a wipe is already running or under
+   *  reduced motion; onAmbientWipeEnd still fires in the reduced-motion case. */
+  beginAmbientWipe: (direction: 'next' | 'prev') => boolean
 }
 
 function SceneCanvasInternal(
@@ -374,6 +407,8 @@ function SceneCanvasInternal(
     qualityTierOverride = null,
     onQualityTierChange,
     pond,
+    pondCharacter = 'source',
+    onAmbientWipeEnd,
   }: SceneCanvasProps,
   ref: React.ForwardedRef<SceneCanvasHandle>,
 ) {
@@ -389,6 +424,7 @@ function SceneCanvasInternal(
     capturePaintState,
     restorePaintState,
     setLandingLogoScale,
+    beginAmbientWipe,
   }))
   const meshBgsRef = useRef<MeshBgs | null>(null)
   const particlesRef = useRef<Particle[]>([])
@@ -442,6 +478,14 @@ function SceneCanvasInternal(
   const themeRef = useRef<ThemeName>(theme)
   const themeFadeCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const themeFadeStartRef = useRef(0)
+  // Ambient scene wipe (vibe carousel): a one-shot CSS-pixel snapshot of the
+  // pre-switch frame, clipped away directionally over the new scene. Unlike
+  // the theme fade the snapshot is never reused across wipes — the ref is
+  // nulled (canvas released) the moment the wipe completes.
+  const ambientWipeCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const ambientWipeStartRef = useRef(0)
+  const ambientWipeDirectionRef = useRef<'next' | 'prev'>('next')
+  const onAmbientWipeEndRef = useRef(onAmbientWipeEnd)
   const unassignedBehaviorRef = useRef<UnassignedGlyphBehavior>('hidden')
   const tuningModeRef = useRef<boolean>(false)
   // Stable prop mirrors: every source rebuild reads the latest selection and
@@ -507,6 +551,14 @@ function SceneCanvasInternal(
   // reflect the body inward past a threshold (engine/pondFormation). Created
   // lazily on the first pond-enabled frame; null = no accumulation ever runs.
   const pondFormationRef = useRef<PondFormationTracker | null>(null)
+  // Pond character render override: 'source' keeps the current source field;
+  // a creature character reroutes the carried field through its own topology
+  // computed at the hidden MOTION_DEFAULTS. The override topology is separate
+  // from the creature mode's creatureTopologyRef, so toggling characters
+  // never disturbs the real motion config's cached state — pure render
+  // routing, restored exactly on 'source'/disable.
+  const pondCharacterRef = useRef<PondCharacter>(pondCharacter)
+  const pondOverrideTopologyRef = useRef<CreatureTopology | null>(null)
   // Ambient layer (Stage 2): a separate typed-array agent pool for the
   // weather/matrix overlay, created/destroyed when ambient.mode changes. The
   // offscreen canvas gives matrix its trail fade without dimming the scene;
@@ -527,6 +579,18 @@ function SceneCanvasInternal(
   const ambientCollisionMsRef = useRef(0)
   const ambientStaticPoseDirtyRef = useRef(true)
   const matrixFontCacheRef = useRef<Map<number, string>>(new Map())
+  // Heavy weather scenes (engine/ambientField HEAVY_WEATHER_PRESETS) render
+  // into a reduced-resolution layer composited scaled up with smoothing;
+  // matrix keeps its own full-resolution trail layer above.
+  const ambientWeatherCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  // Fog sprites: prerendered radial-gradient discs keyed by quantized
+  // (hue, alpha, radius), replacing the per-particle gradient creation that
+  // dominated the fog scene's per-frame cost. Bounded; cleared on rebuild.
+  const fogSpriteCacheRef = useRef<Map<string, HTMLCanvasElement>>(new Map())
+  // Bucketed weather styles: per-particle bucket indices (grown with the
+  // pool), so rain streak strokes and snow font/fillStyle changes happen once
+  // per bucket instead of per particle.
+  const ambientBucketIndexRef = useRef<Int32Array>(new Int32Array(0))
   // Pointer velocity (px/s) for the ambient drag force: smoothed per-frame
   // deltas of the repel pointer.
   const pointerVelocityRef = useRef({ vx: 0, vy: 0, lastX: -9999, lastY: -9999, lastNow: 0 })
@@ -541,6 +605,9 @@ function SceneCanvasInternal(
   const onQualityTierChangeRef = useRef(onQualityTierChange)
   const qualityResizePendingRef = useRef(false)
   const qualityRebuildPendingRef = useRef(false)
+  // Set for the duration of an ambient scene wipe so the controller ignores
+  // every window the transition frames land in (resize/rebuild idiom).
+  const qualityWipePendingRef = useRef(false)
   // Paint overlay: per-target packed-RGBA overrides (0 = unpainted), bounded
   // normalized stroke history, redo stack, and the gesture in progress.
   const paintedColorsRef = useRef<Uint32Array>(new Uint32Array(0))
@@ -679,6 +746,50 @@ function SceneCanvasInternal(
     themeFadeStartRef.current = performance.now()
   }
 
+  // Ambient scene wipe (vibe carousel): capture the live canvas into a
+  // one-shot snapshot at CSS-pixel resolution (drawImage scaled by 1/dpr),
+  // then let the frame loop clip it away directionally over the new scene.
+  // The parent switches the ambient config in the same gesture, so the live
+  // scene underneath changes immediately through the existing rebuild path —
+  // still exactly one live ambient simulation. Canvas pixels only: the
+  // snapshot never includes DOM and never touches paint state.
+  const beginAmbientWipe = (direction: 'next' | 'prev'): boolean => {
+    // A wipe is already running — ignored; the running wipe's completion
+    // fires the callback.
+    if (ambientWipeCanvasRef.current) return false
+    // Reduced motion never animates the wipe: the parent switches the scene
+    // instantly, and the callback still fires (microtask, so the parent's own
+    // gesture handler finishes first) to unlock.
+    if (reducedMotionRef.current) {
+      queueMicrotask(() => onAmbientWipeEndRef.current?.())
+      return false
+    }
+    const canvas = canvasRef.current
+    if (!canvas || canvas.width === 0 || canvas.height === 0) {
+      queueMicrotask(() => onAmbientWipeEndRef.current?.())
+      return false
+    }
+    const pixelRatio = pixelRatioRef.current
+    const W = canvas.width / pixelRatio
+    const H = canvas.height / pixelRatio
+    const snapshot = document.createElement('canvas')
+    snapshot.width = Math.max(1, Math.round(W))
+    snapshot.height = Math.max(1, Math.round(H))
+    const snapshotCtx = snapshot.getContext('2d')
+    if (!snapshotCtx) {
+      queueMicrotask(() => onAmbientWipeEndRef.current?.())
+      return false
+    }
+    snapshotCtx.drawImage(canvas, 0, 0, W, H)
+    ambientWipeCanvasRef.current = snapshot
+    ambientWipeDirectionRef.current = direction
+    ambientWipeStartRef.current = performance.now()
+    // The adaptive quality controller ignores every window the wipe's
+    // transition frames land in (resize/rebuild idiom).
+    qualityWipePendingRef.current = true
+    return true
+  }
+
   // Live theme change (feature/light-dark): retain the last completed frame
   // as a snapshot, rebuild the source field so theme-dependent colors (the
   // landing gradient, the built-in monogram fill) resolve against the new
@@ -754,6 +865,19 @@ function SceneCanvasInternal(
       motionDirtyRef.current = true
     }
   }, [pond])
+  // Pond character mirror: a character change while the pond is live
+  // re-routes the field through applyMotionField (override topology in,
+  // exact prior routing out). A change while the pond is off needs no work —
+  // the next enable reads the ref directly.
+  useEffect(() => {
+    const prev = pondCharacterRef.current
+    pondCharacterRef.current = pondCharacter
+    if (prev === pondCharacter) return
+    if (!getPondConfig()) return
+    if (pondFormationRef.current) resetPondFormationTracker(pondFormationRef.current)
+    applyMotionField()
+  }, [pondCharacter])
+  useEffect(() => { onAmbientWipeEndRef.current = onAmbientWipeEnd }, [onAmbientWipeEnd])
   useEffect(() => { onQualityTierChangeRef.current = onQualityTierChange }, [onQualityTierChange])
   // Debug tier override (dev tuning UI): force a tier or return to Auto.
   useEffect(() => {
@@ -1057,7 +1181,12 @@ function SceneCanvasInternal(
     ambientStaticPoseDirtyRef.current = true
     ambientTickAccumRef.current = 0
     ambientLastTickRef.current = 0
+    // Render caches are scene-specific: prerendered fog sprites and the
+    // reduced-resolution weather layer never survive a rebuild.
+    fogSpriteCacheRef.current.clear()
+    ambientWeatherCanvasRef.current = null
     if (config.mode === 'off') {
+      // Off allocates nothing and steps nothing: no pool, no grid, no layer.
       ambientFieldRef.current = null
       ambientGridRef.current = null
       ambientCanvasRef.current = null
@@ -1309,6 +1438,53 @@ function SceneCanvasInternal(
     motionDirtyRef.current = true
   }
 
+  // Pond character override: replace the carried field's targets with a
+  // creature of the hidden MOTION_DEFAULTS (density/updateRate through the
+  // same device+tier quality composition the real creature mode uses;
+  // amount/speed/custom at compute time in computeMotionFrame). Pure render
+  // routing — motionConfigRef, motionQualityRef, playgroundConfig, and paint
+  // state are never touched, so 'source'/disable restores the exact prior
+  // rendering through the standard applyMotionField branches.
+  const rebuildPondOverrideField = (character: Exclude<PondCharacter, 'source'>) => {
+    const overrideConfig: MotionConfig = {
+      ...MOTION_DEFAULTS,
+      mode: 'parametric-creature',
+      variant: character,
+    }
+    const quality = resolveEffectiveMotionQuality(overrideConfig)
+    const needed = quality.effectiveDensity
+    if (
+      !pondOverrideTopologyRef.current ||
+      pondOverrideTopologyRef.current.count !== needed ||
+      pondOverrideTopologyRef.current.variant !== character
+    ) {
+      pondOverrideTopologyRef.current = buildCreatureTopology(
+        needed,
+        character,
+        MOTION_DEFAULTS.custom,
+      )
+    }
+    // Source colors inherit proportionally from the base field, same as the
+    // real creature mode; the glyph paint channel is hidden at draw time.
+    const base = baseColorsRef.current
+    const colors = new Uint32Array(needed)
+    if (base.length > 0 && needed > 0) {
+      for (let i = 0; i < needed; i += 1) {
+        colors[i] = base[Math.min(base.length - 1, Math.floor((i * base.length) / needed))]
+      }
+    }
+    activeSourceColorsRef.current = colors
+    ensureMotionBuffers(needed)
+    // Seed the buffers with the base centroid so the first frame before the
+    // next compute is finite even when the base field is empty.
+    motionBuffersXRef.current.fill(viewportCenter().x, 0, needed)
+    motionBuffersYRef.current.fill(viewportCenter().y, 0, needed)
+    activeTargetsXRef.current = motionBuffersXRef.current
+    activeTargetsYRef.current = motionBuffersYRef.current
+    activeCountRef.current = needed
+    motionDirtyRef.current = true
+  }
+
   const viewportCenter = () => {
     const { width, height } = getViewportSize()
     return { x: width * 0.5, y: height * 0.5 }
@@ -1346,7 +1522,14 @@ function SceneCanvasInternal(
   // rebuild assignment, then replay the paint overlay over the fresh field.
   const applyMotionField = () => {
     const mode = motionConfigRef.current.mode
-    if (mode === 'parametric-creature') {
+    const pondOverride = getPondOverrideCharacter()
+    if (pondOverride) {
+      // Pond character override: while the pond is enabled and a creature
+      // character is selected, the carried field IS the creature (hidden
+      // MOTION_DEFAULTS); the pond transform applies per frame exactly as
+      // with a source. Checked first so it wins over any live motion mode.
+      rebuildPondOverrideField(pondOverride)
+    } else if (mode === 'parametric-creature') {
       rebuildCreatureField()
     } else if (mode === 'organic-flow') {
       const count = baseCountRef.current
@@ -2572,6 +2755,15 @@ function SceneCanvasInternal(
     return config && config.enabled ? config : null
   }
 
+  // Pond character render override: the creature the body carries instead of
+  // the source field, or null for 'source'/pond-off. A cheap ref read — the
+  // frame path gates on this exactly like the pond config itself.
+  const getPondOverrideCharacter = (): Exclude<PondCharacter, 'source'> | null => {
+    if (!getPondConfig()) return null
+    const character = pondCharacterRef.current
+    return character === 'source' ? null : character
+  }
+
   // Lazily create the single body (centered, seeded wander phase, cruising +X
   // initially) and step it on the quality-capped motion update cadence, in
   // any motion mode. dt derives from the time since the last target compute
@@ -2653,7 +2845,11 @@ function SceneCanvasInternal(
     if (!activeStrokeRef.current) {
       motionTimeRef.current += dt
     }
-    const rate = motionQualityRef.current.effectiveUpdateRate || 30
+    const rate = getPondOverrideCharacter()
+      ? // Pond character override: the hidden defaults' cadence, still capped
+        // by the active quality tier's creature rate.
+        Math.min(MOTION_DEFAULTS.updateRate, qualityBudgetRef.current.creatureRate)
+      : motionQualityRef.current.effectiveUpdateRate || 30
     if (motionDirtyRef.current || now - lastMotionComputeRef.current >= 1000 / rate) {
       // Private Pond: advance the swimming body on the same quality-capped
       // cadence as the target math, in every motion mode, then transform the
@@ -2702,6 +2898,30 @@ function SceneCanvasInternal(
       width,
       height,
       custom: config.custom,
+    }
+    const pondOverride = getPondOverrideCharacter()
+    if (pondOverride && pondOverrideTopologyRef.current) {
+      // Pond character override: creature targets at the hidden
+      // MOTION_DEFAULTS, then the same in-place pond transform as any
+      // carried source — creatures stay upright. The live motion config is
+      // never read on this path.
+      computeCreatureTargets(
+        pondOverrideTopologyRef.current,
+        {
+          time,
+          amount: MOTION_DEFAULTS.amount / 100,
+          speed: MOTION_DEFAULTS.speed,
+          waveScale: MOTION_DEFAULTS.waveScale,
+          complexity: MOTION_DEFAULTS.complexity,
+          width,
+          height,
+          custom: MOTION_DEFAULTS.custom,
+        },
+        motionBuffersXRef.current,
+        motionBuffersYRef.current,
+      )
+      transformPondTargets(pond, pondOverrideTopologyRef.current.count)
+      return
     }
     if (config.mode === 'organic-flow') {
       computeOrganicTargets(
@@ -2825,7 +3045,12 @@ function SceneCanvasInternal(
     colorContext.rowT = targetRowRef.current
     colorContext.wordColorIndices = wordColorRef.current
     colorContext.sourceColors = activeSourceColorsRef.current
-    colorContext.paintedColors = paintedColorsRef.current
+    // Pond character override: the source's glyph paint channel is hidden on
+    // the creature (paint DATA is untouched — purely skipped at compositing;
+    // the background paint layer still renders above).
+    colorContext.paintedColors = getPondOverrideCharacter()
+      ? undefined
+      : paintedColorsRef.current
 
     const behavior = unassignedBehaviorRef.current
     const reducedMotion = reducedMotionRef.current
@@ -3055,7 +3280,17 @@ function SceneCanvasInternal(
       return
     }
 
-    const tickHz = Math.max(1, qualityBudgetRef.current.ambientTickHz)
+    // Heavy weather scenes (rain/storm/snow/blizzard/fog) run their physics
+    // at an extra-capped cadence on top of the tier budget — 20 Hz on T0/T1,
+    // 15 Hz on T2/T3 (engine/ambientField). The tier budgets themselves are
+    // unchanged, so adaptive quality behaves exactly as before.
+    const budgetTickHz = qualityBudgetRef.current.ambientTickHz
+    const tickHz = Math.max(
+      1,
+      config.mode === 'weather' && isHeavyWeatherPreset(config.weather.preset)
+        ? Math.min(budgetTickHz, resolveHeavyAmbientTickCap(qualityBudgetRef.current.tier))
+        : budgetTickHz,
+    )
     if (ambientLastTickRef.current === 0) ambientLastTickRef.current = now
     ambientTickAccumRef.current += Math.min(100, Math.max(0, now - ambientLastTickRef.current))
     ambientLastTickRef.current = now
@@ -3103,6 +3338,48 @@ function SceneCanvasInternal(
     const scaled = fontRef.current.replace(/^(\d+(?:\.\d+)?)px/, `${Math.round(base)}px`)
     cache.set(key, scaled)
     return scaled
+  }
+
+  // Prerendered fog disc: a radial-gradient sprite keyed by quantized
+  // (hue, alpha, radius) buckets, drawn scaled to the agent's actual radius
+  // (smoothing absorbs the small size difference). Bounded like the brush
+  // caches — cleared on overflow and on every ambient rebuild.
+  const getFogSprite = (hue: number, alpha: number, radius: number) => {
+    const qHue = Math.round(hue / 6) * 6
+    const qAlpha = Math.max(0.04, Math.round(alpha * 25) / 25)
+    const qRadius = Math.max(16, Math.ceil(radius / 24) * 24)
+    const key = `${qHue}:${qAlpha.toFixed(2)}:${qRadius}`
+    const cache = fogSpriteCacheRef.current
+    const cached = cache.get(key)
+    if (cached) return cached
+    if (cache.size >= 64) cache.clear()
+    const size = qRadius * 2
+    const canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    const spriteCtx = canvas.getContext('2d')!
+    const gradient = spriteCtx.createRadialGradient(qRadius, qRadius, 0, qRadius, qRadius, qRadius)
+    gradient.addColorStop(0, `hsla(${qHue}, 12%, 88%, ${qAlpha})`)
+    gradient.addColorStop(1, `hsla(${qHue}, 12%, 88%, 0)`)
+    spriteCtx.fillStyle = gradient
+    spriteCtx.fillRect(0, 0, size, size)
+    cache.set(key, canvas)
+    return canvas
+  }
+
+  // Reduced-resolution layer for heavy weather scenes; recreated when the
+  // viewport or the tier-dependent scale changes (also dropped on rebuild).
+  const ensureAmbientWeatherLayer = (W: number, H: number, scale: number) => {
+    const width = Math.max(1, Math.round(W * scale))
+    const height = Math.max(1, Math.round(H * scale))
+    let layer = ambientWeatherCanvasRef.current
+    if (!layer || layer.width !== width || layer.height !== height) {
+      layer = document.createElement('canvas')
+      layer.width = width
+      layer.height = height
+      ambientWeatherCanvasRef.current = layer
+    }
+    return layer
   }
 
   // Render the live ambient agents between the background paint channel and
@@ -3172,48 +3449,124 @@ function SceneCanvasInternal(
     const preset = config.weather.preset
     const profile = WEATHER_PROFILES[preset]
     const blurPx = (config.weather.blur / 100) * 3
-    ctx.save()
+    // Heavy scenes (rain/storm/snow/blizzard/fog) render into a
+    // reduced-resolution layer — 0.5 scale on T0/T1, 0.4 on T2/T3 — composited
+    // scaled up with smoothing. Clear/wind stay direct: few slow agents, no
+    // measurable benefit. Matrix keeps its own full-resolution trail layer
+    // (above). All layer-space drawing below uses the same CSS-pixel
+    // coordinates; the layer transform does the scaling.
+    const heavy = isHeavyWeatherPreset(preset)
+    const layerScale = resolveHeavyAmbientLayerScale(qualityBudgetRef.current.tier)
+    let target = ctx
+    let layer: HTMLCanvasElement | null = null
+    if (heavy) {
+      const candidate = ensureAmbientWeatherLayer(W, H, layerScale)
+      const layerCtx = candidate ? candidate.getContext('2d') : null
+      if (candidate && layerCtx) {
+        layer = candidate
+        layerCtx.setTransform(layerScale, 0, 0, layerScale, 0, 0)
+        layerCtx.clearRect(0, 0, W, H)
+        layerCtx.font = fontRef.current
+        layerCtx.textAlign = 'center'
+        layerCtx.textBaseline = 'middle'
+        target = layerCtx
+      }
+    }
+    target.save()
     if (blurPx > 0.05 && preset === 'fog') {
       try {
-        ctx.filter = `blur(${blurPx.toFixed(2)}px)`
+        target.filter = `blur(${blurPx.toFixed(2)}px)`
       } catch {}
     }
     const precipitation = profile.recycleBottom
-    for (let i = 0; i < field.count; i += 1) {
-      const x = field.x[i]
-      const y = field.y[i]
-      const hue = field.hue[i]
-      const alpha = field.alpha[i]
-      if (preset === 'fog') {
-        // Large, very low-alpha soft discs; the blur knob finishes the haze.
-        const radius = fontSize * field.size[i] * 2
-        const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius)
-        gradient.addColorStop(0, `hsla(${hue}, 12%, 88%, ${alpha})`)
-        gradient.addColorStop(1, `hsla(${hue}, 12%, 88%, 0)`)
-        ctx.fillStyle = gradient
-        ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2)
-        continue
-      }
-      if (precipitation && (preset === 'rain' || preset === 'storm')) {
-        const streakLen = Math.min(48, field.vy[i] * 0.04)
-        const streakX = -field.vx[i] * 0.04
-        ctx.strokeStyle = `hsla(${hue}, 60%, 70%, ${alpha * 0.35})`
-        ctx.lineWidth = 1
-        ctx.beginPath()
-        ctx.moveTo(x, y)
-        ctx.lineTo(x + streakX, y - streakLen)
-        ctx.stroke()
-        ctx.fillStyle = `hsla(${hue}, 55%, 72%, ${alpha})`
-        ctx.fillText(chars[i % charCount] || '|', x, y)
-        continue
-      }
-      // Snow, blizzard, clear, wind: sized glyph flakes/motes.
-      ctx.font = getScaledAmbientFont(field.size[i])
-      ctx.fillStyle = `hsla(${hue}, 35%, 90%, ${alpha})`
-      ctx.fillText(chars[i % charCount] || '.', x, y)
-      ctx.font = fontRef.current
+    // Per-particle bucket scratch for the batched style passes, grown with
+    // the pool (rebuild only, never per frame).
+    let bucketIndex = ambientBucketIndexRef.current
+    if (bucketIndex.length < field.capacity) {
+      bucketIndex = new Int32Array(field.capacity)
+      ambientBucketIndexRef.current = bucketIndex
     }
-    ctx.restore()
+    if (preset === 'fog') {
+      // Large, very low-alpha soft discs drawn from the prerendered sprite
+      // cache — the per-particle gradient creation this replaces was the fog
+      // scene's dominant per-frame cost. The blur knob finishes the haze.
+      for (let i = 0; i < field.count; i += 1) {
+        const x = field.x[i]
+        const y = field.y[i]
+        const radius = fontSize * field.size[i] * 2
+        const sprite = getFogSprite(field.hue[i], field.alpha[i], radius)
+        target.drawImage(sprite, x - radius, y - radius, radius * 2, radius * 2)
+      }
+    } else if (precipitation && (preset === 'rain' || preset === 'storm')) {
+      // Streak pass: one beginPath/stroke per quantized alpha bucket instead
+      // of per-particle style changes. Bucketed styles use the preset's base
+      // hue — the ±6 per-agent jitter is imperceptible on thin fast streaks
+      // and would explode the bucket space (the glyph pass below keeps it).
+      for (let i = 0; i < field.count; i += 1) {
+        bucketIndex[i] = Math.min(
+          AMBIENT_ALPHA_BUCKETS - 1,
+          Math.floor(field.alpha[i] * AMBIENT_ALPHA_BUCKETS),
+        )
+      }
+      target.lineWidth = 1
+      for (let b = 0; b < AMBIENT_ALPHA_BUCKETS; b += 1) {
+        let open = false
+        for (let i = 0; i < field.count; i += 1) {
+          if (bucketIndex[i] !== b) continue
+          if (!open) {
+            target.strokeStyle = `hsla(${profile.hue}, 60%, 70%, ${((b + 0.5) / AMBIENT_ALPHA_BUCKETS) * 0.35})`
+            target.beginPath()
+            open = true
+          }
+          const x = field.x[i]
+          const y = field.y[i]
+          target.moveTo(x, y)
+          target.lineTo(x - field.vx[i] * 0.04, y - Math.min(48, field.vy[i] * 0.04))
+        }
+        if (open) target.stroke()
+      }
+      // Glyph pass: the per-particle drop glyph, styling unchanged.
+      target.font = fontRef.current
+      for (let i = 0; i < field.count; i += 1) {
+        target.fillStyle = `hsla(${field.hue[i]}, 55%, 72%, ${field.alpha[i]})`
+        target.fillText(chars[i % charCount] || '|', field.x[i], field.y[i])
+      }
+    } else {
+      // Snow, blizzard, clear, wind: sized glyph flakes/motes with
+      // font/fillStyle changes once per quantized (size, alpha) bucket
+      // instead of per particle. Same hue rationale as the streaks.
+      for (let i = 0; i < field.count; i += 1) {
+        const sizeKey = Math.min(
+          AMBIENT_SIZE_BUCKETS - 1,
+          Math.max(0, Math.round(field.size[i] * 2) - 1),
+        )
+        const alphaKey = Math.min(
+          AMBIENT_ALPHA_BUCKETS - 1,
+          Math.floor(field.alpha[i] * AMBIENT_ALPHA_BUCKETS),
+        )
+        bucketIndex[i] = sizeKey * AMBIENT_ALPHA_BUCKETS + alphaKey
+      }
+      for (let b = 0; b < AMBIENT_SIZE_BUCKETS * AMBIENT_ALPHA_BUCKETS; b += 1) {
+        let open = false
+        for (let i = 0; i < field.count; i += 1) {
+          if (bucketIndex[i] !== b) continue
+          if (!open) {
+            target.font = getScaledAmbientFont((Math.floor(b / AMBIENT_ALPHA_BUCKETS) + 1) / 2)
+            target.fillStyle = `hsla(${profile.hue}, 35%, 90%, ${((b % AMBIENT_ALPHA_BUCKETS) + 0.5) / AMBIENT_ALPHA_BUCKETS})`
+            open = true
+          }
+          target.fillText(chars[i % charCount] || '.', field.x[i], field.y[i])
+        }
+      }
+      target.font = fontRef.current
+    }
+    target.restore()
+    if (layer) {
+      ctx.save()
+      ctx.imageSmoothingEnabled = true
+      ctx.drawImage(layer, 0, 0, W, H)
+      ctx.restore()
+    }
     // Storm lightning: a brief full-scene flash on top of the agents.
     if (field.lightningFlash > 0) {
       ctx.fillStyle = `rgba(235, 240, 255, ${(field.lightningFlash * 0.35).toFixed(3)})`
@@ -3386,11 +3739,7 @@ function SceneCanvasInternal(
           themeFadeCanvasRef.current = null
         } else {
           const clampedT = Math.min(1, Math.max(0, fadeT))
-          // ease-in-out (quadratic): slow at both ends of the 500ms fade.
-          const eased =
-            clampedT < 0.5
-              ? 2 * clampedT * clampedT
-              : 1 - Math.pow(-2 * clampedT + 2, 2) / 2
+          const eased = easeInOutQuad(clampedT)
           const fadeCanvas = canvasRef.current
           if (fadeCanvas) {
             ctx.save()
@@ -3406,6 +3755,36 @@ function SceneCanvasInternal(
           }
         }
       }
+      // Ambient scene wipe (vibe carousel): the pre-switch snapshot is clipped
+      // away directionally over the freshly drawn new scene — 'next' reveals
+      // right-to-left (the snapshot's right edge is clipped away first, the
+      // reveal edge traveling from the right edge toward the left), 'prev'
+      // left-to-right. On completion the snapshot is released immediately
+      // (ref nulled, canvas dropped) and the parent is notified.
+      const wipeSnapshot = ambientWipeCanvasRef.current
+      if (wipeSnapshot) {
+        const wipeT = (now - ambientWipeStartRef.current) / AMBIENT_WIPE_DURATION_MS
+        const wipeCanvas = canvasRef.current
+        if (wipeT >= 1 || !wipeCanvas) {
+          ambientWipeCanvasRef.current = null
+          qualityWipePendingRef.current = false
+          onAmbientWipeEndRef.current?.()
+        } else {
+          const eased = easeInOutQuad(Math.min(1, Math.max(0, wipeT)))
+          const W = wipeCanvas.width / pixelRatioRef.current
+          const H = wipeCanvas.height / pixelRatioRef.current
+          ctx.save()
+          ctx.beginPath()
+          if (ambientWipeDirectionRef.current === 'next') {
+            ctx.rect(0, 0, W * (1 - eased), H)
+          } else {
+            ctx.rect(W * eased, 0, W * (1 - eased), H)
+          }
+          ctx.clip()
+          ctx.drawImage(wipeSnapshot, 0, 0, W, H)
+          ctx.restore()
+        }
+      }
       const frameCost = performance.now() - frameStart
       frameTimingRef.current.record(frameCost, frameStart)
       // Adaptive quality: feed the frame cost into the hysteresis controller
@@ -3418,6 +3797,7 @@ function SceneCanvasInternal(
           renderMs: frameCost,
           resized: qualityResizePendingRef.current,
           rebuilt: qualityRebuildPendingRef.current,
+          wiped: qualityWipePendingRef.current,
         })
         qualityResizePendingRef.current = false
         qualityRebuildPendingRef.current = false

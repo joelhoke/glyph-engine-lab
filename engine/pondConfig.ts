@@ -14,6 +14,14 @@
  * Pure functions only — verified by scripts/verify-pond.js.
  */
 
+/**
+ * What the pond body carries (SceneCanvas render routing): 'source' keeps the
+ * current source field; a creature character is a temporary render override —
+ * the field targets compute from CREATURE_DEFINITIONS[character] at the hidden
+ * MOTION_DEFAULTS while the pond transform applies exactly as with a source.
+ */
+export type PondCharacter = 'source' | 'original' | 'jelly' | 'ray'
+
 export type PondConfig = {
   /** Master switch; when false the scene behaves exactly as without pond. */
   enabled: boolean
