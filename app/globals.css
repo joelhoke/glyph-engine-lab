@@ -1531,7 +1531,7 @@ button:focus-visible {
 .work-experience {
   position: absolute;
   left: 50%;
-  bottom: 0;
+  bottom: var(--work-large-screen-card-shift, 0px);
   transform: translateX(-50%);
   /* Interactive surface over the pointer-transparent foreground column: the
      card owns its gestures (bounded scrolling, buttons, links); the layout
@@ -1761,15 +1761,41 @@ button:focus-visible {
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
+  /* Large displays have more unused vertical space than the laptop layout.
+     The compact card and glyph stage use independent responsive shifts so
+     the composition tightens without changing the card's expansion geometry. */
+  --work-large-screen-card-shift: 0px;
+  --work-large-screen-glyph-shift: 0px;
 }
 
 .work-glyph-stage {
   position: absolute;
-  top: 0;
+  top: var(--work-large-screen-glyph-shift, 0px);
   left: 0;
   right: 0;
   height: 46%;
   pointer-events: none;
+}
+
+/* The MacBook-sized layout remains the baseline. On taller desktop viewports,
+   raise the compact card and lower the glyph stage independently; the
+   measured stage rect then carries the glyph adjustment into the canvas target
+   region. */
+@media (min-width: 761px) and (min-height: 901px) {
+  .work-layout {
+    --work-large-screen-card-shift: clamp(0rem, calc(51.975dvh - 29.2359375rem), 13.86rem);
+    --work-large-screen-glyph-shift: clamp(0rem, calc(51.975dvh - 29.2359375rem), 13.86rem);
+  }
+}
+
+/* Portrait desktop displays have substantially more vertical runway than the
+   horizontal monitor layout. Give that composition its own calibrated card
+   lift while keeping the glyph field on its separate portrait drop. */
+@media (min-width: 761px) and (min-height: 1200px) and (orientation: portrait) {
+  .work-layout {
+    --work-large-screen-card-shift: clamp(0rem, calc(131.340825dvh - 73.8792140625rem), 35.02422rem);
+    --work-large-screen-glyph-shift: clamp(0rem, calc(62.37dvh - 35.083125rem), 16.632rem);
+  }
 }
 
 /* Non-scrolling panel footer (BoundedScrollPanel): sits below the viewport
@@ -2389,6 +2415,19 @@ button:focus-visible {
 @media (max-width: 560px) {
   .collaborate-experience-viewport {
     padding: 1.25rem 1.25rem;
+  }
+}
+
+/* Suggested prompts align to the full mobile content column so their borders
+   share the same left/right edges as the rest of the Collaborate surface. */
+@media (max-width: 760px) {
+  .collaborate-experience .conversation-starters {
+    width: 100%;
+  }
+
+  .collaborate-experience .conversation-starter {
+    width: 100%;
+    flex: 1 1 100%;
   }
 }
 
