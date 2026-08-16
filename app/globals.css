@@ -1520,23 +1520,68 @@ button:focus-visible {
 
 /* --- Work experience (M4) --- */
 
-/* Fixed outer frame: border/background/height stay stationary while the
-   inner viewport (BoundedScrollPanel) scrolls the slide content. */
+/* Fixed outer frame: border/background stay stationary while the inner
+   viewport (BoundedScrollPanel) scrolls the slide content. The card is
+   absolutely anchored to the bottom of .work-layout in the compact state;
+   expansion is scroll-scrubbed — WorkExperience drives fixed-position
+   interpolated geometry inline from the measured compact rect, so there is
+   NO CSS transition here (input scrubs both directions without easing).
+   The grid rows keep the scrolling viewport above the non-scrolling footer:
+   minmax(0, 1fr) lets the viewport shrink without pushing the footer out. */
 .work-experience {
-  position: relative;
+  position: absolute;
+  left: 50%;
+  bottom: var(--work-large-screen-card-shift, 0px);
+  transform: translateX(-50%);
   /* Interactive surface over the pointer-transparent foreground column: the
      card owns its gestures (bounded scrolling, buttons, links); the layout
      gaps around it fall through to the canvas. */
   pointer-events: auto;
-  width: min(100%, 40rem);
+  /* Compact state: on desktop the card rests at the expanded panel's width
+     and horizontal position (centered, min(60rem, 100vw - 4rem)), so the
+     scrubbed expansion interpolates only top and height; mobile keeps its
+     available-width card near the viewport bottom. */
+  width: min(60rem, calc(100vw - 4rem));
+  max-height: min(68%, calc(100vh - 10rem));
+  max-height: min(
+    68%,
+    calc(100dvh - 10rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))
+  );
   text-align: left;
   color: var(--color-text);
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   border-radius: 12px;
   border: 1px solid var(--color-border-subtle);
   background: var(--color-surface-panel-soft);
   backdrop-filter: blur(8px);
+}
+
+/* The scrubbed expansion (0..1) is exposed to CSS as --work-expansion on the
+   card; geometry itself is inline (measured compact rect → expanded target).
+   Mobile expanded padding: lifts the content below the persistent nav as the
+   card approaches the edge-to-edge reading surface. */
+@media (max-width: 760px) {
+  /* Mobile compact keeps the available-width card (it still widens to the
+     edge-to-edge reading surface during the scrub). */
+  .work-experience {
+    width: 100%;
+  }
+  .work-experience-viewport {
+    padding-top: calc(
+      1.25rem + (3rem + env(safe-area-inset-top, 0px)) * var(--work-expansion, 0)
+    );
+  }
+}
+
+/* Readable body text keeps a 44–46rem measure in every state. */
+.work-story-thesis,
+.work-story-outcome,
+.work-story-section-copy,
+.work-story-section-list,
+.work-story-section-callout,
+.work-mode-intro {
+  max-width: 45rem;
 }
 
 /* The scrolling viewport: carries the padding and content layout the card
@@ -1544,8 +1589,16 @@ button:focus-visible {
 .work-experience-viewport {
   display: flex;
   flex-direction: column;
-  gap: 1.1rem;
   padding: 1.75rem 2rem;
+}
+
+/* Content wrapper inside the viewport: WorkExperience measures ITS
+   scrollHeight against the compact viewport's clientHeight to decide whether
+   the slide overflows (and can expand at all). */
+.work-experience-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
 }
 
 .work-mode-heading {
@@ -1657,7 +1710,6 @@ button:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-top: 0.25rem;
 }
 
 .work-nav-button {
@@ -1691,78 +1743,71 @@ button:focus-visible {
   .work-experience-viewport {
     padding: 1.25rem 1.25rem;
   }
+
+  .work-experience .bounded-scroll-footer {
+    padding: 0.6rem 1.25rem calc(0.6rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 
-/* Work mode scrolls vertically inside its panel while the canvas stays
-   fixed behind it. The 100dvh + safe-area variant wins where supported so
-   the panel clears the iOS browser chrome and home-indicator insets; the
-   100vh line is the fallback for older engines. Height constraints live on
-   the frame; the inner viewport owns the actual scrolling. */
-.work-experience {
-  max-height: calc(100vh - 9rem);
-  max-height: calc(
-    100dvh - 9rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
-  );
-}
-
-/* Work glyph stage (mobile): the stage reserves real layout space so the
-   region-bound glyph field renders above/beside the panel instead of behind
-   it. Desktop hides the stage and keeps the full-scene background
-   treatment. The stage itself never intercepts pointer input — the fixed
-   canvas beneath stays interactive. */
+/* Work layout: fills the foreground area so the glyph stage can occupy the
+   top and the card can anchor to the bottom. The stage is absolutely
+   positioned with a FIXED share of the layout — its rect (measured by
+   PortfolioExperience as the canvas target region) never changes when the
+   card expands, so expansion causes no canvas morph. The stage never
+   intercepts pointer input: gestures inside it stay dedicated to the canvas
+   beneath. */
 .work-layout {
-  display: contents;
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  /* Large displays have more unused vertical space than the laptop layout.
+     The compact card and glyph stage use independent responsive shifts so
+     the composition tightens without changing the card's expansion geometry. */
+  --work-large-screen-card-shift: 0px;
+  --work-large-screen-glyph-shift: 0px;
 }
 
 .work-glyph-stage {
-  display: none;
+  position: absolute;
+  top: var(--work-large-screen-glyph-shift, 0px);
+  left: 0;
+  right: 0;
+  height: 46%;
   pointer-events: none;
 }
 
-/* Portrait mobile: stage above the scrollable Work panel (column layout). */
-@media (max-width: 760px) {
+/* The MacBook-sized layout remains the baseline. On taller desktop viewports,
+   raise the compact card and lower the glyph stage independently; the
+   measured stage rect then carries the glyph adjustment into the canvas target
+   region. */
+@media (min-width: 761px) and (min-height: 901px) {
   .work-layout {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1rem;
-    width: 100%;
-  }
-  .work-glyph-stage {
-    display: block;
-    width: 100%;
-    height: 38vh;
-  }
-  .work-experience {
-    max-height: calc(100vh - 38vh - 6rem);
-    max-height: calc(
-      100dvh - 38vh - 6rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
-    );
+    --work-large-screen-card-shift: clamp(0rem, calc(51.975dvh - 29.2359375rem), 13.86rem);
+    --work-large-screen-glyph-shift: clamp(0rem, calc(51.975dvh - 29.2359375rem), 13.86rem);
   }
 }
 
-/* Short landscape mobile: stage beside the panel (row layout). */
-@media (max-height: 520px) and (orientation: landscape) {
+/* Portrait desktop displays have substantially more vertical runway than the
+   horizontal monitor layout. Give that composition its own calibrated card
+   lift while keeping the glyph field on its separate portrait drop. */
+@media (min-width: 761px) and (min-height: 1200px) and (orientation: portrait) {
   .work-layout {
-    display: flex;
-    flex-direction: row;
-    align-items: stretch;
-    gap: 1rem;
-    width: 100%;
+    --work-large-screen-card-shift: clamp(0rem, calc(131.340825dvh - 73.8792140625rem), 35.02422rem);
+    --work-large-screen-glyph-shift: clamp(0rem, calc(62.37dvh - 35.083125rem), 16.632rem);
   }
-  .work-glyph-stage {
-    display: block;
-    flex: 0 0 36vw;
-    height: auto;
-  }
-  .work-layout .work-experience {
-    flex: 1 1 auto;
-    min-width: 0;
-    max-height: calc(100vh - 6rem);
-    max-height: calc(
-      100dvh - 6rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
-    );
-  }
+}
+
+/* Non-scrolling panel footer (BoundedScrollPanel): sits below the viewport
+   inside the frame, so the prev/next controls never cover scrolling
+   content. */
+.bounded-scroll-footer {
+  flex: 0 0 auto;
+}
+
+.work-experience .bounded-scroll-footer {
+  padding: 0.75rem 2rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--color-border-subtle);
 }
 
 .work-mode-intro {
@@ -1814,25 +1859,8 @@ button:focus-visible {
   max-width: calc(100% - 40px);
 }
 
-.work-story-disclosure {
-  align-self: flex-start;
-  font: inherit;
-  font-size: 0.85rem;
-  color: var(--color-accent);
-  background: none;
-  border: none;
-  border-bottom: 1px solid var(--color-accent-border);
-  padding: 0 0 2px;
-  cursor: pointer;
-  transition: color 180ms ease, border-color 180ms ease;
-}
-
-.work-story-disclosure:hover,
-.work-story-disclosure:focus-visible {
-  color: var(--color-accent-strong);
-  border-color: var(--color-accent-strong);
-}
-
+/* The narrative is always rendered (no disclosure) — the card's expanded
+   reading panel is the reveal. */
 .work-story-sections {
   display: flex;
   flex-direction: column;
@@ -1874,6 +1902,22 @@ button:focus-visible {
   color: var(--color-accent-vivid);
   border-left: 2px solid var(--color-accent-vivid);
   padding-left: 0.9rem;
+}
+
+/* Related links: always the final story content. */
+.work-story-related {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.work-story-related-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
 }
 
 .work-gallery {
@@ -1940,6 +1984,33 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  /* Scrubbed expansion narrows inline figures toward 40% of the content
+     width on desktop (full width while compact); mobile stays full width. */
+  margin-inline: auto;
+}
+
+@media (min-width: 761px) {
+  .work-inline-media--image {
+    width: calc(100% - 60% * var(--work-expansion, 0));
+  }
+}
+
+@media (max-width: 760px) {
+  .work-inline-media--image {
+    width: 100%;
+  }
+}
+
+/* Inline images open the lightbox — the button is the zoom target; it shares
+   the figure's width and centering. */
+.work-inline-media-button {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+  display: block;
+  width: 100%;
+  max-width: 100%;
 }
 
 .work-inline-media img,
@@ -1997,7 +2068,7 @@ button:focus-visible {
   inset: 0;
   z-index: 80;
   background: rgba(4, 6, 10, 0.86);
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2347,6 +2418,19 @@ button:focus-visible {
   }
 }
 
+/* Suggested prompts align to the full mobile content column so their borders
+   share the same left/right edges as the rest of the Collaborate surface. */
+@media (max-width: 760px) {
+  .collaborate-experience .conversation-starters {
+    width: 100%;
+  }
+
+  .collaborate-experience .conversation-starter {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+}
+
 /* --- Collaborate AI guide (preview-only, behind COLLABORATE_AI_GUIDE) --- */
 
 .collaborate-guide {
@@ -2357,13 +2441,18 @@ button:focus-visible {
   align-items: stretch;
 }
 
+/* The invitation card reads left-aligned like the Work cards; only the
+   email CTAs stay centered. */
 .collaborate-guide .collaborate-heading,
 .collaborate-guide .collaborate-statement,
 .collaborate-guide .guide-disclosure {
-  text-align: center;
+  text-align: left;
 }
 
-.collaborate-guide .conversation-starters,
+.collaborate-guide .conversation-starters {
+  justify-content: flex-start;
+}
+
 .collaborate-guide .collaborate-contact {
   justify-content: center;
 }
@@ -2848,6 +2937,7 @@ a.guide-source:focus-visible {
   font-weight: 400;
   font-size: 1rem;
   line-height: 1.6;
+  letter-spacing: 0.02em;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -3158,6 +3248,7 @@ a.guide-source:focus-visible {
   font-weight: 400;
   font-size: 1rem;
   line-height: 1.65;
+  letter-spacing: 0.02em;
   color: var(--color-warm-strong);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -3191,12 +3282,30 @@ a.guide-source:focus-visible {
   -webkit-backdrop-filter: blur(8px);
 }
 
+/* Newest guide answer only: a small upward settle + fade as the turn arrives.
+   The global prefers-reduced-motion kill-switch covers it. */
+.chat-answer-new {
+  animation: chat-answer-in 320ms ease-out;
+}
+
+@keyframes chat-answer-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .chat-answer-text {
   margin: 0;
   font-family: var(--font-display), var(--font-mono);
   font-weight: 400;
   font-size: 1rem;
   line-height: 1.65;
+  letter-spacing: 0.02em;
   color: var(--color-warm-strong);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -3385,6 +3494,7 @@ a.guide-source:focus-visible {
   font-weight: 400;
   font-size: 1rem;
   line-height: 1.6;
+  letter-spacing: 0.02em;
   flex: 1 1 auto;
   min-width: 0;
   resize: none;
@@ -3455,6 +3565,17 @@ a.guide-source:focus-visible {
      lines, and snaps into place as the rail scrolls horizontally. */
   .chat-rail {
     scroll-snap-type: x mandatory;
+    /* Full-bleed: the rail breaks out of the gutter so pills scroll
+       edge-to-edge. The resting inset lives on the pill group (not the
+       rail), so it scrolls away with the content once the visitor swipes —
+       pill type treatment is untouched. */
+    margin-left: calc(-1 * var(--collab-gutter));
+    margin-right: calc(-1 * var(--collab-gutter));
+  }
+
+  .chat-rail .guide-followups {
+    padding-left: var(--collab-gutter);
+    padding-right: var(--collab-gutter);
   }
 
   .chat-rail .guide-followup {
@@ -3523,6 +3644,219 @@ a.guide-source:focus-visible {
 @media (max-width: 760px) and (max-height: 480px) and (orientation: landscape) {
   .foreground-layer--chat {
     --collab-top-clearance: calc(env(safe-area-inset-top, 0px) + 1.25rem);
+  }
+}
+
+/* --- Guided chat companion (docked panel / resume bar / modal overlay) --- */
+
+/* The conversation survives leaving the full chat page: a docked right-side
+   companion on wide viewports (≥960px), a minimized resume bar (narrow) or
+   compact pill (wide), and — from the narrow bar — a full-viewport modal
+   overlay. All three render the same ChatShell against the controller-owned
+   state; the hash and history belong to the underlying site. */
+
+/* Header presentation controls: pop-out (page, wide), minimize (page narrow /
+   companion / overlay), and open-full (companion). Round 44px targets sharing
+   the back-button treatment at the header's trailing edge. */
+.chat-present {
+  flex: 0 0 auto;
+  margin-left: auto;
+  /* Match the back button's first-line alignment (see .chat-header). */
+  margin-top: -0.375rem;
+  display: flex;
+  gap: 0.5rem;
+  pointer-events: auto;
+}
+
+.chat-expand,
+.chat-popout {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-panel);
+  color: var(--color-warm-text);
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+.chat-expand svg,
+.chat-popout svg {
+  width: 18px;
+  height: 18px;
+}
+
+.chat-expand:hover,
+.chat-expand:focus-visible,
+.chat-popout:hover,
+.chat-popout:focus-visible {
+  color: var(--color-warm-strong);
+  border-color: var(--color-warm);
+}
+
+/* Below the companion breakpoint the header presentation control sits near
+   the viewport's right edge — clear the fixed privacy FAB (top-right, 44px +
+   offset) so both stay usable. */
+@media (max-width: 959px) {
+  .chat-present {
+    margin-right: calc(3.75rem + env(safe-area-inset-right, 0px));
+  }
+}
+
+/* Docked companion: a nonmodal complementary region floating OVER the
+   content (no layout push). Its bounds own pointer input (the canvas beneath
+   it is covered); the exposed canvas regions stay interactive. z-index sits
+   above the foreground/nav, below the work lightbox (80), paint confirm (90),
+   and consent UI (100). Wide viewports only — the shell minimizes it below
+   the breakpoint instead of rendering it. Entrance: slides down into place
+   (the global reduced-motion kill-switch stills it). */
+@keyframes guide-companion-in {
+  from {
+    opacity: 0;
+    transform: translateY(-1.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.guide-companion {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 5.5rem);
+  right: calc(env(safe-area-inset-right, 0px) + 1rem);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+  z-index: 60;
+  width: clamp(22rem, 26vw, 30rem);
+  display: flex;
+  border: 1px solid var(--color-border);
+  border-radius: 1.25rem;
+  background: var(--color-surface-panel);
+  backdrop-filter: blur(18px);
+  overflow: hidden;
+  pointer-events: auto;
+  animation: guide-companion-in 260ms ease-out;
+  /* Inner breathing room lives HERE, not on .chat-shell: the shell's header,
+     transcript, and bottom cluster are absolutely positioned (inset: 0), so
+     shell padding would do nothing — padding on the flex frame shrinks the
+     shell itself, and the heading clears the rounded corner. */
+  padding: 1.35rem 1.25rem 1.1rem;
+  /* ChatShell internals measure against these collaborate-scoped vars. */
+  --collab-chat-stage: 100%;
+  --collab-lane-offset: 0rem;
+}
+
+.guide-companion .chat-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.chat-shell--companion .chat-heading {
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+
+/* Minimized chrome: a bottom bar on narrow screens (safe-area aware), a
+   compact pill on desktop. Guide title plus pending/new-answer status only —
+   never transcript text. */
+.guide-resume {
+  position: fixed;
+  z-index: 60;
+  left: calc(env(safe-area-inset-left, 0px) + 0.75rem);
+  right: calc(env(safe-area-inset-right, 0px) + 0.75rem);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
+  display: flex;
+}
+
+.guide-resume-button {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-panel);
+  backdrop-filter: blur(18px);
+  color: var(--color-warm-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 180ms ease, color 180ms ease;
+}
+
+.guide-resume-button:hover,
+.guide-resume-button:focus-visible {
+  border-color: var(--color-warm);
+  color: var(--color-warm-strong);
+}
+
+.guide-resume-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+
+.guide-resume-status {
+  flex: 0 0 auto;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-warm);
+  color: var(--color-warm-strong);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+}
+
+@media (min-width: 960px) {
+  .guide-resume {
+    left: auto;
+    right: calc(env(safe-area-inset-right, 0px) + 1rem);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+  }
+
+  .guide-resume-button {
+    flex: 0 1 auto;
+    max-width: 22rem;
+  }
+}
+
+/* Narrow modal overlay: the full-viewport conversation over the current site
+   (hash untouched). Readable over anything beneath; the background is inert
+   while it is open. */
+.guide-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  background: var(--color-surface-panel);
+  backdrop-filter: blur(18px);
+  --collab-chat-stage: 100%;
+  --collab-lane-offset: 0rem;
+  --collab-gutter: clamp(1.25rem, 4vw, 4rem);
+  padding: calc(env(safe-area-inset-top, 0px) + 1.25rem) var(--collab-gutter)
+    calc(env(safe-area-inset-bottom, 0px) + 1rem);
+}
+
+.guide-overlay .chat-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Layout reservation: the minimized bar owns a bottom band on narrow
+   viewports, so Work controls, Vibe tools, the nav, and the consent UI stay
+   clear. The docked companion intentionally OVERLAPS the content (no desktop
+   reserve) — the exposed canvas regions keep their pointer input. */
+@media (max-width: 959px) {
+  .portfolio-shell--guide-minimized .foreground-layer {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 5rem);
   }
 }
 

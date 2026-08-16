@@ -25,6 +25,13 @@ export type SceneSourceSelection =
   | { kind: 'builtin' }
   | { kind: 'static'; url: string; sourceKind: VisualSourceKind }
   | { kind: 'animated'; provider: 'black-hole' }
+  /**
+   * The landing hero: SceneCanvas itself resolves the desktop logotype vs the
+   * mobile monogram AT BUILD TIME from its measured canvas width (768px
+   * breakpoint), so the choice is always made from real geometry — never from
+   * a not-yet-measured parent value — and every resize rebuild re-resolves.
+   */
+  | { kind: 'responsive-landing' }
 
 /** The only animated provider that ships. */
 export type AnimatedProviderName = 'black-hole'

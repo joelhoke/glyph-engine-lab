@@ -36,6 +36,11 @@ export type CollaborateGuideProps = {
   onDraftChange: (draft: string) => void
   onNavigateToChat: () => void
   onNavigateToLanding: () => void
+  /** Full-chat header control: pop out (wide) / minimize (narrow). */
+  onPopOut?: () => void
+  popOutLabel?: string
+  /** Intentional internal Work source navigation (validated story id). */
+  onSourceNavigate?: (storyId: string) => void
 }
 
 type CollaborateExperienceProps = {
@@ -85,7 +90,6 @@ export default function CollaborateExperience({
           >
             {COLLABORATE_HEADLINE}
           </h2>
-          <p className="collaborate-statement">{COLLABORATE_ENERGIZING_STATEMENT}</p>
           <p className="guide-disclosure">{COLLABORATE_GUIDE_DISCLOSURE}</p>
           <ContactActions contact={COLLABORATE_GUIDE_CONTACT} />
         </BoundedScrollPanel>
@@ -102,6 +106,9 @@ export default function CollaborateExperience({
           onDraftChange={guide.onDraftChange}
           onShare={guide.onShare}
           onBack={guide.onNavigateToLanding}
+          onMinimize={guide.onPopOut}
+          minimizeLabel={guide.popOutLabel}
+          onSourceNavigate={guide.onSourceNavigate}
         />
       )
     }

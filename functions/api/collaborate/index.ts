@@ -37,10 +37,14 @@ type CollaborateEnv = {
   AIG_TOKEN?: string
   DEEPSEEK_API_KEY?: string
   OPENAI_API_KEY?: string
+  MOONSHOT_API_KEY?: string
+  /** Upstream model id override for the Kimi adapter (hosted names change). */
+  MOONSHOT_MODEL?: string
   /** Full-URL overrides — local preview/mocks only; production goes through
    *  the AI Gateway URLs constructed from CF_ACCOUNT_ID + AIG_GATEWAY_ID. */
   AIG_DEEPSEEK_URL?: string
   AIG_OPENAI_URL?: string
+  AIG_MOONSHOT_URL?: string
 }
 
 const JSON_HEADERS = {
@@ -60,8 +64,11 @@ export const onRequestPost: PagesFunction<CollaborateEnv> = async (context) => {
     gatewayToken: context.env.AIG_TOKEN,
     deepseekApiKey: context.env.DEEPSEEK_API_KEY,
     openaiApiKey: context.env.OPENAI_API_KEY,
+    moonshotApiKey: context.env.MOONSHOT_API_KEY,
+    moonshotModel: context.env.MOONSHOT_MODEL,
     deepseekUrl: context.env.AIG_DEEPSEEK_URL,
     openaiUrl: context.env.AIG_OPENAI_URL,
+    moonshotUrl: context.env.AIG_MOONSHOT_URL,
   }
   if (!isAdapterConfigured(config)) return json(503, { ok: false, error: 'The AI guide is unavailable.' })
 
@@ -90,10 +97,15 @@ export const onRequestPost: PagesFunction<CollaborateEnv> = async (context) => {
   const candidates = ROUTING_POLICY[category]
 
   const messages = buildModelMessages(entries, validated.request.messages)
-  const result = await completeWithRouting(candidates, messages, activeIds, config, fetch)
+  // Thinking models (kimi-k2.6) can exceed the 12s adapter default; give each
+  // candidate 30s. maxTokens is raised for the same class of reason: reasoning
+  // models consume completion tokens before the answer, and 700 starved
+  // kimi-k2.6 into empty completions. The 220-word answer cap still bounds
+  // visible output.
+  const result = await completeWithRouting(candidates, messages, activeIds, config, fetch, { timeoutMs: 30000, maxTokens: 4000 })
 
   if (!result.ok) {
-    // Both candidates failed (timeout, provider error, rate limit, or invalid
+    // All candidates failed (timeout, provider error, rate limit, or invalid
     // structured output) — deterministic email handoff, still a 200 so the
     // conversation UI can show it as an ordinary answer card.
     const body: CollaborateResponseBody = {

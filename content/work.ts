@@ -120,6 +120,9 @@ export type WorkStory = {
   context: string
   /** Concise outcome statement. */
   outcome: string
+  /** Optional additional outcome narrative, rendered after `outcome` in the
+   *  case study's opening Outcome section. */
+  outcomeParagraphs?: string[]
   /** External references; may be empty. */
   links: WorkStoryLink[]
   /** Public stories render fully; protected stories show only the teaser. */
@@ -157,53 +160,65 @@ export const WORK_STORIES: WorkStory[] = [
     id: 'microsoft-global-operations',
     title: 'Global Operations',
     thesis:
-      'Optimizing global campus operations through agentic building onboarding and mapping, paired with user-insight dashboards and agents.',
+      'Operating Microsoft’s global campus requires teams to onboard, understand, and manage complex building environments at scale. I helped design agentic onboarding, mapping, and insight tools that gave teams better visibility into their spaces, streamlined operations, and enabled faster, more informed decisions.',
     role: 'Lead designer',
     context:
       'Microsoft · cross-functional team across design, product management, research, and engineering · 2025–2026',
     outcome:
       'Two agent-integrated operational dashboards that synthesized information spread across 48+ Power BI dashboards and SharePoint folders — and a foundation for an operational ecosystem of tools serving teams domestically and internationally.',
-    links: [],
+    links: [
+      {
+        label: 'Realcomm IBcon 2026 Digie award winners announcement',
+        url: 'https://realcomm.com/news/1224/1/realcomm-ibcon-2026-digie-award-winners-announced',
+      },
+    ],
     access: 'public',
     mark: MICROSOFT_BRAND_MARK,
     details: [
       {
-        heading: 'Two products, one operational stack',
-        paragraphs: [
-          'This project encompassed two business verticals. The first: direct operations teams onboarding and managing buildings and assets, and monitoring and acting on faults and alarms. The second: lobby hosts, facility managers, and district facility managers. Building Orchestrator supported the former while Live Campus supported the latter.',
-        ],
-      },
-      {
         heading: 'The challenge',
         paragraphs: [
-          'Building operations teams: vendor teams monitoring faults and alarms across a full campus of buildings with millions of devices and assets face an incredible challenge. Per year, hundreds of thousands of alarms and faults ring across those assets — hundreds per hour. That creates a huge scope of responsibility for small teams of only 8–12 people with tight budgets and response times that depend on the alarm. New devices and assets are onboarded daily, adding the overhead of completing that process and managing those assets across a variety of building management systems. Widely varying variables and inconsistent naming conventions create a seemingly overwhelming amount of data.',
-          'Lobby hosts: the vendor hosts who support employees and visitors alike — ensuring smooth transitions in and out of buildings for all occupants, clear guidance to and from rooms and areas, and support with filing and reporting the status of building work orders, facilities requests, active construction projects, and general room comfort.',
-          'Facility managers and district facility managers: facility managers oversee individual buildings, aiming for consistent operations with as few disruptions as possible across temperature, facilities, services, projects, and events — effectively owning responsibility for every building operation that lobby hosts simply monitor and support. District facility managers focus on financial operations across multiple buildings: operational cost, capital expenditures on construction projects — campus health where facility managers focus on the individual building.',
-          'Each of these users needs an interface to support their day-to-day tasks, and many of those needs are grounded in gaining insight from the key data points and metrics across building operations.',
+          'A Microsoft campus runs on millions of devices and assets, and it never sits still. Hundreds of thousands of alarms and faults ring across those assets each year — hundreds per hour — while new devices are onboarded daily into a variety of building management systems, each with its own variables and inconsistent naming conventions. The vendor operations teams responsible for responding are only 8–12 people with tight budgets and alarm-dependent response times, and the signals they needed were scattered across 48+ Power BI dashboards and SharePoint folders.',
+          'Each of these user groups needed an interface that turns scattered data points and metrics into day-to-day operational insight:',
+        ],
+        items: [
+          'Building operations teams — vendor teams onboarding and managing buildings and assets, and monitoring and acting on faults and alarms. Served by Building Orchestrator.',
+          'Lobby hosts — supporting employees and visitors with smooth transitions in and out of buildings, clear wayfinding, and reporting on work orders, facilities requests, construction projects, and room comfort. Served by Live Campus.',
+          'Facility managers — owning consistent, disruption-free operations for individual buildings across temperature, facilities, services, projects, and events. Served by Live Campus.',
+          'District facility managers — owning campus health: operational cost and capital expenditure across multiple buildings. Served by Live Campus.',
         ],
       },
       {
         heading: 'The approach',
         paragraphs: [
-          'Deep user learning through multiple rounds of workshops and qualitative user research interviews and feedback sessions. We started by understanding the key jobs to be done by each user persona; that learning led deeper into the operational stack — buildings, devices, assets, faults, alarms, facilities requests, work orders based on faults and alarms to fix device or asset issues and failures, preventative maintenance, and more. With the key jobs and context in hand, we developed architectural models and interactive prototypes to solve those user needs. Wash, rinse, repeat with research and design development.',
+          'Deep user learning anchored everything: multiple rounds of workshops, qualitative research interviews, and feedback sessions to understand the key jobs to be done by each user group. That learning led deeper into the operational stack — buildings, devices, assets, faults, alarms, facilities requests, work orders, preventative maintenance — and into architectural models and interactive prototypes that the team validated and refined through repeated research cycles.',
+          'The result was two products on one operational stack: Building Orchestrator for operations teams, and Live Campus for lobby hosts and facility managers — on a shared architecture that keeps the door open to a broader ecosystem of operational tooling.',
         ],
       },
       {
         heading: 'My contributions',
         items: [
-          'Building Orchestrator UX, strategy, and conference keynote — which led to Microsoft earning the 2026 Digie award for "Most Intelligent Corporate Headquarters".',
+          'Building Orchestrator UX, strategy, and conference keynote — work that contributed to Microsoft earning the 2026 Digie award for "Most Intelligent Corporate Headquarters".',
           'Live Campus UX and strategy.',
           'Shared architecture supporting the option of broad ecosystem development across operational tooling.',
         ],
-      },
-      {
-        heading: 'The outcome',
-        paragraphs: [
-          'Two agent-integrated operational dashboards that synthesized information spread across 48+ Power BI dashboards and SharePoint folders. The work established a foundation for an operational ecosystem of tools to serve the many different operational teams domestically and internationally.',
-        ],
+        mediaIds: ['realcomm-keynote'],
       },
     ],
-    media: [],
+    media: [
+      {
+        kind: 'video',
+        id: 'realcomm-keynote',
+        src: '/assets/work/RealComm-Keynote.mp4',
+        width: 1920,
+        height: 1080,
+        alt: 'Excerpt from the Realcomm conference keynote “Microsoft’s AI Frontier Transformation” — a speaker on stage with the keynote title slide behind him.',
+        caption: 'An excerpt from Microsoft’s RealComm 2026 Keynote presentation, which I supported by developing slide content while collaborating on the strategic story and vision. This work led to Microsoft winning the 2026 Digie award for "Most Intelligent Corporate Headquarters".',
+        poster: '/assets/work/RealComm-Keynote-poster.jpg',
+        // TODO: replace with the excerpt's spoken transcript before launch.
+        transcript: 'Transcript for this excerpt is being prepared.',
+      },
+    ],
     // Microsoft project: the field takes the sampled brand colors straight
     // from the source SVG.
     sourceUrl: '/assets/work/building-multiple.svg',
@@ -216,15 +231,21 @@ export const WORK_STORIES: WorkStory[] = [
   },
   {
     id: 'microsoft-employee-experience',
-    title: 'Microsoft Employee Experience',
+    title: 'Employee Experience',
     role: 'Junior to Senior Designer',
     context: 'Microsoft · cross-functional team across design, product management, research, and engineering · 2019–2026',
-    thesis: 'Supporting efficiency across Microsoft by reducing fragmentation across internal tools, enabling employees to complete tasks more easily and return their focus to the work at hand.',
+    thesis: 'Supporting Microsoft’s global workforce requires an ecosystem spanning everything from personal finance and compensation to security, facilities, and workplace services. Across two technology platforms, I helped reduce fragmentation and shape their respective design systems, making employee experiences easier to use and more consistent at enterprise scale.',
     outcome: 'I helped Microsoft move toward a more unified employee-experience ecosystem by aligning teams around shared patterns, reusable components, and a standardized design process.',
+    outcomeParagraphs: [
+      'As employee services transitioned from MyHub to Microsoft Viva Connections, our team created the EX Toolkit — a common design language and component library that reduced variation and duplicated implementation across teams, made platform capabilities and constraints clearer to developers, streamlined partner onboarding, and improved consistency across compensation, benefits, workplace services, and daily employee tasks.',
+      'This work supported an employee platform deployed globally at Microsoft, established practices shared with other product teams and external customers, and contributed to the broader evolution from fragmented employee tools toward a centralized Viva experience. Microsoft later reported usage above 97% among employees across the Viva suite — a company-wide figure from Microsoft’s later Viva context, reflecting the work of many teams rather than a result attributable to this design work alone.',
+    ],
     links: [
       { label: 'Microsoft MyHub', url: 'https://apps.apple.com/us/app/microsoft-myhub/id1476326475' },
       { label: 'Microsoft Viva Connections', url: 'https://www.microsoft.com/en-us/microsoft-viva/connections' },
       { label: 'The People Powered Workplace — an Employee Experience Platform analysis', url: 'https://pulse.microsoft.com/wp-content/uploads/2023/11/Microsoft-Viva-Ebook.pdf' },
+      { label: 'Accelerating our cultural transformation at Microsoft with Viva and AI — Microsoft Inside Track', url: 'https://www.microsoft.com/insidetrack/blog/accelerating-our-cultural-transformation-at-microsoft-with-viva-and-ai/' },
+      { label: 'Deploying Microsoft Viva Connections internally at Microsoft — Microsoft Inside Track', url: 'https://www.microsoft.com/insidetrack/blog/deploying-microsoft-viva-connections-internally-at-microsoft/' },
     ],
     access: 'public',
     sourceUrl: '/assets/work/MyHubTest.png',
@@ -232,38 +253,136 @@ export const WORK_STORIES: WorkStory[] = [
     colorMode: 'source-colors',
     mark: MICROSOFT_BRAND_MARK,
     glyphText: 'Defragmenting the Employee Experience ',
-    media: [],
-    details: [
-      { heading: 'The thesis', paragraphs: [
-        'Employee experience at the scale of a business like Microsoft — built over 50 years — presents challenges from many perspectives. The work ranged from helping employees commute, order lunch, and review compensation information to supporting broader business needs and engagement targets that help employees stay focused and efficient.',
-      ] },
-      { heading: 'The challenge', paragraphs: [
-        'At Microsoft’s scale, employee experience was not a single product — it was an interconnected ecosystem of services owned by many different business groups. From pay, stock, and retirement benefits to commuter transportation, workplace reporting, and facilities support, employees expected a clear and consistent experience even when the systems behind it were highly distributed.',
-        'The challenge was to make those organizational boundaries less visible: defragmenting journeys, aligning interaction patterns, and coordinating teams around a more coherent employee experience, while helping employees complete tasks efficiently and return to the work at hand.',
-      ] },
-      { heading: 'The approach', paragraphs: [
-        'Every engagement was shaped by the needs of the business, project goals, and stakeholders involved, while defragmentation and user efficiency remained foundational priorities.',
-        'Once we aligned on the problem, desired outcomes, and key constraints, we used the Double Diamond as a flexible framework for discovery, definition, development, and delivery. Research guided each iteration — first helping us understand challenges in the existing experience, and later evaluating prototypes or working solutions to identify remaining friction and opportunities.',
-        'We used those insights to refine the experience, validate decisions, and repeat the process until we had addressed both employee needs and business objectives.',
-      ] },
-      { heading: 'My contributions, 2019–2024', items: [
-        'Stock experience',
-        'Pay preview',
-        'Shuttles',
-        'Connectors (private buses)',
-        'Facilities requests',
-        'Security: Report It Now',
-        'Ecosystem alignment and transitions between platforms',
-        'Component toolkits for use across tools and business verticals',
-        'Lobby experience',
-        'Return-to-work implementation and tracking',
-      ] },
-      { heading: 'The outcome', paragraphs: [
-        'I helped Microsoft move toward a more unified employee-experience ecosystem by aligning teams around shared patterns, reusable components, and a standardized design process.',
-        'As employee services transitioned from MyHub to Microsoft Viva Connections, our team created the EX Toolkit — a common design language and component library that reduced variation and duplicated implementation across teams, made platform capabilities and constraints clearer to developers, streamlined partner onboarding, and improved consistency across compensation, benefits, workplace services, and daily employee tasks.',
-        'This work supported an employee platform deployed globally at Microsoft, established practices shared with other product teams and external customers, and contributed to the broader evolution from fragmented employee tools toward a centralized Viva experience. Microsoft later reported usage above 97% among employees across the Viva suite.',
-      ] },
+    media: [
+      {
+        kind: 'image',
+        id: 'myhub-viva',
+        src: '/assets/work/EmployeeExperience-MyHub+Viva.png',
+        width: 899,
+        height: 963,
+        alt: 'Two iPhone screens: the MyHub dashboard with tiles for booking a space, booking a connector, dining, maintenance, parking, and directions, alongside the Microsoft Viva Connections dashboard with paystub, holiday, and on-site cards.',
+        caption: 'MyHub and Viva Connections — the employee-experience platforms this work spanned.',
+      },
+      {
+        kind: 'image',
+        id: 'viva-connections-dashboard',
+        src: '/assets/work/EmployeeExperience-VivaConnections-Dashboard.png',
+        width: 1500,
+        height: 884,
+        alt: 'Microsoft Viva Connections dashboard for a Microsoft employee, with cards for Viva Learning, Paystub, Stock awards, Perks+, Perspectives, Holiday, Cafe, Facility request, Digital TechLink, Feedback, and Viva Topics, alongside a company news feed.',
+        caption: 'Microsoft’s internal Viva Connections dashboard as published by Microsoft Inside Track — cards for pay, stock awards, facilities requests, tech support, and workplace services this design work supported.',
+      },
+      {
+        kind: 'image',
+        id: 'viva-connections',
+        src: '/assets/work/EmployeeExperience-VivaConnections.jpg',
+        width: 1600,
+        height: 900,
+        alt: 'Microsoft Viva Connections home dashboard inside Teams, showing a news carousel, a greeting, and dashboard cards for Tasks, Viva Learning, Events, and Copilot.',
+        caption: 'Microsoft’s published Viva Connections dashboard in Teams — the current public product surface that grew out of the employee-experience platform this design work contributed to.',
+      },
     ],
+    details: [
+      { heading: 'The challenge', paragraphs: [
+        'Employee experience at Microsoft’s scale was never a single product — it was an interconnected ecosystem of services owned by many different business groups. From pay, stock, and retirement benefits to commuter transportation, workplace reporting, and facilities support, employees expected a clear and consistent experience even when the systems behind it were highly distributed.',
+        'The challenge was to make those organizational boundaries less visible: defragmenting journeys, aligning interaction patterns, and coordinating teams around a more coherent employee experience, while helping employees complete tasks efficiently and return to the work at hand.',
+      ], mediaIds: ['myhub-viva'] },
+      { heading: 'The approach', paragraphs: [
+        'Every engagement was shaped by the needs of the business, project goals, and stakeholders involved, while defragmentation and user efficiency remained foundational priorities. Once we aligned on the problem, desired outcomes, and key constraints, we used the Double Diamond as a flexible framework for discovery, definition, development, and delivery.',
+        'Research guided each iteration — first helping us understand challenges in the existing experience, and later evaluating prototypes or working solutions to identify remaining friction and opportunities. We used those insights to refine the experience, validate decisions, and repeat the process until we had addressed both employee needs and business objectives.',
+      ] },
+      { heading: 'My contributions, 2019–2024', paragraphs: [
+        'I joined this team as a junior designer and grew into a senior designer role over the course of the work, taking on broader ownership across the ecosystem. The engagements spanned:',
+      ], items: [
+        'Compensation clarity: the stock experience and pay preview.',
+        'Commute and mobility: shuttles and Connectors (private buses).',
+        'Workplace services: facilities requests, the lobby experience, and Security’s Report It Now.',
+        'Return-to-work implementation and tracking.',
+        'Ecosystem alignment and transitions between platforms, including MyHub to Viva Connections.',
+        'Component toolkits for use across tools and business verticals — the through-line that became the EX Toolkit.',
+      ], mediaIds: ['viva-connections-dashboard', 'viva-connections'] },
+    ],
+  },
+  {
+    id: 'microsoft-global-compensation',
+    title: 'Global Compensation',
+    thesis:
+      'Fortune 500 companies like Microsoft offer complex compensation packages spanning cash, stock, and benefits. I helped create a platform that clearly explained total compensation and connected employees to available benefits, helping them maximize their earnings, improve satisfaction, and reduce unused benefits.',
+    role: 'Lead Designer',
+    context:
+      'Microsoft · cross-functional team across design, product management, research, and engineering · 2021',
+    outcome:
+      'I drove the design of a first-party platform that Microsoft continues to use to communicate compensation and benefits, helping employees understand the full value of their package in an increasingly competitive market.',
+    links: [
+      {
+        label: 'Helping Microsoft employees understand their value',
+        url: 'https://www.microsoft.com/insidetrack/blog/helping-microsoft-employees-understand-their-value-with-the-total-rewards-portal/',
+      },
+    ],
+    access: 'public',
+    mark: MICROSOFT_BRAND_MARK,
+    details: [
+      {
+        heading: 'The challenge',
+        paragraphs: [
+          'Microsoft brought its compensation portal in-house in 2021, moving from a third-party platform to a first-party one that Microsoft has since described as serving more than 220,000 users. What started as a simple lift-and-shift re-skin alongside my primary workload became a full redesign — and a six-month engagement grew to closer to twelve.',
+          'The root problem was user understanding. The existing portal communicated the headlines — cash, stock, benefits — but once employees scratched below the surface, things fell apart. The clearest gaps were surfacing the total value of benefits and communicating stock awards, whose long-term value stayed ambiguous. Getting this right mattered: a platform that clearly explains total compensation helps employees maximize their earnings, improves satisfaction, and reduces unused benefits. Creating something new while aligning to expectations the old tool had set was a fine line to walk.',
+        ],
+      },
+      {
+        heading: 'The approach',
+        paragraphs: [
+          'Start with the user and go where their needs dictate. An introductory research study into how employees used the third-party tool surfaced clear needs for additional clarity. Follow-up studies tested design prototypes and pinned down the key gaps between the tool and employees’ understanding of their compensation and value.',
+          'Those findings drove the pivotal decision: expanding the re-skin into a full redesign. Each research phase built on the last — understanding existing behavior, testing interpretations of the new platform, and refining toward a ship-ready design. Prototypes moved from low to high fidelity as confidence grew, with engineering involved early enough to keep the ambition buildable. The added scope served both the business and employees.',
+        ],
+        mediaIds: ['total-rewards'],
+      },
+      {
+        heading: 'My contributions',
+        paragraphs: [
+          'The redesigned first-party platform shipped and remains the way Microsoft communicates compensation and benefits to its employees.',
+        ],
+        items: [
+          'Platform redesign, owned end to end — from research synthesis and information architecture through interaction design and the shipped product.',
+          'Coordination across product management, research, and engineering.',
+          'The scope expansion itself: advocating for and shaping the pivot from re-skin to redesign in service of business and employee needs.',
+        ],
+        mediaIds: ['total-rewards-employee', 'total-rewards-manager'],
+      },
+    ],
+    media: [
+      {
+        kind: 'image',
+        id: 'total-rewards',
+        src: '/assets/work/GlobalCompensation-TotalRewards.png',
+        width: 1002,
+        height: 566,
+        alt: 'The Microsoft Total Rewards portal overview page, showing the employee’s total rewards figure with breakdown cards for cash, stock, and benefits.',
+        caption: 'The Total Rewards portal — Microsoft’s first-party platform for communicating compensation and benefits.',
+      },
+      {
+        kind: 'image',
+        id: 'total-rewards-employee',
+        src: '/assets/work/GlobalCompensation-TotalRewards-Employee.png',
+        width: 1160,
+        height: 877,
+        alt: 'Total Rewards portal employee overview showing a total rewards figure of 225,000 USD broken into Cash, Stock, and Benefits cards, with a compensation history bar chart.',
+        caption: 'The employee view of Microsoft’s Total Rewards portal as published by Microsoft Inside Track — a public product view reflecting the compensation platform this design work contributed to.',
+      },
+      {
+        kind: 'image',
+        id: 'total-rewards-manager',
+        src: '/assets/work/GlobalCompensation-TotalRewards-Manager.png',
+        width: 1379,
+        height: 759,
+        alt: 'Total Rewards portal manager Team dashboard showing direct-report snapshot cards and a searchable organization list with employee names and roles.',
+        caption: 'The manager team-dashboard view of Microsoft’s Total Rewards portal as published by Microsoft Inside Track — a public product view reflecting the compensation platform this design work contributed to.',
+      },
+    ],
+    sourceUrl: '/assets/work/Money.png',
+    sourceKind: 'raster',
+    colorMode: 'source-colors',
+    glyphText: 'Employee Compensation and Benefits ',
   },
 ]
 
@@ -291,6 +410,14 @@ export function getWorkMedia(story: WorkStory, mediaId: string): WorkMedia | nul
   return story.media?.find((entry) => entry.id === mediaId) ?? null
 }
 
+/** How a slide's hero source is fitted into the canvas target region:
+ *  'stage' contains the source inside the measured .work-glyph-stage bounds;
+ *  'viewport' samples viewport-sized bounds centered on the stage (the wide
+ *  Microsoft wordmark treatment); 'balanced' (the project-story default)
+ *  interpolates halfway between the two — larger than stage fit, smaller
+ *  than viewport fit, still centered on the stage. */
+export type WorkHeroFit = 'viewport' | 'stage' | 'balanced'
+
 /**
  * One Work slide. The intro slide opens the mode with the tenure summary and
  * its own hero source; project slides wrap a story from WORK_STORIES, so
@@ -314,6 +441,8 @@ export type WorkSlide =
       mark?: WorkBrandMark
       /** Optional color-distribution override (e.g. source-colors). */
       colorMode?: GlyphColorMode
+      /** Hero fit override — defaults to 'balanced' like the project stories. */
+      heroFit?: WorkHeroFit
     }
   | { kind: 'project'; story: WorkStory }
 
@@ -322,7 +451,7 @@ export const WORK_SLIDES: WorkSlide[] = [
     kind: 'intro',
     id: 'microsoft',
     title: 'Microsoft',
-    copy: 'Over nearly eight years at Microsoft, I had the privilege of helping shape the future of work by designing thoughtful experiences where people, business, and technology meet.',
+    copy: 'Over nearly seven years at Microsoft, I had the privilege of helping shape the future of work by designing thoughtful experiences where people, business, and technology meet.',
     // The full-color Microsoft logo/wordmark SVG; the field takes the sampled
     // brand colors straight from the source.
     sourceUrl: '/assets/work/story-03.svg',
@@ -330,6 +459,9 @@ export const WORK_SLIDES: WorkSlide[] = [
     glyphText: 'culture eats strategy for breakfast ',
     mark: MICROSOFT_BRAND_MARK,
     colorMode: 'source-colors',
+    // The wide wordmark keeps main's full-viewport sampling size (centered on
+    // the stage); project stories stay contained in the stage bounds.
+    heroFit: 'viewport',
   },
   ...WORK_STORIES.map((story): WorkSlide => ({ kind: 'project', story })),
 ]
@@ -354,6 +486,13 @@ export function getWorkSlideMark(slide: WorkSlide): WorkBrandMark | null {
 /** Slide display/document title (the story title for project slides). */
 export function getWorkSlideTitle(slide: WorkSlide): string {
   return slide.kind === 'project' ? slide.story.title : slide.title
+}
+
+/** Hero fit for either slide kind. Project stories always use 'balanced' so
+ *  future case studies never inherit the oversized viewport treatment — only
+ *  an intro slide may opt into 'viewport'. */
+export function getWorkSlideHeroFit(slide: WorkSlide): WorkHeroFit {
+  return slide.kind === 'intro' ? (slide.heroFit ?? 'balanced') : 'balanced'
 }
 
 /**

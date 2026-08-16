@@ -92,6 +92,12 @@ export type AnalyticsEvent =
   | { name: 'source_change'; params: { source: SourceChange } }
   | { name: 'tier_transition'; params: { from_tier: number; to_tier: number } }
   | { name: 'collaborate_guide_answered'; params: { topic: string; model_class: string } }
+  | {
+      name: 'collaborate_guide_navigation'
+      /** The validated story and the resulting presentation only — never
+       *  prompts, answers, or raw URLs. */
+      params: { story_id: string; presentation: string }
+    }
 
 /** Parameter keys each event may carry — anything else is stripped. */
 const ALLOWED_PARAMS: Record<AnalyticsEvent['name'], readonly string[]> = {
@@ -105,6 +111,7 @@ const ALLOWED_PARAMS: Record<AnalyticsEvent['name'], readonly string[]> = {
   source_change: ['source'],
   tier_transition: ['from_tier', 'to_tier'],
   collaborate_guide_answered: ['topic', 'model_class'],
+  collaborate_guide_navigation: ['story_id', 'presentation'],
 }
 
 /** Keys that must never appear in an event payload (defense in depth). */

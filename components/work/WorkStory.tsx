@@ -1,6 +1,6 @@
 'use client'
 
-import { RefObject, useId, useRef, useState } from 'react'
+import { RefObject, useRef, useState } from 'react'
 import { getWorkMedia, WorkMedia, WorkStory } from '../../content/work'
 import { AnalyticsEvent, outboundHost } from '../../engine/analytics'
 import WorkMediaLightbox from './WorkMediaLightbox'
@@ -15,21 +15,25 @@ type WorkStoryProps = {
 const PREVIEW_THUMB_COUNT = 3
 
 /**
- * Presentational view of a single case study. The compact summary is always
- * visible; "Read the case study" expands the structured narrative inline, and
- * gallery thumbnails open the accessible lightbox. Pure semantic HTML — the
- * story is fully readable with the canvas disabled. Protected stories render
- * only their approved teaser plus the confidential-viewer route.
+ * Presentational view of a single case study. The structured narrative is
+ * always rendered (no disclosure) — the card's expanded reading panel is what
+ * reveals it. Media referenced from narrative sections via mediaIds renders
+ * inline (images open the lightbox); the gallery is reserved for media NOT
+ * placed in the narrative, so nothing appears twice. Related links always
+ * come last. Pure semantic HTML — the story is fully readable with the
+ * canvas disabled. Protected stories render only their approved teaser plus
+ * the confidential-viewer route.
  */
 export default function WorkStoryView({ story, headingRef, onTrackEvent }: WorkStoryProps) {
-  const detailsId = useId().replace(/:/g, '-')
-  const [expanded, setExpanded] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const lightboxTriggerRef = useRef<HTMLElement | null>(null)
 
   const media = story.access === 'public' ? (story.media ?? []) : []
   const details = story.access === 'public' ? (story.details ?? []) : []
-  const previewMedia = media.slice(0, PREVIEW_THUMB_COUNT)
+  // Media placed inline in the narrative never repeats as a gallery thumb.
+  const inlineIds = new Set(details.flatMap((section) => section.mediaIds ?? []))
+  const galleryMedia = media.filter((entry) => !inlineIds.has(entry.id))
+  const previewMedia = galleryMedia.slice(0, PREVIEW_THUMB_COUNT)
 
   const openLightbox = (index: number, trigger: HTMLElement) => {
     lightboxTriggerRef.current = trigger
@@ -38,6 +42,11 @@ export default function WorkStoryView({ story, headingRef, onTrackEvent }: WorkS
     if (entry) {
       onTrackEvent?.({ name: 'media_open', params: { story_id: story.id, media_kind: entry.kind } })
     }
+  }
+
+  const openInlineLightbox = (mediaId: string, trigger: HTMLElement) => {
+    const index = media.findIndex((entry) => entry.id === mediaId)
+    if (index >= 0) openLightbox(index, trigger)
   }
 
   const trackOutbound = (url: string) => {
@@ -66,108 +75,131 @@ export default function WorkStoryView({ story, headingRef, onTrackEvent }: WorkS
           <dd>{story.context}</dd>
         </div>
       </dl>
-      <p className="work-story-outcome">{story.outcome}</p>
 
       {story.access === 'protected' ? (
+        /* Access action, not a related resource — it keeps its position
+           directly under the teaser. */
         <a className="work-story-link" href={`/protected-work?story=${story.protectedId}`}>
           View this confidential case study
           <span aria-hidden="true"> →</span>
         </a>
       ) : (
         <>
-          {story.links.map((link) => (
-            <a
-              key={link.url}
-              className="work-story-link"
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => trackOutbound(link.url)}
-            >
-              {link.label}
-              <span aria-hidden="true"> ↗</span>
-            </a>
-          ))}
-
           {details.length > 0 && (
-            <div className="work-story-details">
-              <button
-                type="button"
-                className="work-story-disclosure"
-                aria-expanded={expanded}
-                aria-controls={detailsId}
-                onClick={() => setExpanded((value) => !value)}
-              >
-                {expanded ? 'Close the case study' : 'Read the case study'}
-                <span aria-hidden="true">{expanded ? ' ↑' : ' ↓'}</span>
-              </button>
-              {expanded && (
-                <div id={detailsId} className="work-story-sections">
-                  {details.map((section) => (
-                    <section key={section.heading} className="work-story-section">
-                      <h4 className="work-story-section-heading">{section.heading}</h4>
-                      {section.paragraphs?.map((paragraph, i) => (
-                        <p key={i} className="work-story-section-copy">
-                          {paragraph}
-                        </p>
-                      ))}
-                      {section.items && (
-                        <ul className="work-story-section-list">
-                          {section.items.map((item, i) => (
-                            <li key={i}>{item}</li>
-                          ))}
-                        </ul>
-                      )}
-                      {section.callout && (
-                        <p className="work-story-section-callout">{section.callout}</p>
-                      )}
-                      {section.mediaIds?.map((mediaId) => {
-                        const entry = getWorkMedia(story, mediaId)
-                        return entry ? (
-                          <InlineMedia key={mediaId} item={entry} />
-                        ) : null
-                      })}
-                      {section.attachments?.map((attachment) => (
-                        <a
-                          key={attachment.url}
-                          className="work-story-link"
-                          href={attachment.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {attachment.label}
-                          <span aria-hidden="true"> ↗</span>
-                        </a>
-                      ))}
-                    </section>
+            <div className="work-story-sections">
+              <section className="work-story-section">
+                <h4 className="work-story-section-heading">Outcome</h4>
+                <p className="work-story-outcome">{story.outcome}</p>
+                {story.outcomeParagraphs?.map((paragraph, i) => (
+                  <p key={i} className="work-story-section-copy">
+                    {paragraph}
+                  </p>
+                ))}
+              </section>
+              {details.map((section) => (
+                <section key={section.heading} className="work-story-section">
+                  <h4 className="work-story-section-heading">{section.heading}</h4>
+                  {section.paragraphs?.map((paragraph, i) => (
+                    <p key={i} className="work-story-section-copy">
+                      {paragraph}
+                    </p>
                   ))}
-                </div>
-              )}
+                  {section.items && (
+                    <ul className="work-story-section-list">
+                      {section.items.map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {section.callout && (
+                    <p className="work-story-section-callout">{section.callout}</p>
+                  )}
+                  {section.mediaIds?.map((mediaId) => {
+                    const entry = getWorkMedia(story, mediaId)
+                    return entry ? (
+                      <InlineMedia
+                        key={mediaId}
+                        item={entry}
+                        onOpenImage={(trigger) => openInlineLightbox(mediaId, trigger)}
+                      />
+                    ) : null
+                  })}
+                  {section.attachments?.map((attachment) => (
+                    <a
+                      key={attachment.url}
+                      className="work-story-link"
+                      href={attachment.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {attachment.label}
+                      <span aria-hidden="true"> ↗</span>
+                    </a>
+                  ))}
+                </section>
+              ))}
             </div>
           )}
+          {/* Stories without details sections keep the outcome here so it
+              never disappears. */}
+          {details.length === 0 && <p className="work-story-outcome">{story.outcome}</p>}
 
-          {media.length > 0 && (
+          {galleryMedia.length > 0 && (
             <div className="work-gallery">
               <ul className="work-gallery-thumbs">
-                {previewMedia.map((entry, i) => (
+                {previewMedia.map((entry) => (
                   <li key={entry.id}>
                     <GalleryThumb
                       item={entry}
-                      onOpen={(trigger) => openLightbox(i, trigger)}
+                      onOpen={(trigger) =>
+                        openLightbox(
+                          media.findIndex((candidate) => candidate.id === entry.id),
+                          trigger,
+                        )
+                      }
                     />
                   </li>
                 ))}
               </ul>
-              {media.length > PREVIEW_THUMB_COUNT && (
+              {galleryMedia.length > PREVIEW_THUMB_COUNT && (
                 <button
                   type="button"
                   className="work-gallery-view-all"
-                  onClick={(event) => openLightbox(0, event.currentTarget)}
+                  onClick={(event) =>
+                    openLightbox(
+                      media.findIndex((entry) => entry.id === galleryMedia[0].id),
+                      event.currentTarget,
+                    )
+                  }
                 >
-                  View all media ({media.length})
+                  View all media ({galleryMedia.length})
                 </button>
               )}
             </div>
+          )}
+
+          {/* Related links are always the final story content — after all
+              narrative, inline media, and remaining gallery media. */}
+          {story.links.length > 0 && (
+            <section className="work-story-related" aria-label="Related links">
+              <h4 className="work-story-section-heading">Related links</h4>
+              <ul className="work-story-related-list">
+                {story.links.map((link) => (
+                  <li key={link.url}>
+                    <a
+                      className="work-story-link"
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => trackOutbound(link.url)}
+                    >
+                      {link.label}
+                      <span aria-hidden="true"> ↗</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
         </>
       )}
@@ -223,13 +255,32 @@ function GalleryThumb({
   )
 }
 
-/** Media rendered inside an expanded narrative section. */
-function InlineMedia({ item }: { item: WorkMedia }) {
+/** Media rendered inside a narrative section. */
+function InlineMedia({
+  item,
+  onOpenImage,
+}: {
+  item: WorkMedia
+  onOpenImage: (trigger: HTMLElement) => void
+}) {
   if (item.kind === 'image') {
     return (
-      <figure className="work-inline-media">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={item.src} width={item.width} height={item.height} alt={item.alt} loading="lazy" />
+      <figure className="work-inline-media work-inline-media--image">
+        <button
+          type="button"
+          className="work-inline-media-button"
+          onClick={(event) => onOpenImage(event.currentTarget)}
+          aria-label={`View ${item.caption ?? item.alt}`}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={item.src}
+            width={item.width}
+            height={item.height}
+            alt={item.alt}
+            loading="lazy"
+          />
+        </button>
         {item.caption && <figcaption>{item.caption}</figcaption>}
       </figure>
     )

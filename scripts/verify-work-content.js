@@ -75,11 +75,10 @@ assert(WORK_STORY_COUNT === WORK_STORIES.length, 'WORK_STORY_COUNT matches the a
 
 assert(WORK_SLIDE_COUNT === WORK_SLIDES.length, 'WORK_SLIDE_COUNT matches the slide array')
 assert(
-  WORK_SLIDES.length === 3 &&
+  WORK_SLIDES.length === WORK_STORIES.length + 1 &&
     WORK_SLIDES[0].kind === 'intro' &&
-    WORK_SLIDES[1].kind === 'project' &&
-    WORK_SLIDES[2].kind === 'project',
-  'WORK_SLIDES is exactly intro + two project slides',
+    WORK_SLIDES.slice(1).every((slide) => slide.kind === 'project'),
+  'WORK_SLIDES is intro + one project slide per story',
 )
 
 const introSlide = WORK_SLIDES.find((slide) => slide.kind === 'intro')
@@ -90,8 +89,8 @@ assert(
   "intro slide carries id 'microsoft' and title 'Microsoft'",
 )
 assert(
-  !!introSlide && introSlide.copy.includes('eight years'),
-  'intro slide carries the eight-years tenure copy',
+  !!introSlide && introSlide.copy.includes('seven years'),
+  'intro slide carries the seven-years tenure copy',
 )
 assert(
   !!introSlide && introSlide.sourceUrl === '/assets/work/story-03.svg',
@@ -136,7 +135,7 @@ assert(
 const employeeProject = projectSlides.find((slide) => slide.story.id === 'microsoft-employee-experience')
 assert(!!employeeProject, 'the microsoft-employee-experience project slide exists')
 assert(
-  !!employeeProject && employeeProject.story.title === 'Microsoft Employee Experience',
+  !!employeeProject && employeeProject.story.title === 'Employee Experience',
   'employee-experience story carries its exact title',
 )
 assert(
@@ -156,13 +155,122 @@ assert(
   'employee-experience story is public',
 )
 assert(
-  !!employeeProject && Array.isArray(employeeProject.story.media) && employeeProject.story.media.length === 0,
-  'employee-experience story ships no gallery media',
+  !!employeeProject &&
+    Array.isArray(employeeProject.story.media) &&
+    employeeProject.story.media.length === 3 &&
+    employeeProject.story.media[0].src === '/assets/work/EmployeeExperience-MyHub+Viva.png',
+  'employee-experience story keeps the MyHub+Viva composite and adds two self-hosted images',
 )
 assert(
-  !!employeeProject && employeeProject.story.links.length === 3,
-  'employee-experience story carries its three external links',
+  !!employeeProject && employeeProject.story.links.length === 5,
+  'employee-experience story carries its five external links',
 )
+assert(
+  !!employeeProject &&
+    employeeProject.story.links.some((l) =>
+      l.url.includes('accelerating-our-cultural-transformation-at-microsoft-with-viva-and-ai'),
+    ),
+  'employee-experience story links the Microsoft Inside Track Viva source',
+)
+assert(
+  !!employeeProject &&
+    employeeProject.story.links.some((l) =>
+      l.url.includes('deploying-microsoft-viva-connections-internally-at-microsoft'),
+    ),
+  'employee-experience story links the Inside Track Viva Connections deployment source',
+)
+assert(
+  !!employeeProject &&
+    !(employeeProject.story.details ?? []).some((d) => d.heading === 'The thesis'),
+  'employee-experience story dropped the redundant "The thesis" section',
+)
+assert(
+  !!employeeProject &&
+    (employeeProject.story.outcomeParagraphs ?? []).some((p) => p.includes('EX Toolkit')),
+  'employee-experience story keeps the EX Toolkit outcome',
+)
+assert(
+  !!employeeProject &&
+    (employeeProject.story.outcomeParagraphs ?? []).some(
+      (p) => p.includes('97%') && p.includes('rather than a result attributable to this design work'),
+    ),
+  'the 97% Viva usage figure is framed as later Microsoft context, not this work’s result',
+)
+assert(
+  !!employeeProject &&
+    (employeeProject.story.details ?? []).some(
+      (d) => (d.paragraphs ?? []).some((p) => p.includes('junior designer')),
+    ),
+  'employee-experience story keeps the junior → senior designer progression',
+)
+
+// global-operations editorial facts + Digie link + inline keynote beat
+const operationsProject = WORK_SLIDES.find(
+  (slide) => slide.kind === 'project' && slide.story.id === 'microsoft-global-operations',
+)
+assert(
+  !!operationsProject &&
+    operationsProject.story.links.some((l) =>
+      l.url.includes('realcomm-ibcon-2026-digie-award-winners-announced'),
+    ),
+  'global-operations story links the official 2026 Digie award announcement',
+)
+const operationsText = JSON.stringify(operationsProject?.story.details ?? [])
+for (const fact of ['48+', '8–12', 'Digie', 'Building Orchestrator', 'Live Campus']) {
+  assert(
+    operationsText.includes(fact),
+    `global-operations story retains the "${fact}" fact`,
+  )
+}
+assert(
+  !!operationsProject &&
+    (operationsProject.story.details ?? []).some((d) =>
+      (d.mediaIds ?? []).includes('realcomm-keynote'),
+    ),
+  'global-operations story places the keynote video inline in the narrative',
+)
+
+// global-compensation: primary external source + public-context scale
+const compensationProject = WORK_SLIDES.find(
+  (slide) => slide.kind === 'project' && slide.story.id === 'microsoft-global-compensation',
+)
+assert(
+  !!compensationProject &&
+    compensationProject.story.links.some((l) =>
+      l.url.includes('helping-microsoft-employees-understand-their-value-with-the-total-rewards-portal'),
+    ),
+  'global-compensation story keeps the Total Rewards article as its external source',
+)
+assert(
+  !!compensationProject &&
+    JSON.stringify(compensationProject.story.details ?? []).includes('220,000'),
+  'global-compensation story keeps the 220,000-plus-user public context',
+)
+
+// every public story follows the Outcome → Challenge → Approach →
+// Contributions rhythm and lands in the 350–550 word target range
+// (outcome + narrative copy only — metadata and links excluded)
+for (const story of WORK_STORIES) {
+  if (story.access !== 'public') continue
+  const headings = (story.details ?? []).map((d) => d.heading.toLowerCase())
+  const challengeAt = headings.findIndex((h) => h.includes('challenge'))
+  const approachAt = headings.findIndex((h) => h.includes('approach'))
+  const contributionsAt = headings.findIndex((h) => h.includes('contribution'))
+  assert(
+    challengeAt >= 0 && approachAt > challengeAt && contributionsAt > approachAt,
+    `${story.id}: narrative follows Challenge → Approach → Contributions after the Outcome`,
+  )
+  const parts = [story.outcome, ...(story.outcomeParagraphs ?? [])]
+  for (const section of story.details ?? []) {
+    parts.push(...(section.paragraphs ?? []), ...(section.items ?? []))
+    if (section.callout) parts.push(section.callout)
+  }
+  const words = parts.join(' ').split(/\s+/).filter(Boolean).length
+  assert(
+    words >= 350 && words <= 550,
+    `${story.id}: public story copy is ${words} words (target 350–550)`,
+  )
+}
 
 // every slide's source asset must exist in public/ — a missing source fails
 // the suite (the placeholder FAIL guard lives above)

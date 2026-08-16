@@ -4,7 +4,7 @@ import SceneCanvas, { SceneCanvasHandle, SceneTargetRegion } from './SceneCanvas
 import CanvasFallback from './CanvasFallback'
 import ExperienceNav from './ExperienceNav'
 import ExperienceTransition, { useExperienceTransition } from './ExperienceTransition'
-import WorkExperience from './work/WorkExperience'
+import WorkExperience, { MIN_EXPANSION_RANGE_PX } from './work/WorkExperience'
 import CollaborateExperience from './collaborate/CollaborateExperience'
 import VibeExperience, { VibeSurfaceStatus } from './vibe/VibeExperience'
 import VibeToolbar from './vibe/VibeToolbar'
@@ -19,12 +19,18 @@ import PrimaryActions, { ExperienceKey, PRIMARY_ACTION_COUNT } from './PrimaryAc
 import TuningPanel from './tuning/TuningPanel'
 import AnalyticsConsent from './AnalyticsConsent'
 import { ExperienceMode, ExperienceSceneKey } from '../engine/types'
-import { EXPERIENCE_SCENES, LANDING_SOURCE_URL, resolveScenePlayground } from '../engine/sceneConfig'
-import { getWorkSlide, getWorkSlideId, resolveWorkSlideScene, WORK_SLIDES } from '../content/work'
+import { EXPERIENCE_SCENES, resolveScenePlayground } from '../engine/sceneConfig'
+import { getWorkSlide, getWorkSlideHeroFit, getWorkSlideId, resolveWorkSlideScene, WORK_SLIDES } from '../content/work'
 import {
   COLLABORATE_AI_GUIDE,
   COLLABORATE_CONTACT,
   COLLABORATE_ENERGIZING_STATEMENT,
+  COLLABORATE_GUIDE_MINIMIZE_LABEL,
+  COLLABORATE_GUIDE_PENDING_HEADING,
+  COLLABORATE_GUIDE_POP_OUT_LABEL,
+  COLLABORATE_GUIDE_RESUME,
+  COLLABORATE_GUIDE_RESUME_PENDING_STATUS,
+  COLLABORATE_GUIDE_RESUME_UNSEEN_STATUS,
   COLLABORATE_HEADLINE,
   COLLABORATE_SHOW_STARTERS,
   CONVERSATION_STARTERS,
@@ -38,6 +44,15 @@ import {
   parseExperienceHashTarget,
   shouldCanonicalizeCollaborateChat,
 } from '../engine/experienceHash'
+import {
+  GUIDE_COMPANION_MIN_WIDTH_PX,
+  GuidePresentation,
+  resolveGuideExitPresentation,
+  resolveGuideMinimizedStatus,
+  resolveGuideSourceTarget,
+  resolveGuideViewportCrossing,
+} from './collaborate/guideNavigation'
+import ChatShell from './collaborate/ChatShell'
 import {
   beginGuideShare,
   beginTurn,
@@ -60,7 +75,6 @@ import {
 } from '../engine/diagnostics'
 import { QualityTier } from '../engine/qualityTiers'
 import { SceneSourceSelection } from '../engine/animatedSource'
-import { isMobileViewport } from '../engine/displayBudget'
 import {
   captureSeasonalAtmosphereInput,
   resolveSeasonalAtmosphere,
@@ -226,6 +240,22 @@ export default function PortfolioExperience() {
   // the foreground slide and the canvas descriptor.
   const [workSlideIndex, setWorkSlideIndex] = useState(0)
 
+  // Work card expansion progress (0 = compact hero+card, 1 = full-height
+  // reading panel). Controlled here because this component coordinates the
+  // inputs: in-card scrolling (via WorkExperience), gap gestures outside the
+  // card, and the measured glyph region those gestures must avoid. Gap
+  // gestures are additionally gated on the expansion metrics reported up from
+  // WorkExperience — a non-scrollable slide (the intro) never expands — and
+  // accumulate against the same expansion range the card uses.
+  const [workExpansionProgress, setWorkExpansionProgress] = useState(0)
+  // Live mirrors for the passive window listeners (state is too stale
+  // mid-gesture); gap commits are rAF-coalesced like the card's.
+  const workExpansionProgressRef = useRef(0)
+  const workOverflowEligibleRef = useRef(false)
+  const workExpansionRangeRef = useRef(MIN_EXPANSION_RANGE_PX)
+  const workGapRafRef = useRef<number | null>(null)
+  const workGapPendingRef = useRef(0)
+
   // Resolved work scene: the work baseline merged with the active slide's
   // source, palette/background, and behavior overrides.
   const workDescriptor = useMemo(
@@ -233,13 +263,22 @@ export default function PortfolioExperience() {
     [workSlideIndex],
   )
 
-  // Mobile Work glyph stage: the measured viewport-relative rect the source
-  // target field is fitted into (null on desktop / outside Work mode = the
-  // canvas keeps the full-viewport treatment). Measured with a
-  // ResizeObserver on the stage (plus its layout wrapper, whose size shifts
-  // the stage's position) and window resize/orientationchange; values are
-  // rounded to whole CSS px so only real changes propagate.
+  // Work glyph stage: the active slide's hero-fit policy decides the canvas
+  // target region. 'viewport' (the Microsoft intro's wide wordmark) keeps
+  // MAIN's full-viewport sampling size — viewport-sized bounds centered on
+  // the stage's center — so the glyphs render at their original scale,
+  // shifted directionally up, with a slight intentional overlap behind the
+  // compact card. 'stage' passes the measured stage rectangle directly.
+  // 'balanced' (every project story) interpolates halfway between the two,
+  // centered on the stage: larger than stage fit, smaller than viewport fit.
+  // The stage rect itself always stays the gesture-dedication area (and
+  // never changes with card expansion, so expansion never morphs the
+  // canvas). Measured with a ResizeObserver on the stage (plus its layout
+  // wrapper, whose size shifts the stage's position) and window
+  // resize/orientationchange; values are rounded to whole CSS px so only
+  // real changes propagate.
   const glyphStageRef = useRef<HTMLDivElement | null>(null)
+  const workHeroFit = getWorkSlideHeroFit(getWorkSlide(workSlideIndex))
   const [workTargetRegion, setWorkTargetRegion] = useState<SceneTargetRegion | null>(null)
   useEffect(() => {
     if (displayed !== 'work') {
@@ -250,17 +289,43 @@ export default function PortfolioExperience() {
     if (!stage) return
     const measure = () => {
       const rect = stage.getBoundingClientRect()
-      const width = Math.round(rect.width)
-      const height = Math.round(rect.height)
-      const next: SceneTargetRegion | null =
-        width > 1 && height > 1
-          ? { x: Math.round(rect.left), y: Math.round(rect.top), width, height }
-          : null
+      const vw = window.visualViewport?.width ?? window.innerWidth
+      const vh = window.visualViewport?.height ?? window.innerHeight
+      if (rect.width <= 1 || rect.height <= 1) {
+        setWorkTargetRegion((prev) => (prev === null ? prev : null))
+        return
+      }
+      // Viewport-fit bounds: viewport-sized, centered on the stage center.
+      const viewportBounds = {
+        x: rect.left + rect.width / 2 - vw / 2,
+        y: rect.top + rect.height / 2 - vh / 2,
+        width: vw,
+        height: vh,
+      }
+      const stageBounds = { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
+      // 'balanced': halfway between stage and viewport bounds, component by
+      // component — both share the stage center, so the midpoint does too.
+      const balancedBounds = {
+        x: (stageBounds.x + viewportBounds.x) / 2,
+        y: (stageBounds.y + viewportBounds.y) / 2,
+        width: (stageBounds.width + viewportBounds.width) / 2,
+        height: (stageBounds.height + viewportBounds.height) / 2,
+      }
+      const raw =
+        workHeroFit === 'viewport'
+          ? viewportBounds
+          : workHeroFit === 'stage'
+            ? stageBounds
+            : balancedBounds
+      const next: SceneTargetRegion = {
+        x: Math.round(raw.x),
+        y: Math.round(raw.y),
+        width: Math.round(raw.width),
+        height: Math.round(raw.height),
+      }
       setWorkTargetRegion((prev) => {
-        if (prev === null && next === null) return prev
         if (
           prev !== null &&
-          next !== null &&
           prev.x === next.x &&
           prev.y === next.y &&
           prev.width === next.width &&
@@ -284,6 +349,143 @@ export default function PortfolioExperience() {
       observer?.disconnect()
       window.removeEventListener('resize', measure)
       window.removeEventListener('orientationchange', measure)
+    }
+    // transitionPhase: the entrance morph transforms the foreground without
+    // RESIZING the stage, so the initial measurement can be mid-flight —
+    // re-measure once the transition settles.
+  }, [displayed, workHeroFit, transitionPhase])
+
+  // Dev-only debug surface for scripts/dev/work-visual-smoke.js (?debug=true):
+  // the resolved hero fit and target region for the active slide.
+  useEffect(() => {
+    if (!tuningMode) return
+    ;(window as unknown as { __workHero?: unknown }).__workHero = {
+      fit: workHeroFit,
+      region: workTargetRegion,
+    }
+  }, [tuningMode, workHeroFit, workTargetRegion])
+
+  // Keep the gap-gesture mirror in sync with the controlled state (card-side
+  // commits from WorkExperience also move it).
+  useEffect(() => {
+    workExpansionProgressRef.current = workExpansionProgress
+  }, [workExpansionProgress])
+
+  // Leaving Work always returns the card to the compact state.
+  useEffect(() => {
+    if (displayed !== 'work') {
+      workExpansionProgressRef.current = 0
+      workOverflowEligibleRef.current = false
+      workExpansionRangeRef.current = MIN_EXPANSION_RANGE_PX
+      setWorkExpansionProgress(0)
+    }
+  }, [displayed])
+
+  // Gap gestures: wheel/trackpad or touch in the empty gap OUTSIDE the card
+  // scrubs the expansion progress against the same expansion range the card
+  // reports (compactCardTop - expandedCardTop) — but never inside the
+  // measured glyph region, which stays dedicated to canvas interaction. The
+  // gaps are pointer-transparent, so these gestures land on the canvas; the
+  // window listeners observe them without intercepting (all passive). The
+  // card's own viewport handles in-card gestures (WorkExperience). Upward gap
+  // input contracts only when the card content is at its top — gap gestures
+  // never scroll content. Non-overflowing slides ignore gap input entirely.
+  useEffect(() => {
+    if (displayed !== 'work') return
+    const commitGapProgress = (next: number) => {
+      const clamped = Math.min(1, Math.max(0, next))
+      if (clamped === workExpansionProgressRef.current) return
+      workExpansionProgressRef.current = clamped
+      workGapPendingRef.current = clamped
+      if (workGapRafRef.current === null) {
+        workGapRafRef.current = requestAnimationFrame(() => {
+          workGapRafRef.current = null
+          setWorkExpansionProgress(workGapPendingRef.current)
+        })
+      }
+    }
+    const gapRangePx = () => Math.max(workExpansionRangeRef.current, MIN_EXPANSION_RANGE_PX)
+    const contentScrolled = () => {
+      const viewport = document.querySelector('.work-experience-viewport')
+      return !!viewport && viewport.scrollTop > 1
+    }
+    const applyGapDelta = (deltaPx: number) => {
+      if (!workOverflowEligibleRef.current || deltaPx === 0) return
+      if (deltaPx < 0 && contentScrolled()) return
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      if (reduced) {
+        commitGapProgress(deltaPx > 0 ? 1 : 0)
+        return
+      }
+      commitGapProgress(workExpansionProgressRef.current + deltaPx / gapRangePx())
+    }
+    const isInCard = (target: EventTarget | null) =>
+      target instanceof Element &&
+      !!(target.closest('.work-experience') || target.closest('.work-lightbox'))
+    const isInGlyphRegion = (x: number, y: number) => {
+      const rect = glyphStageRef.current?.getBoundingClientRect()
+      return (
+        !!rect &&
+        rect.width > 1 &&
+        rect.height > 1 &&
+        x >= rect.left &&
+        x <= rect.right &&
+        y >= rect.top &&
+        y <= rect.bottom
+      )
+    }
+    const handleWheel = (event: globalThis.WheelEvent) => {
+      if (isInCard(event.target)) return
+      if (isInGlyphRegion(event.clientX, event.clientY)) return
+      applyGapDelta(event.deltaY)
+    }
+    // Gesture dedication is decided where the touch BEGINS: a swipe that
+    // starts in the glyph region never scrubs the card, even if it travels
+    // over the gap. Like the card, gap touch progress is ABSOLUTE — computed
+    // from the gesture's starting Y and starting progress.
+    let touch: { startY: number; startProgress: number; allowed: boolean } | null = null
+    const handleTouchStart = (event: globalThis.TouchEvent) => {
+      const point = event.touches[0]
+      if (!point) {
+        touch = null
+        return
+      }
+      touch = {
+        startY: point.clientY,
+        startProgress: workExpansionProgressRef.current,
+        allowed: !isInCard(event.target) && !isInGlyphRegion(point.clientX, point.clientY),
+      }
+    }
+    const handleTouchMove = (event: globalThis.TouchEvent) => {
+      if (!touch?.allowed) return
+      const point = event.touches[0]
+      if (!point) return
+      const dy = touch.startY - point.clientY
+      if (!workOverflowEligibleRef.current) return
+      if (dy < 0 && contentScrolled()) return
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      if (reduced) {
+        commitGapProgress(dy > 0 ? 1 : 0)
+        return
+      }
+      commitGapProgress(touch.startProgress + dy / gapRangePx())
+    }
+    const handleTouchEnd = () => {
+      touch = null
+    }
+    window.addEventListener('wheel', handleWheel, { passive: true })
+    window.addEventListener('touchstart', handleTouchStart, { passive: true })
+    window.addEventListener('touchmove', handleTouchMove, { passive: true })
+    window.addEventListener('touchend', handleTouchEnd)
+    window.addEventListener('touchcancel', handleTouchEnd)
+    return () => {
+      window.removeEventListener('wheel', handleWheel)
+      window.removeEventListener('touchstart', handleTouchStart)
+      window.removeEventListener('touchmove', handleTouchMove)
+      window.removeEventListener('touchend', handleTouchEnd)
+      window.removeEventListener('touchcancel', handleTouchEnd)
+      if (workGapRafRef.current !== null) cancelAnimationFrame(workGapRafRef.current)
+      workGapRafRef.current = null
     }
   }, [displayed])
 
@@ -325,6 +527,46 @@ export default function PortfolioExperience() {
     setGuideState(next)
   }
 
+  // Guide presentation: how the conversation appears while the visitor
+  // browses. 'page' = the full chat view (#collaborate/chat); 'companion' =
+  // docked panel alongside Work/Vibe (wide viewports); 'minimized' = resume
+  // bar/pill. Page memory only — no storage, no new URLs. The narrow-viewport
+  // modal overlay is a flag on top of 'minimized', not a fourth presentation.
+  const [guidePresentation, setGuidePresentation] = useState<GuidePresentation>('page')
+  const [guideOverlayOpen, setGuideOverlayOpen] = useState(false)
+  // An answer that arrived while the transcript was out of view (minimized).
+  const [guideUnseenAnswer, setGuideUnseenAnswer] = useState(false)
+  const guideResumeRef = useRef<HTMLButtonElement | null>(null)
+  const guideOverlayRef = useRef<HTMLDivElement | null>(null)
+  // Focus-restore flags: set by the user action, consumed by the effect that
+  // runs once the destination control is mounted.
+  const guideResumeFocusRef = useRef(false)
+  const guideMinimizeFocusRef = useRef(false)
+  const guideOverlayRestoreFocusRef = useRef(false)
+
+  // Companion breakpoint (960px): drives the pop-out/minimize labels and the
+  // resume target, and the crossing effect below minimizes an open companion.
+  const [guideWideViewport, setGuideWideViewport] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      window.matchMedia(`(min-width: ${GUIDE_COMPANION_MIN_WIDTH_PX}px)`).matches,
+  )
+  useEffect(() => {
+    const query = window.matchMedia(`(min-width: ${GUIDE_COMPANION_MIN_WIDTH_PX}px)`)
+    const update = () => setGuideWideViewport(query.matches)
+    update()
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
+
+  // Viewport crossing: an open companion minimizes below the breakpoint (and
+  // any open overlay closes) — widening never reopens a minimized chat.
+  useEffect(() => {
+    const width = window.innerWidth
+    setGuidePresentation((current) => resolveGuideViewportCrossing(current, width))
+    if (width >= GUIDE_COMPANION_MIN_WIDTH_PX) setGuideOverlayOpen(false)
+  }, [guideWideViewport])
+
   // Sealed analytics client (Stage 5): no-op until the visitor opts in via
   // the consent UI; every track call is silent on failure.
   const analyticsClientRef = useRef<AnalyticsClient | null>(null)
@@ -365,17 +607,6 @@ export default function PortfolioExperience() {
 
   useEffect(() => {
     setTuningMode(isTuningMode())
-  }, [])
-
-  // Current viewport width (resize-listened; updates on resize only, never
-  // per frame). Drives the landing source choice: the JH logotype on
-  // desktop, the built-in monogram on mobile viewports.
-  const [viewportWidth, setViewportWidth] = useState(0)
-  useEffect(() => {
-    const updateViewportWidth = () => setViewportWidth(window.innerWidth)
-    updateViewportWidth()
-    window.addEventListener('resize', updateViewportWidth)
-    return () => window.removeEventListener('resize', updateViewportWidth)
   }, [])
 
   // Editable working copies of authored configuration. The intro sequence
@@ -938,6 +1169,17 @@ export default function PortfolioExperience() {
 
   const navigateTo = (key: ExperienceSceneKey) => {
     const doNavigate = () => {
+      // Leaving the full chat page via the nav retains the conversation as
+      // the companion (wide) or the minimized resume bar (narrow); entering
+      // Collaborate keeps that chrome too — the landing's resume view
+      // coexists with the docked conversation.
+      const leavingChatPage =
+        COLLABORATE_AI_GUIDE && displayed === 'collaborate' && collaborateView === 'chat'
+      const hasConversation = (guideStateRef.current?.turns.length ?? 0) > 0
+      if (leavingChatPage && hasConversation && key !== 'collaborate') {
+        setGuidePresentation(resolveGuideExitPresentation(window.innerWidth))
+        setGuideOverlayOpen(false)
+      }
       setSelected(key)
       setExperience(key)
       // Selecting Collaborate from Work/Vibe ALWAYS opens the landing, even
@@ -988,6 +1230,14 @@ export default function PortfolioExperience() {
             setCollaborateView('landing')
           } else {
             setCollaborateView(target.subview === 'chat' ? 'chat' : 'landing')
+          }
+          // Back/forward into the chat deep link returns the conversation to
+          // the full page; a bare #collaborate keeps the companion/minimized
+          // chrome alongside the landing's resume view.
+          if (target.subview === 'chat') {
+            setGuidePresentation('page')
+            setGuideOverlayOpen(false)
+            setGuideUnseenAnswer(false)
           }
         }
       }
@@ -1068,6 +1318,9 @@ export default function PortfolioExperience() {
   // --- Guide conversation actions (chat view; controller is pure) -----------
 
   const navigateToCollaborateChat = () => {
+    setGuidePresentation('page')
+    setGuideOverlayOpen(false)
+    setGuideUnseenAnswer(false)
     setCollaborateView('chat')
     if (typeof window !== 'undefined' && window.location.hash !== COLLABORATE_CHAT_HASH) {
       // pushState (not location.hash assignment) so no hashchange event fires;
@@ -1086,6 +1339,129 @@ export default function PortfolioExperience() {
     }
   }
 
+  // --- Guide presentation actions (companion / minimized / overlay) ---------
+
+  /** Full-chat header control: "Pop chat out" (wide) / "Minimize chat"
+   *  (narrow). Returns to the collaborate landing — the last place the
+   *  visitor was before the conversation — with the chat docked (wide) or
+   *  minimized (narrow) alongside it. Back from there restores
+   *  #collaborate/chat. */
+  const exitGuideChatPage = () => {
+    setGuidePresentation(resolveGuideExitPresentation(window.innerWidth))
+    setGuideOverlayOpen(false)
+    setSelected('collaborate')
+    setExperience('collaborate')
+    setCollaborateView('landing')
+    if (
+      typeof window !== 'undefined' &&
+      window.location.hash !== formatExperienceHash('collaborate')
+    ) {
+      window.history.pushState(null, '', formatExperienceHash('collaborate'))
+    }
+  }
+
+  /** Intentional internal source navigation: a validated `#work/<storyId>`
+   *  source card clicked with an unmodified primary click. Selects the story,
+   *  updates the hash, and docks (wide) or minimizes (narrow) the chat. From
+   *  the narrow overlay this also restores the resume bar. */
+  const handleGuideSourceNavigate = (storyId: string) => {
+    const target = resolveGuideSourceTarget(`#work/${storyId}`)
+    if (!target) return
+    const doNavigate = () => {
+      const nextPresentation = resolveGuideExitPresentation(window.innerWidth)
+      setGuidePresentation(nextPresentation)
+      setGuideOverlayOpen(false)
+      setSelected('work')
+      setExperience('work')
+      setWorkSlideIndex(target.slideIndex)
+      // Same-story re-click while Work is already settled: the slide-change
+      // focus effect will not fire, so move focus to the Work heading here.
+      if (target.slideIndex === workSlideIndex && displayed === 'work') {
+        modeHeadingRef.current?.focus({ preventScroll: true })
+      }
+      const hash = `#work/${target.storyId}`
+      if (typeof window !== 'undefined' && window.location.hash !== hash) {
+        window.history.pushState(null, '', hash)
+      }
+      trackEvent({
+        name: 'collaborate_guide_navigation',
+        params: { story_id: target.storyId, presentation: nextPresentation },
+      })
+    }
+    // Leaving vibe with paint on the field asks before discarding it.
+    if (displayed === 'vibe') {
+      withPaintConfirmation(() => {
+        sceneCanvasRef.current?.clearPaint()
+        doNavigate()
+      })
+      return
+    }
+    doNavigate()
+  }
+
+  /** Companion "Open full conversation" (and any path back to the chat page):
+   *  the hash returns to #collaborate/chat so Back restores the page. */
+  const openGuideFullConversation = () => {
+    const doOpen = () => {
+      setGuidePresentation('page')
+      setGuideOverlayOpen(false)
+      setGuideUnseenAnswer(false)
+      setSelected('collaborate')
+      setExperience('collaborate')
+      setCollaborateView('chat')
+      if (typeof window !== 'undefined' && window.location.hash !== COLLABORATE_CHAT_HASH) {
+        window.history.pushState(null, '', COLLABORATE_CHAT_HASH)
+      }
+    }
+    if (displayed === 'vibe') {
+      withPaintConfirmation(() => {
+        sceneCanvasRef.current?.clearPaint()
+        doOpen()
+      })
+      return
+    }
+    doOpen()
+  }
+
+  /** Companion "Minimize": collapse to the resume pill and return focus to
+   *  it once mounted. */
+  const minimizeGuideCompanion = () => {
+    guideMinimizeFocusRef.current = true
+    setGuidePresentation('minimized')
+  }
+
+  /** Resume control: wide viewports reopen the docked companion (focus moves
+   *  to its heading); narrow viewports open the full-viewport modal overlay
+   *  over the current site without changing its hash. */
+  const handleGuideResume = () => {
+    setGuideUnseenAnswer(false)
+    if (window.innerWidth >= GUIDE_COMPANION_MIN_WIDTH_PX) {
+      guideResumeFocusRef.current = true
+      setGuidePresentation('companion')
+    } else {
+      setGuideOverlayOpen(true)
+    }
+  }
+
+  /** Overlay minimize control / Escape: back to the resume bar with focus. */
+  const closeGuideOverlay = () => {
+    guideOverlayRestoreFocusRef.current = true
+    setGuideOverlayOpen(false)
+  }
+
+  // Focus delivery for the companion/minimize transitions above: the flags
+  // are set by the user action and consumed once the destination is mounted.
+  useEffect(() => {
+    if (guidePresentation === 'companion' && guideResumeFocusRef.current) {
+      guideResumeFocusRef.current = false
+      chatHeadingRef.current?.focus({ preventScroll: true })
+    }
+    if (guidePresentation === 'minimized' && guideMinimizeFocusRef.current) {
+      guideMinimizeFocusRef.current = false
+      guideResumeRef.current?.focus({ preventScroll: true })
+    }
+  }, [guidePresentation])
+
   /** Optimistically append the visitor message, navigate to the chat, and
    *  send the full transcript. A starter id also applies its canvas glyph
    *  treatment (existing behavior). */
@@ -1096,7 +1472,9 @@ export default function PortfolioExperience() {
     if (!begun.ok) return
     applyGuideState(begun.state)
     if (starterId) setCollaborateStarterId(starterId)
-    navigateToCollaborateChat()
+    // Sending from the docked companion or the narrow overlay keeps the
+    // visitor where they are; only a page-context send opens the chat view.
+    if (guidePresentation === 'page') navigateToCollaborateChat()
     void completeGuideTurn(begun.state)
   }
 
@@ -1140,6 +1518,9 @@ export default function PortfolioExperience() {
         name: 'collaborate_guide_answered',
         params: { topic: resolved.topic, model_class: payload.modelClass },
       })
+      // If the transcript isn't on screen (minimized), flag the new answer
+      // for the resume chrome — never transcript text, just the status.
+      if (!guideTranscriptVisibleRef.current) setGuideUnseenAnswer(true)
     } catch {
       // Roll the optimistic visitor turn back so nothing is lost; the typed
       // draft is restored and the error card offers retry + email.
@@ -1162,6 +1543,9 @@ export default function PortfolioExperience() {
     applyGuideState(resetGuideConversation(current, guideDepsRef.current))
     setCollaborateStarterId(null)
     setCollaborateGuideTopic(null)
+    setGuidePresentation('page')
+    setGuideOverlayOpen(false)
+    setGuideUnseenAnswer(false)
   }
 
   const handleGuideDraftChange = (draft: string) => {
@@ -1799,18 +2183,17 @@ export default function PortfolioExperience() {
     if (displayed !== 'vibe') setVibeControlsOpen(false)
   }, [displayed])
 
-  // The scene's source selection: the landing samples the JH logotype
-  // (LANDING_SOURCE_URL, falling back to the built-in monogram on decode
-  // failure) on desktop viewports and the built-in JH monogram on mobile;
-  // work/collaborate sample their resolved static SVGs; vibe samples the
-  // uploaded image or the built-in monogram. (The animated Black-hole
-  // provider is retained in engine/animatedSource.ts but is not a
-  // selectable production option — nothing here can construct it.)
+  // The scene's source selection: the landing is ALWAYS the responsive
+  // landing variant — SceneCanvas resolves logotype (desktop) vs monogram
+  // (mobile) at build time from its own measured canvas width, so a cold
+  // mobile load never briefly builds the desktop source. Work/collaborate
+  // sample their resolved static SVGs; vibe samples the uploaded image or
+  // the built-in monogram. (The animated Black-hole provider is retained in
+  // engine/animatedSource.ts but is not a selectable production option —
+  // nothing here can construct it.)
   const sceneSource = useMemo<SceneSourceSelection>(() => {
     if (displayed === 'intro') {
-      return isMobileViewport(viewportWidth)
-        ? { kind: 'builtin' }
-        : { kind: 'static', url: LANDING_SOURCE_URL, sourceKind: 'svg' }
+      return { kind: 'responsive-landing' }
     }
     if (displayed === 'work') {
       if (!workDescriptor.sourceUrl) return { kind: 'builtin' }
@@ -1837,7 +2220,7 @@ export default function PortfolioExperience() {
       return { kind: 'static', url: uploadedSource.url, sourceKind: uploadedSource.kind }
     }
     return { kind: 'builtin' }
-  }, [displayed, viewportWidth, workDescriptor, collaborateDescriptor, uploadedSource, workSlideIndex, theme])
+  }, [displayed, workDescriptor, collaborateDescriptor, uploadedSource, workSlideIndex, theme])
 
   // The landing runs on the themed canvas gradient (engine/theme) with the
   // seasonal atmosphere adopted as soon as it resolves; the work/collaborate
@@ -1875,8 +2258,85 @@ export default function PortfolioExperience() {
   const collaborateChatActive =
     COLLABORATE_AI_GUIDE && displayed === 'collaborate' && collaborateView === 'chat'
 
+  // Guide companion chrome: the conversation off the full chat page. The
+  // docked companion (wide), the minimized resume bar/pill, and the narrow
+  // modal overlay are mutually exclusive; each requires a live conversation
+  // and none appears on the chat page itself.
+  const guideConversationActive =
+    COLLABORATE_AI_GUIDE && !!guideState && guideState.turns.length > 0
+  const guideChromeOffPage = guideConversationActive && !collaborateChatActive
+  const guideCompanionVisible = guideChromeOffPage && guidePresentation === 'companion'
+  const guideOverlayVisible =
+    guideChromeOffPage && guidePresentation === 'minimized' && guideOverlayOpen
+  const guideMinimizedVisible =
+    guideChromeOffPage && guidePresentation === 'minimized' && !guideOverlayOpen
+  const guideResumeStatus = guideMinimizedVisible
+    ? resolveGuideMinimizedStatus(guideState, guideUnseenAnswer)
+    : null
+
+  // Whether the transcript is on screen (page, companion, or overlay) —
+  // answers arriving while it is hidden flag the resume chrome instead.
+  const guideTranscriptVisibleRef = useRef(true)
+  useEffect(() => {
+    guideTranscriptVisibleRef.current =
+      collaborateChatActive || guideCompanionVisible || guideOverlayVisible
+  })
+
+  // Narrow modal overlay: focus containment, Escape back to the resume bar,
+  // and inert background content (nav, canvas, foreground) while it is open.
+  useEffect(() => {
+    if (!guideOverlayVisible) return
+    const overlay = guideOverlayRef.current
+    const shell = overlay?.parentElement
+    if (!overlay || !shell) return
+    const background = Array.from(shell.children).filter((el) => el !== overlay)
+    background.forEach((el) => el.setAttribute('inert', ''))
+    chatHeadingRef.current?.focus({ preventScroll: true })
+    const focusableSelector =
+      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        guideOverlayRestoreFocusRef.current = true
+        setGuideOverlayOpen(false)
+        return
+      }
+      if (event.key !== 'Tab') return
+      const focusables = Array.from(
+        overlay.querySelectorAll<HTMLElement>(focusableSelector),
+      ).filter((el) => el.getClientRects().length > 0)
+      if (focusables.length === 0) {
+        event.preventDefault()
+        return
+      }
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      const active = document.activeElement
+      if (event.shiftKey && (active === first || !overlay.contains(active))) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && (active === last || !overlay.contains(active))) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      background.forEach((el) => el.removeAttribute('inert'))
+      document.removeEventListener('keydown', onKeyDown, true)
+      if (guideOverlayRestoreFocusRef.current) {
+        guideOverlayRestoreFocusRef.current = false
+        guideResumeRef.current?.focus({ preventScroll: true })
+      }
+    }
+  }, [guideOverlayVisible])
+
   return (
-    <div className="portfolio-shell">
+    <div
+      className={`portfolio-shell${guideCompanionVisible ? ' portfolio-shell--guide-companion' : ''}${
+        guideMinimizedVisible ? ' portfolio-shell--guide-minimized' : ''
+      }${guideOverlayVisible ? ' portfolio-shell--guide-overlay' : ''}`}
+    >
       {/* Static branded layer behind the canvas: visible only while the
           canvas has not painted (no JS / no 2D context). */}
       <CanvasFallback />
@@ -1959,11 +2419,14 @@ export default function PortfolioExperience() {
               </>
             ) : displayed === 'work' ? (
               <div className="work-layout">
-                {/* Glyph stage: on mobile the Work glyph field is region-bound
-                    to this measured rect (above/beside the panel) instead of
-                    rendering behind it. Empty and pointer-transparent — the
-                    fixed canvas beneath stays interactive. Desktop hides it
-                    (display:none) and keeps the full-scene treatment. */}
+                {/* Glyph stage: its measured rect positions the hero (fit per
+                    the active slide's hero policy — 'viewport' samples at
+                    full-viewport size centered on the stage, 'stage' is
+                    contained inside the stage bounds) and marks the
+                    canvas-dedicated gesture area. Empty and
+                    pointer-transparent — the fixed canvas beneath stays
+                    interactive. Its geometry does not change when the card
+                    expands, so expansion never morphs the canvas. */}
                 <div className="work-glyph-stage" aria-hidden="true" ref={glyphStageRef} />
                 <WorkExperience
                   slides={WORK_SLIDES}
@@ -1972,6 +2435,12 @@ export default function PortfolioExperience() {
                   headingRef={modeHeadingRef}
                   titleBase={BASE_DOCUMENT_TITLE}
                   modeTitle={EXPERIENCE_SCENES.work.copy.documentTitle}
+                  expansionProgress={workExpansionProgress}
+                  onExpansionProgressChange={setWorkExpansionProgress}
+                  onExpansionMetricsChange={(metrics) => {
+                    workOverflowEligibleRef.current = metrics.eligible
+                    workExpansionRangeRef.current = metrics.rangePx
+                  }}
                   onTrackEvent={trackEvent}
                 />
               </div>
@@ -1993,6 +2462,11 @@ export default function PortfolioExperience() {
                         onDraftChange: handleGuideDraftChange,
                         onNavigateToChat: navigateToCollaborateChat,
                         onNavigateToLanding: navigateToCollaborateLanding,
+                        onPopOut: exitGuideChatPage,
+                        popOutLabel: guideWideViewport
+                          ? COLLABORATE_GUIDE_POP_OUT_LABEL
+                          : COLLABORATE_GUIDE_MINIMIZE_LABEL,
+                        onSourceNavigate: handleGuideSourceNavigate,
                       }
                     : undefined
                 }
@@ -2010,6 +2484,79 @@ export default function PortfolioExperience() {
           </div>
         </ExperienceTransition>
       </main>
+      {/* Docked companion (wide viewports): a nonmodal complementary region
+          alongside Work/Vibe. Rendered at the shell level — inside the
+          foreground layers a fixed panel would be trapped by the work panel's
+          backdrop-filter containing block (same trap as the media lightbox). */}
+      {guideCompanionVisible && guideState && (
+        <aside className="guide-companion" role="complementary" aria-label="Joel’s guide conversation">
+          <ChatShell
+            variant="companion"
+            heading={guideState.heading}
+            state={guideState}
+            headingRef={chatHeadingRef}
+            onSend={(content) => sendGuideMessage(content)}
+            onRetry={retryGuideMessage}
+            onDraftChange={handleGuideDraftChange}
+            onShare={shareGuideConversation}
+            onMinimize={minimizeGuideCompanion}
+            minimizeLabel={COLLABORATE_GUIDE_MINIMIZE_LABEL}
+            onExpand={openGuideFullConversation}
+            onSourceNavigate={handleGuideSourceNavigate}
+          />
+        </aside>
+      )}
+      {/* Narrow modal overlay: the full-viewport conversation over the current
+          site (hash untouched). Focus is contained and the background is inert
+          while it is open (effect above). */}
+      {guideOverlayVisible && guideState && (
+        <div
+          className="guide-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Conversation with Joel’s guide"
+          ref={guideOverlayRef}
+        >
+          <ChatShell
+            variant="modal"
+            heading={guideState.heading}
+            state={guideState}
+            headingRef={chatHeadingRef}
+            onSend={(content) => sendGuideMessage(content)}
+            onRetry={retryGuideMessage}
+            onDraftChange={handleGuideDraftChange}
+            onShare={shareGuideConversation}
+            onMinimize={closeGuideOverlay}
+            minimizeLabel={COLLABORATE_GUIDE_MINIMIZE_LABEL}
+            onSourceNavigate={handleGuideSourceNavigate}
+          />
+        </div>
+      )}
+      {/* Minimized chrome: the guide title plus pending/new-answer status —
+          never transcript text. A bottom bar on narrow screens (safe-area
+          aware), a compact pill on desktop. */}
+      {guideMinimizedVisible && guideState && (
+        <div className="guide-resume">
+          <button
+            type="button"
+            className="guide-resume-button"
+            ref={guideResumeRef}
+            onClick={handleGuideResume}
+          >
+            <span className="guide-resume-title">
+              {guideState.heading ?? COLLABORATE_GUIDE_PENDING_HEADING}
+            </span>
+            {guideResumeStatus && (
+              <span className="guide-resume-status" role="status">
+                {guideResumeStatus === 'pending'
+                  ? COLLABORATE_GUIDE_RESUME_PENDING_STATUS
+                  : COLLABORATE_GUIDE_RESUME_UNSEEN_STATUS}
+              </span>
+            )}
+            <span className="visually-hidden"> — {COLLABORATE_GUIDE_RESUME}</span>
+          </button>
+        </div>
+      )}
       {/* Crawlable work digest: the interactive work surface only mounts after
           client-side hash/navigation state resolves, so the static export
           carries the full story content here instead. Visually hidden but

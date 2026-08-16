@@ -49,9 +49,10 @@
  * unknown-source, and heading faults in rotation and asserts the gates catch
  * all of them (exit 1 by design).
  *
- * Live mode reads CF_ACCOUNT_ID, AIG_GATEWAY_ID, AIG_TOKEN, DEEPSEEK_API_KEY,
- * and OPENAI_API_KEY from the environment, calls each candidate adapter
- * DIRECTLY (bypassing ROUTING_POLICY — the bake-off scores each model
+ * Live mode reads CF_ACCOUNT_ID, AIG_GATEWAY_ID, AIG_TOKEN, MOONSHOT_API_KEY,
+ * DEEPSEEK_API_KEY, and OPENAI_API_KEY (plus optional MOONSHOT_MODEL and
+ * AIG_MOONSHOT_URL overrides) from the environment, calls each candidate
+ * adapter DIRECTLY (bypassing ROUTING_POLICY — the bake-off scores each model
  * independently), --runs times per case, non-streaming.
  *
  * Metrics per model per category: accept rate (all gates passed), p50/p95
@@ -87,6 +88,7 @@ const { performance } = require('perf_hooks')
 // the range of each provider's current flagship/chat tiers — replace them with
 // the actual list prices before trusting absolute cost figures.
 const PRICE_TABLE = {
+  'moonshot/kimi-k2.6': { inputPer1M: 0.60, outputPer1M: 2.50, source: 'Moonshot list price (placeholder — confirm)' },
   'openai/gpt-5.6-luna': { inputPer1M: 1.25, outputPer1M: 10.0, source: 'OpenAI list price (placeholder — confirm)' },
   'deepseek/deepseek-v4-pro': { inputPer1M: 0.55, outputPer1M: 2.19, source: 'Fireworks-hosted list price (placeholder — confirm)' },
   'mock/deterministic': { inputPer1M: 0, outputPer1M: 0, source: 'offline self-test model' },
@@ -114,6 +116,10 @@ function argValue(flag, fallback) {
   return i !== -1 && args[i + 1] ? args[i + 1] : fallback
 }
 const RUNS = Math.max(1, parseInt(argValue('--runs', '3'), 10) || 3)
+// Hard wall-clock budget: rate-limit retry chains must never make a run's
+// duration unknowable again. On expiry the run stops launching new calls and
+// writes a partial report. Override with --max-minutes; 0 disables.
+const MAX_MINUTES = Math.max(0, parseInt(argValue('--max-minutes', '45'), 10) || 0)
 const projectRoot = path.resolve(__dirname, '..', '..')
 const outDir = path.resolve(projectRoot, argValue('--out', 'tmp-evals'))
 
@@ -172,7 +178,15 @@ const entriesById = new Map(activeEntries.map((e) => [e.id, e]))
 
 const questionCases = loadCases(path.join(__dirname, 'questions.json'))
 const adversarialCases = loadCases(path.join(__dirname, 'adversarial.json'))
-const allCases = [...questionCases, ...adversarialCases]
+// --only id1,id2,... narrows the run to specific case ids (regression passes
+// over a prior report's failure list without paying for the full suite).
+const ONLY = argValue('--only', '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+const allCases = ONLY.length
+  ? [...questionCases, ...adversarialCases].filter((c) => ONLY.includes(c.id))
+  : [...questionCases, ...adversarialCases]
 
 assert(questionCases.length >= MIN_QUESTION_CASES, `questions.json has >= ${MIN_QUESTION_CASES} cases (got ${questionCases.length})`)
 assert(adversarialCases.length >= MIN_ADVERSARIAL_CASES, `adversarial.json has >= ${MIN_ADVERSARIAL_CASES} cases (got ${adversarialCases.length})`)
@@ -336,6 +350,8 @@ async function runModel(modelId, callModel) {
     categories[cat] = { runs: 0, accepted: 0, latencies: [], inputTokens: 0, outputTokens: 0, usageMissing: 0 }
   }
   const failureList = []
+  const deadline = MAX_MINUTES > 0 ? Date.now() + MAX_MINUTES * 60 * 1000 : Infinity
+  let truncated = false
 
   for (let caseIndex = 0; caseIndex < allCases.length; caseIndex += 1) {
     const evalCase = allCases[caseIndex]
@@ -343,9 +359,20 @@ async function runModel(modelId, callModel) {
     const agg = categories[evalCase.category]
 
     for (let run = 0; run < RUNS; run += 1) {
+      if (Date.now() > deadline) { truncated = true; break }
       agg.runs += 1
+      // Steady-state throttle: the Moonshot org caps at 20 RPM; spacing calls
+      // keeps the backoff loop for genuine collisions. Outside latency timing.
+      await new Promise((resolve) => setTimeout(resolve, 3000))
       const started = performance.now()
-      const result = await callModel({ evalCase, caseIndex, messages, run })
+      // Retry provider rate limits (HTTP 429) with backoff: the org RPM cap
+      // is an infrastructure constraint, not a model-quality signal, and an
+      // unretried burst otherwise poisons the accept rate.
+      let result = await callModel({ evalCase, caseIndex, messages, run })
+      for (let attempt = 1; attempt <= 4 && !result.ok && /\b429\b/.test(result.error); attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 6000 * attempt))
+        result = await callModel({ evalCase, caseIndex, messages, run })
+      }
       const latencyMs = performance.now() - started
       agg.latencies.push(latencyMs)
 
@@ -375,7 +402,10 @@ async function runModel(modelId, callModel) {
         failureList.push({ model: modelId, caseId: evalCase.id, run: run + 1, reasons })
       }
     }
+    if (truncated) break
   }
+  if (truncated)
+    failureList.push({ model: modelId, caseId: '(harness)', run: 0, reasons: [`run truncated at the ${MAX_MINUTES}-minute budget — partial results`] })
   return { modelId, categories, failureList }
 }
 
@@ -511,18 +541,23 @@ async function main() {
       gatewayToken: process.env.AIG_TOKEN,
       deepseekApiKey: process.env.DEEPSEEK_API_KEY,
       openaiApiKey: process.env.OPENAI_API_KEY,
+      moonshotApiKey: process.env.MOONSHOT_API_KEY,
+      moonshotModel: process.env.MOONSHOT_MODEL,
+      moonshotUrl: process.env.AIG_MOONSHOT_URL,
     }
     if (!config.accountId || !config.gatewayId || !config.gatewayToken) {
       console.error('Live mode requires CF_ACCOUNT_ID, AIG_GATEWAY_ID, and AIG_TOKEN in the environment.')
       process.exit(2)
     }
     const adapters = []
+    if (config.moonshotApiKey) adapters.push(MODEL_ADAPTERS['moonshot/kimi-k2.6'])
+    else console.warn('WARN: MOONSHOT_API_KEY not set — skipping moonshot/kimi-k2.6.')
     if (config.deepseekApiKey) adapters.push(MODEL_ADAPTERS['deepseek/deepseek-v4-pro'])
     else console.warn('WARN: DEEPSEEK_API_KEY not set — skipping deepseek/deepseek-v4-pro.')
     if (config.openaiApiKey) adapters.push(MODEL_ADAPTERS['openai/gpt-5.6-luna'])
     else console.warn('WARN: OPENAI_API_KEY not set — skipping openai/gpt-5.6-luna.')
     if (adapters.length === 0) {
-      console.error('No provider keys set (DEEPSEEK_API_KEY, OPENAI_API_KEY) — nothing to evaluate.')
+      console.error('No provider keys set (MOONSHOT_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY) — nothing to evaluate.')
       process.exit(2)
     }
 
@@ -531,7 +566,10 @@ async function main() {
     for (const adapter of adapters) {
       console.log(`Running ${allCases.length} cases x ${RUNS} runs against ${adapter.id} ...`)
       const result = await runModel(adapter.id, (input) =>
-        adapter.complete({ messages: input.messages, maxTokens: 700, timeoutMs: 12000 }, config, fetch),
+        // Mirror production settings (functions/api/collaborate/index.ts):
+        // thinking models (kimi-k2.6) need maxTokens 4000 — 700 starves them
+        // into empty completions — and 30s, not the 12s adapter default.
+        adapter.complete({ messages: input.messages, maxTokens: 4000, timeoutMs: 30000 }, config, fetch),
       )
       summaries.push({ modelId: adapter.id, perCategory: summarize(result) })
       failureList.push(...result.failureList)

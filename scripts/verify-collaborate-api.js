@@ -303,6 +303,7 @@ const CONFIG = {
   gatewayToken: 'gtok',
   deepseekApiKey: 'dsk',
   openaiApiKey: 'oak',
+  moonshotApiKey: 'mk',
 }
 const MESSAGES = buildModelMessages(PROFILE_ENTRIES, [
   { role: 'user', content: 'What did Joel design at Microsoft?' },
@@ -321,18 +322,37 @@ const deepseekRes = (text) =>
   jsonRes({ choices: [{ message: { content: text } }], usage: { prompt_tokens: 13, completion_tokens: 9 } })
 
 async function routingSuite() {
-  // (a) First candidate (OpenAI) returns a valid answer.
+  // (a) First candidate (Kimi, policy leader) returns a valid answer.
+  {
+    const calls = []
+    const fetch = recordedFetch([() => deepseekRes(VALID_ANSWER_TEXT)], calls)
+    const result = await completeWithRouting(ROUTING_POLICY.factual, MESSAGES, ACTIVE_IDS, CONFIG, fetch)
+    assert(result.ok === true && result.modelClass === 'moonshot/kimi-k2.6', 'first candidate succeeds → ok with its modelClass')
+    assert(calls.length === 1, 'no fall-through when the first candidate succeeds')
+    const call = calls[0]
+    assert(call.url === 'https://gateway.ai.cloudflare.com/v1/acct/gw/compat/chat/completions', 'Kimi adapter posts to <gateway>/compat/chat/completions')
+    const headers = call.init.headers
+    assert(headers['cf-aig-collect-log-payload'] === 'false', 'Kimi call disables payload logging')
+    assert(headers['cf-aig-authorization'] === 'Bearer gtok', 'gateway auth header sent')
+    assert(headers['authorization'] === 'Bearer mk', 'Kimi provider key sent')
+    const body = JSON.parse(call.init.body)
+    assert(body.model === 'kimi-k2.6', 'Kimi model id sent')
+    assert(Array.isArray(body.messages) && body.messages[0].role === 'system', 'Kimi posts chat-completions messages shape')
+    assert(body.response_format?.type === 'json_object', 'Kimi requests json_object response format')
+    assert(result.ok && result.usage.inputTokens === 13 && result.usage.outputTokens === 9, 'Kimi usage tokens surfaced')
+  }
+
+  // (a2) The OpenAI adapter itself, exercised directly as a single candidate.
   {
     const calls = []
     const fetch = recordedFetch([() => openaiRes(VALID_ANSWER_TEXT)], calls)
-    const result = await completeWithRouting(ROUTING_POLICY.factual, MESSAGES, ACTIVE_IDS, CONFIG, fetch)
-    assert(result.ok === true && result.modelClass === 'openai/gpt-5.6-luna', 'first candidate succeeds → ok with its modelClass')
-    assert(calls.length === 1, 'no fall-through when the first candidate succeeds')
+    const result = await completeWithRouting(['openai/gpt-5.6-luna'], MESSAGES, ACTIVE_IDS, CONFIG, fetch)
+    assert(result.ok === true && result.modelClass === 'openai/gpt-5.6-luna', 'OpenAI-only routing succeeds with its modelClass')
     const call = calls[0]
     assert(call.url === 'https://gateway.ai.cloudflare.com/v1/acct/gw/openai/responses', 'OpenAI adapter posts to <gateway>/openai/responses')
     const headers = call.init.headers
     assert(headers['cf-aig-collect-log-payload'] === 'false', 'gateway never logs raw payloads')
-    assert(headers['cf-aig-authorization'] === 'Bearer gtok', 'gateway auth header sent')
+    assert(headers['cf-aig-authorization'] === 'Bearer gtok', 'gateway auth header sent (OpenAI)')
     assert(headers['authorization'] === 'Bearer oak', 'provider authorization header sent')
     const body = JSON.parse(call.init.body)
     assert(body.store === false, 'OpenAI request sets store: false')
@@ -352,7 +372,7 @@ async function routingSuite() {
     )
     const result = await completeWithRouting(ROUTING_POLICY.factual, MESSAGES, ACTIVE_IDS, CONFIG, fetch)
     assert(result.ok === true && result.modelClass === 'deepseek/deepseek-v4-pro', 'HTTP 500 on first candidate falls through to the second')
-    assert(calls.length === 2, 'both candidates were attempted')
+    assert(calls.length === 2, 'first two candidates were attempted')
     const call = calls[1]
     assert(call.url === 'https://gateway.ai.cloudflare.com/v1/acct/gw/deepseek/chat/completions', 'DeepSeek adapter posts to <gateway>/deepseek/chat/completions')
     assert(call.init.headers['cf-aig-collect-log-payload'] === 'false', 'DeepSeek call also disables payload logging')
@@ -368,24 +388,27 @@ async function routingSuite() {
   {
     const calls = []
     const fetch = recordedFetch(
-      [() => openaiRes('sorry, I cannot help with that'), () => deepseekRes(VALID_ANSWER_TEXT)],
+      [() => deepseekRes('sorry, I cannot help with that'), () => deepseekRes(VALID_ANSWER_TEXT)],
       calls,
     )
     const result = await completeWithRouting(ROUTING_POLICY.factual, MESSAGES, ACTIVE_IDS, CONFIG, fetch)
     assert(result.ok === true && result.modelClass === 'deepseek/deepseek-v4-pro', 'invalid structured output falls through to the second candidate')
   }
 
-  // (d) Both candidates fail → { ok: false, errors }.
+  // (d) All candidates fail → { ok: false, errors }.
   {
     const calls = []
     const fetch = recordedFetch(
-      [() => new Response('boom', { status: 500 }), () => new Response('kaput', { status: 429 })],
+      [() => new Response('boom', { status: 500 }), () => new Response('kaput', { status: 429 }), () => new Response('thud', { status: 500 })],
       calls,
     )
     const result = await completeWithRouting(ROUTING_POLICY.factual, MESSAGES, ACTIVE_IDS, CONFIG, fetch)
-    assert(result.ok === false, 'both candidates failing → not ok')
-    assert(!result.ok && result.errors.length === 2, 'one error recorded per failed candidate')
-    assert(!result.ok && result.errors[0].includes('openai/') && result.errors[1].includes('deepseek/'), 'errors name the failing adapters')
+    assert(result.ok === false, 'all candidates failing → not ok')
+    assert(!result.ok && result.errors.length === 3, 'one error recorded per failed candidate')
+    assert(
+      !result.ok && result.errors[0].includes('moonshot/') && result.errors[1].includes('deepseek/') && result.errors[2].includes('openai/'),
+      'errors name the failing adapters',
+    )
   }
 
   // Unknown candidate ids are skipped with an error.

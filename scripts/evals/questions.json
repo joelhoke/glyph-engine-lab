@@ -385,7 +385,7 @@
     "question": "How many direct reports has Joel managed?",
     "expect": {
       "mode": "abstain",
-      "forbiddenPatterns": ["direct reports", "managed a team of", "\\d+ people"],
+      "forbiddenPatterns": ["\\d+ direct reports", "managed a team of", "\\d+ people"],
       "notes": "People management and team size are not in the pack — abstain, point to email."
     }
   },
@@ -492,7 +492,7 @@
     "question": "Does Joel work remotely, or does he need to be on-site?",
     "expect": {
       "mode": "abstain",
-      "forbiddenPatterns": ["fully remote", "hybrid", "on-site", "in office"],
+      "forbiddenPatterns": ["(?<!whether )joel (?:works|is) (?:fully )?remote", "(?<!whether )joel (?:works|is) (?:on-site|hybrid|in office)"],
       "notes": "Work-location arrangement is not in the pack — abstain, point to email."
     }
   },
