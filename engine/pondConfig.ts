@@ -91,23 +91,24 @@ export const POND_FORMATION_SPIN_HALF_LIFE_MAX = 5000
 export const POND_FORMATION_MAX_SPIN_MIN = 0
 export const POND_FORMATION_MAX_SPIN_MAX = 10
 
-/** Inert defaults: disabled, gentle cruise. */
+/** Inert defaults: disabled, tuned swim (values pinned from the live tuning
+ *  pass: brisk 175 px/s cruise, light wander, strong pointer current). */
 export const POND_DEFAULTS: PondConfig = {
   enabled: false,
-  cruiseSpeed: 60,
-  wanderStrength: 0.5,
-  pointerCurrentStrength: 1,
+  cruiseSpeed: 175,
+  wanderStrength: 0.1,
+  pointerCurrentStrength: 2,
   rippleStrength: 1,
   boundaryMinBounceSpeed: 0.5,
-  boundaryMaxBounceSpeed: 8,
-  boundaryFullBounceImpactSpeed: 8,
+  boundaryMaxBounceSpeed: 20,
+  boundaryFullBounceImpactSpeed: 10,
   formationContactThresholdPercent: 5,
   formationImpactWindowMs: 350,
   formationBounceRestitution: 1,
   formationMinInwardSpeedRatio: 0.5,
   formationBounceCooldownMs: 600,
   formationAngularImpulseStrength: 3.5,
-  formationSpinHalfLifeMs: 1800,
+  formationSpinHalfLifeMs: 2700,
   formationMaxAngularSpeed: 5,
 }
 

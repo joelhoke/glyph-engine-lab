@@ -360,10 +360,16 @@ const RESTING = Math.PI // original fish rests facing -X
 {
   assert(POND_DEFAULTS.enabled === false, 'pond defaults to disabled (inert)')
   assert(
+    POND_DEFAULTS.cruiseSpeed === 175 &&
+      POND_DEFAULTS.wanderStrength === 0.1 &&
+      POND_DEFAULTS.pointerCurrentStrength === 2,
+    'swim defaults: cruise 175 px/s, wander 0.1, pointer current 2 (tuned)',
+  )
+  assert(
     POND_DEFAULTS.boundaryMinBounceSpeed === 0.5 &&
-      POND_DEFAULTS.boundaryMaxBounceSpeed === 8 &&
-      POND_DEFAULTS.boundaryFullBounceImpactSpeed === 8,
-    'boundary defaults: min 0.5, max 8, full-bounce impact 8 (px/frame)',
+      POND_DEFAULTS.boundaryMaxBounceSpeed === 20 &&
+      POND_DEFAULTS.boundaryFullBounceImpactSpeed === 10,
+    'boundary defaults: min 0.5, max 20, full-bounce impact 10 (px/frame)',
   )
   const clamped = clampPondConfig({
     enabled: true,
@@ -436,9 +442,9 @@ const RESTING = Math.PI // original fish rests facing -X
 
   assert(
     POND_DEFAULTS.formationAngularImpulseStrength === 3.5 &&
-      POND_DEFAULTS.formationSpinHalfLifeMs === 1800 &&
+      POND_DEFAULTS.formationSpinHalfLifeMs === 2700 &&
       POND_DEFAULTS.formationMaxAngularSpeed === 5,
-    'spin defaults: impulse 3.5 rad/s, half-life 1800ms, max 5 rad/s',
+    'spin defaults: impulse 3.5 rad/s, half-life 2700ms, max 5 rad/s',
   )
   const spinClamped = clampPondConfig({
     ...POND_DEFAULTS,
@@ -1330,6 +1336,7 @@ const RESTING = Math.PI // original fish rests facing -X
 {
   const config = pondWith({
     cruiseSpeed: 60,
+    boundaryFullBounceImpactSpeed: 8,
     formationContactThresholdPercent: 1,
     formationBounceCooldownMs: 0,
     formationAngularImpulseStrength: 3.5,
