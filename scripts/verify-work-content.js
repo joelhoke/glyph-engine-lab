@@ -162,8 +162,8 @@ assert(
   'employee-experience story keeps the MyHub+Viva composite and adds two self-hosted images',
 )
 assert(
-  !!employeeProject && employeeProject.story.links.length === 4,
-  'employee-experience story carries its four external links',
+  !!employeeProject && employeeProject.story.links.length === 5,
+  'employee-experience story carries its five external links',
 )
 assert(
   !!employeeProject &&
@@ -171,6 +171,13 @@ assert(
       l.url.includes('accelerating-our-cultural-transformation-at-microsoft-with-viva-and-ai'),
     ),
   'employee-experience story links the Microsoft Inside Track Viva source',
+)
+assert(
+  !!employeeProject &&
+    employeeProject.story.links.some((l) =>
+      l.url.includes('deploying-microsoft-viva-connections-internally-at-microsoft'),
+    ),
+  'employee-experience story links the Inside Track Viva Connections deployment source',
 )
 assert(
   !!employeeProject &&

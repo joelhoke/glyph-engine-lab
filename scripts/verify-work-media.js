@@ -203,7 +203,7 @@ if (process.platform === 'darwin') {
 // docs/work-media-sources.md with its source page, original asset URL,
 // retrieval date, and displayed caption (feature/work-expanding-case-study)
 const ADDED_ASSETS = [
-  'EmployeeExperience-MyHub-AppStore.png',
+  'EmployeeExperience-VivaConnections-Dashboard.png',
   'EmployeeExperience-VivaConnections.jpg',
   'GlobalCompensation-TotalRewards-Employee.png',
   'GlobalCompensation-TotalRewards-Manager.png',

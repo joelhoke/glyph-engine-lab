@@ -2,14 +2,14 @@
 
 Provenance for self-hosted images in `public/assets/work/` used by the case-study pages. All assets were downloaded from the original publisher CDNs (never hotlinked), re-encoded to strip metadata, and sized to a 1600px longest edge.
 
-## EmployeeExperience-MyHub-AppStore.png
+## EmployeeExperience-VivaConnections-Dashboard.png
 
 - **Story:** Employee Experience
-- **Local path:** `public/assets/work/EmployeeExperience-MyHub-AppStore.png`
-- **Source page:** https://apps.apple.com/us/app/microsoft-myhub/id1476326475
-- **Original asset URL:** https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/5b/91/e0/5b91e0e6-90d0-6192-1307-cfe7706e10da/93f31157-3859-47eb-8168-b9c06049093b_ILSImageX.png/1242x2688bb.png
-- **Retrieval date:** 2026-08-13
-- **Caption:** The published Microsoft MyHub app showing in-building wayfinding — a later public product view of the employee-experience platform this design work contributed to.
+- **Local path:** `public/assets/work/EmployeeExperience-VivaConnections-Dashboard.png`
+- **Source page:** https://www.microsoft.com/insidetrack/blog/deploying-microsoft-viva-connections-internally-at-microsoft/
+- **Original asset URL:** https://www.microsoft.com/insidetrack/blog/uploads/prod/2023/06/10442_image001.png
+- **Retrieval date:** 2026-08-15
+- **Caption:** Microsoft's internal Viva Connections dashboard as published by Microsoft Inside Track — cards for pay, stock awards, facilities requests, tech support, and workplace services this design work supported.
 
 ## EmployeeExperience-VivaConnections.jpg
 
