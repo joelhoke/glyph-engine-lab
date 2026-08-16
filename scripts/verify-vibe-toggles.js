@@ -546,6 +546,38 @@ async function scenarioMobile(browser) {
   })
   check('mobile: expanded pills do not overlap the center toolbar chrome', !overlap)
 
+  // Open toolbar dialog stacks above the edge chevrons (ambient carousel):
+  // at the chevron's center, the topmost element must belong to the panel.
+  await page.click('button.vibe-toolbar-category[aria-label="Paint"]')
+  await page.waitForSelector('.vibe-toolbar-panel', { timeout: 10000 })
+  const stacking = await page.evaluate(() => {
+    const panel = document.querySelector('.vibe-toolbar-panel')
+    const chevron = document.querySelector('.vibe-ambient-nav-button-prev')
+    if (!panel || !chevron) return null
+    const p = panel.getBoundingClientRect()
+    const c = chevron.getBoundingClientRect()
+    const cx = c.left + c.width / 2
+    const cy = c.top + c.height / 2
+    const hit = document.elementFromPoint(cx, cy)
+    return {
+      covers:
+        cx >= p.left && cx <= p.right && cy >= p.top && cy <= p.bottom,
+      hitIsChevron: !!hit && (hit === chevron || chevron.contains(hit)),
+      toolbarZ: getComputedStyle(document.querySelector('.vibe-toolbar')).zIndex,
+      navZ: getComputedStyle(document.querySelector('.vibe-ambient-nav')).zIndex,
+    }
+  })
+  check(
+    'mobile: open toolbar dialog covers the ambient chevrons',
+    !!stacking &&
+      stacking.covers &&
+      !stacking.hitIsChevron &&
+      Number(stacking.toolbarZ) > Number(stacking.navZ),
+    JSON.stringify(stacking),
+  )
+  await page.keyboard.press('Escape')
+  await sleep(200)
+
   // Visual viewport shrink (browser chrome): controls remain fully visible.
   await page.setViewportSize({ width: 390, height: 600 })
   await sleep(200)
