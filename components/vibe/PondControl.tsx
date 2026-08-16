@@ -1,10 +1,11 @@
 'use client'
 
 /**
- * Pond control: a round fish button fixed at the lower-right screen corner.
- * Clicking it enables the pond and expands a teal gradient pill — the same
- * structure as the Sound control: a fish badge on the left (click it to
- * disable/collapse) and the four swimming-body characters as a radiogroup.
+ * Pond control: a round toggle fixed at the lower-right screen corner, using
+ * the supplied pond glyph (sun over water). Clicking it enables the pond and
+ * expands a teal gradient pill — the same structure as the Sound control: a
+ * badge on the left (click it to disable/collapse) and the four swimming-body
+ * characters as a radiogroup.
  *
  * Session-only UI: nothing here persists — the parent owns the state.
  */
@@ -26,11 +27,11 @@ const POND_CHOICES: { value: PondCharacter; label: string }[] = [
   { value: 'ray', label: 'Ray' },
 ]
 
-/* Icons render as CSS masks over currentColor (same idiom as the vibe
-   toolbar) so color/hover/focus states come from CSS. */
-const FISH_MASK = {
-  WebkitMaskImage: 'url(/toolbar/Pond-icon.svg)',
-  maskImage: 'url(/toolbar/Pond-icon.svg)',
+/* The pond glyph (sun over water) supplied as public/toolbar/AmbientPond.png;
+   rendered as a CSS mask over currentColor. */
+const POND_GLYPH_MASK = {
+  WebkitMaskImage: 'url(/toolbar/AmbientPond.png)',
+  maskImage: 'url(/toolbar/AmbientPond.png)',
 } as const
 
 export default function PondControl({
@@ -50,7 +51,7 @@ export default function PondControl({
           aria-expanded={false}
           onClick={onToggle}
         >
-          <span className="vibe-pond-toggle-icon" style={FISH_MASK} aria-hidden="true" />
+          <span className="vibe-pond-toggle-icon" style={POND_GLYPH_MASK} aria-hidden="true" />
         </button>
       </div>
     )
@@ -66,7 +67,7 @@ export default function PondControl({
           aria-expanded={true}
           onClick={onToggle}
         >
-          <span className="vibe-pond-badge-icon" style={FISH_MASK} aria-hidden="true" />
+          <span className="vibe-pond-badge-icon" style={POND_GLYPH_MASK} aria-hidden="true" />
         </button>
         <div className="vibe-pond-choices" role="radiogroup" aria-label="Pond character">
           {POND_CHOICES.map((choice) => {

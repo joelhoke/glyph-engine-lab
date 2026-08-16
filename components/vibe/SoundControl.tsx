@@ -76,10 +76,15 @@ export default function SoundControl({
           aria-expanded={false}
           onClick={onExpand}
         >
-          <img
+          {/* Collapsed (off) state: note glyph as a CSS mask over the toolbar
+              beam background, per the simplified-controls direction. The
+              supplied vibe-sound-off.png original stays unused but kept. */}
+          <span
             className="vibe-sound-toggle-icon"
-            src="/toolbar/vibe-sound-off.png"
-            alt=""
+            style={{
+              WebkitMaskImage: 'url(/toolbar/vibe-sound-note.png)',
+              maskImage: 'url(/toolbar/vibe-sound-note.png)',
+            }}
             aria-hidden="true"
           />
         </button>
