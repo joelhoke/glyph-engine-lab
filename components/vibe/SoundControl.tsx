@@ -130,8 +130,8 @@ export default function SoundControl({
           {playing ? (
             <svg
               className="vibe-sound-pause-icon"
-              width="16"
-              height="18"
+              width="22"
+              height="25"
               viewBox="0 0 14 16"
               fill="currentColor"
               xmlns="http://www.w3.org/2000/svg"

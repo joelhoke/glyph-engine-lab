@@ -4997,13 +4997,14 @@ a.guide-source:focus-visible {
 }
 
 /* Expanded pill: deep teal gradient + white ring, badge circle on the left
-   (matches the supplied artwork at 52px rendered height). */
+   (matches the supplied artwork). Height matches the toolbar capsule
+   (~72px) so opening never "shrinks". */
 .vibe-pond-pill {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
-  height: 52px;
-  padding: 0 0.45rem 0 0;
+  gap: 0.35rem;
+  height: 72px;
+  padding: 0 0.6rem 0 0;
   border: 3px solid rgba(255, 255, 255, 0.92);
   border-radius: 999px;
   background:
@@ -5020,9 +5021,9 @@ a.guide-source:focus-visible {
   align-items: center;
   justify-content: center;
   flex: none;
-  width: 46px;
-  height: 46px;
-  margin: 0 0.15rem 0 0;
+  width: 64px;
+  height: 64px;
+  margin: 0 0.2rem 0 1px;
   padding: 0;
   border: none;
   border-radius: 999px;
@@ -5043,8 +5044,8 @@ a.guide-source:focus-visible {
 }
 
 .vibe-pond-badge-icon {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   display: block;
   background-color: currentColor;
   -webkit-mask-position: center;
@@ -5065,13 +5066,13 @@ a.guide-source:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
-  padding: 0.35rem 0.8rem;
+  min-height: 44px;
+  padding: 0.45rem 1rem;
   border: 2px solid transparent;
   border-radius: 999px;
   background: transparent;
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   line-height: 1.2;
   color: rgba(255, 255, 255, 0.85);
   cursor: pointer;
@@ -5148,10 +5149,13 @@ a.guide-source:focus-visible {
   color: var(--color-accent);
 }
 
-/* Note glyph as a CSS mask over currentColor (toolbar icon idiom). */
+/* Note glyph as a CSS mask over currentColor (toolbar icon idiom). The
+   glyph's visual weight leans right (note head), so it is nudged 2px left
+   for optical centering. */
 .vibe-sound-toggle-icon {
   width: 30px;
   height: 36px;
+  transform: translateX(-2px);
   display: block;
   background-color: currentColor;
   -webkit-mask-position: center;
@@ -5163,10 +5167,11 @@ a.guide-source:focus-visible {
 }
 
 /* The pill composes the derived artwork layers (vibe-sound-*.png) at the
-   source artwork's aspect ratio; glyph buttons sit on their artwork spots. */
+   source artwork's aspect ratio; glyph buttons sit on their artwork spots.
+   Height matches the toolbar capsule (~72px) so opening never "shrinks". */
 .vibe-sound-pill {
   position: relative;
-  height: 52px;
+  height: 72px;
   aspect-ratio: 232 / 103;
 }
 
@@ -5242,8 +5247,8 @@ a.guide-source:focus-visible {
 
 .vibe-sound-play-icon {
   /* Artwork triangle is 21x27 (29x35 with pad) in a 103px-tall pill:
-     ~18px at the pill's rendered 52px height. */
-  height: 18px;
+     ~25px at the pill's rendered 72px height. */
+  height: 25px;
   width: auto;
   display: block;
 }
@@ -5260,8 +5265,8 @@ a.guide-source:focus-visible {
 }
 
 .vibe-sound-direction-arrow {
-  /* Artwork arrow is 24x30 (32x38 with pad): ~19px at the 52px pill. */
-  height: 19px;
+  /* Artwork arrow is 24x30 (32x38 with pad): ~26px at the 72px pill. */
+  height: 26px;
   width: auto;
   display: block;
   transition: transform 200ms ease;
@@ -5281,14 +5286,36 @@ a.guide-source:focus-visible {
   color: var(--color-text-muted);
 }
 
-/* Narrow screens: only the EXPANDED pills leave the corners (the collapsed
-   toggles stay put), staggering above the center toolbar — sound first,
-   pond above it. Offsets assume the mobile toolbar (~8.6rem tall at bottom
-   0.5rem). */
+/* Collision guards: an expanded pill that no longer fits beside the center
+   toolbar moves ABOVE it (centered, staggered sound lower / pond higher —
+   the same pattern as narrow screens). The 72px pond pill (~24rem wide at
+   the 20vw inset) collides with the toolbar capsule below ~1728px; the
+   72px sound pill (~10rem) below ~990px. */
+@media (max-width: 1728px) {
+  .vibe-pond-control:has(.vibe-pond-pill) {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    /* sound pill bottom (9.6rem) + pill height (4.5rem) + 0.5rem gap */
+    bottom: calc(14.6rem + env(safe-area-inset-bottom, 0px));
+    align-items: center;
+  }
+}
+
+@media (max-width: 990px) {
+  .vibe-sound-control:has(.vibe-sound-pill) {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    bottom: calc(9.6rem + env(safe-area-inset-bottom, 0px));
+    align-items: center;
+  }
+}
+
+/* Narrow screens: the collapsed toggles keep the corner inset (20vw would
+   collide with the nearly full-width toolbar capsule) and align with the
+   mobile capsule row (center ≈ 3.2rem + 33px above the bottom). */
 @media (max-width: 640px) {
-  /* Collapsed toggles keep the corner inset (20vw would collide with the
-     nearly full-width toolbar capsule) and align with the mobile capsule
-     row (center ≈ 3.2rem + 33px above the bottom). */
   .vibe-sound-control:not(:has(.vibe-sound-pill)) {
     left: calc(0.75rem + env(safe-area-inset-left, 0px));
     bottom: calc(3.2rem + env(safe-area-inset-bottom, 0px));
@@ -5297,22 +5324,6 @@ a.guide-source:focus-visible {
   .vibe-pond-control:not(:has(.vibe-pond-pill)) {
     right: calc(0.75rem + env(safe-area-inset-right, 0px));
     bottom: calc(3.2rem + env(safe-area-inset-bottom, 0px));
-  }
-
-  .vibe-sound-control:has(.vibe-sound-pill) {
-    left: 50%;
-    right: auto;
-    transform: translateX(-50%);
-    bottom: calc(9.6rem + env(safe-area-inset-bottom, 0px));
-    align-items: center;
-  }
-
-  .vibe-pond-control:has(.vibe-pond-pill) {
-    right: auto;
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: calc(13.35rem + env(safe-area-inset-bottom, 0px));
-    align-items: center;
   }
 }
 
