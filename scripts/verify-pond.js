@@ -14,8 +14,7 @@
  * body rebound with restitution/min-kick/heading alignment, cooldown), and
  * the fixed-orientation creature geometry in engine/motion.ts (resting-
  * orientation evidence; no facing metadata — creatures never flip).
- * SceneCanvas routing invariants and PondPanel copy are asserted as source
- * text.
+ * SceneCanvas routing invariants are asserted as source text.
  */
 
 const { execSync } = require('child_process')
@@ -735,7 +734,7 @@ const RESTING = Math.PI // original fish rests facing -X
   assert(finite, 'targets stay finite across source switches with the pond active')
 }
 
-// (17) SceneCanvas routing + PondPanel copy (source-text invariants)
+// (17) SceneCanvas routing + retired debug panel (source-text invariants)
 {
   const sceneSrc = fs.readFileSync(path.join(projectRoot, 'components', 'SceneCanvas.tsx'), 'utf8')
   assert(
@@ -783,57 +782,9 @@ const RESTING = Math.PI // original fish rests facing -X
     'only the main glyph loop runs the boundary pass (ambient pool untouched)',
   )
 
-  const panelSrc = fs.readFileSync(
-    path.join(projectRoot, 'components', 'vibe', 'PondPanel.tsx'),
-    'utf8',
-  )
   assert(
-    !panelSrc.includes('Use Original fish') && !panelSrc.includes('Only the Original fish'),
-    'PondPanel drops the obsolete fish-only hint and action',
-  )
-  assert(
-    panelSrc.includes('vibe-pond-panel'),
-    'PondPanel keeps its panel class (debug gating selector)',
-  )
-  assert(
-    panelSrc.includes('boundaryMinBounceSpeed') &&
-      panelSrc.includes('boundaryMaxBounceSpeed') &&
-      panelSrc.includes('boundaryFullBounceImpactSpeed'),
-    'PondPanel wires the three boundary config fields',
-  )
-  assert(
-    panelSrc.includes('Min bounce') &&
-      panelSrc.includes('Max bounce') &&
-      panelSrc.includes('Full-bounce impact'),
-    'PondPanel labels the three boundary controls accessibly',
-  )
-  assert(
-    panelSrc.includes('formationContactThresholdPercent') &&
-      panelSrc.includes('formationImpactWindowMs') &&
-      panelSrc.includes('formationBounceRestitution') &&
-      panelSrc.includes('formationMinInwardSpeedRatio') &&
-      panelSrc.includes('formationBounceCooldownMs'),
-    'PondPanel wires the five formation config fields',
-  )
-  assert(
-    panelSrc.includes('Object contact threshold') &&
-      panelSrc.includes('Object impact window') &&
-      panelSrc.includes('Object restitution') &&
-      panelSrc.includes('Object inward kick') &&
-      panelSrc.includes('Object bounce cooldown'),
-    'PondPanel labels the five formation controls accessibly',
-  )
-  assert(
-    panelSrc.includes('formationAngularImpulseStrength') &&
-      panelSrc.includes('formationSpinHalfLifeMs') &&
-      panelSrc.includes('formationMaxAngularSpeed'),
-    'PondPanel wires the three spin config fields',
-  )
-  assert(
-    panelSrc.includes('Impact torque') &&
-      panelSrc.includes('Spin half-life') &&
-      panelSrc.includes('Max spin speed'),
-    'PondPanel labels the three spin controls accessibly',
+    !fs.existsSync(path.join(projectRoot, 'components', 'vibe', 'PondPanel.tsx')),
+    'the debug PondPanel is retired (pond physics stay at hidden POND_DEFAULTS)',
   )
 }
 

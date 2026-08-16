@@ -1,17 +1,13 @@
 'use client'
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { BorderBeam } from 'border-beam'
 import { PlaygroundConfig } from '../../engine/playgroundConfig'
 import { PaintStatus, PaintToolConfig } from '../../engine/paint'
-import { PondConfig } from '../../engine/pondConfig'
-import { SonificationConfig } from '../../engine/sonificationConfig'
-import type { SonificationPlaybackState } from '../../engine/sonificationEngine'
 import { VibePreset } from '../../content/vibe'
 import { SceneCanvasHandle } from '../SceneCanvas'
 import {
   CategoryConfig,
-  DEBUG_ONLY_CATEGORIES,
   UtilityConfig,
   VIBE_TOOLBAR_CATEGORIES,
   VIBE_TOOLBAR_UTILITIES,
@@ -22,10 +18,6 @@ import UploadPanel from './UploadPanel'
 import TextEffectsPanel from './TextEffectsPanel'
 import ColorStylesPanel from './ColorStylesPanel'
 import PaintPanel from './PaintPanel'
-import MotionEffectsPanel from './MotionEffectsPanel'
-import AmbientPanel from './AmbientPanel'
-import PondPanel from './PondPanel'
-import SoundPanel from './SoundPanel'
 import type { ClipRecorderControls } from './useClipRecorder'
 
 export type VibeToolbarProps = {
@@ -55,23 +47,8 @@ export type VibeToolbarProps = {
   onClearPaint: () => void
   /** Scene canvas handle for the share PNG export. */
   canvasRef: React.RefObject<SceneCanvasHandle>
-  /** Dev ?debug=true: reveals debug-only categories (DEBUG_ONLY_CATEGORIES —
-   *  e.g. Visual Sonification). Production visitors never see them — the
-   *  category is not rendered at all. */
+  /** Dev ?debug=true: exposes the clip diagnostics details in the preview. */
   debugMode?: boolean
-  /** Session-only Private Pond experiment config (debug-only); never enters
-   *  history/presets/sharing. */
-  pond?: PondConfig
-  onPondChange?: (next: PondConfig) => void
-  /** Session-only Visual Sonification experiment state (debug-only). */
-  sound?: {
-    config: SonificationConfig
-    playback: SonificationPlaybackState
-    error: string | null
-  }
-  onSoundConfigChange?: (next: SonificationConfig) => void
-  onSoundPlay?: () => void
-  onSoundPause?: () => void
   /** Clip recording state + actions (15-second canvas+soundtrack export).
    *  Session-only; the blob never leaves the browser without an explicit
    *  share/download. */
@@ -112,12 +89,6 @@ export default function VibeToolbar({
   onClearPaint,
   canvasRef,
   debugMode = false,
-  pond,
-  onPondChange,
-  sound,
-  onSoundConfigChange,
-  onSoundPlay,
-  onSoundPause,
   clip,
   id: externalId,
 }: VibeToolbarProps) {
@@ -144,13 +115,9 @@ export default function VibeToolbar({
   const utilityButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const shareFeedbackTimeoutRef = useRef<number | null>(null)
 
-  // Debug-only categories (DEBUG_ONLY_CATEGORIES — Visual Sonification) are
-  // filtered out entirely unless the dev ?debug=true mode is on — never
-  // merely disabled, never rendered.
-  const visibleCategories = useMemo(
-    () => VIBE_TOOLBAR_CATEGORIES.filter((category) => !DEBUG_ONLY_CATEGORIES.has(category.id) || debugMode),
-    [debugMode],
-  )
+  // The center toolbar is the simplified four-category set (Upload, Text,
+  // Color, Paint); ambient, pond, and sound live in their own controls.
+  const visibleCategories = VIBE_TOOLBAR_CATEGORIES
 
   useEffect(() => {
     setMounted(true)
@@ -239,7 +206,8 @@ export default function VibeToolbar({
   }
 
   // Recording (or finalizing) a clip locks the actions that would interrupt
-  // it: Reset, a duplicate Share, and the debug Sound transport.
+  // it: Reset and a duplicate Share. (The Sound control's transport is locked
+  // out by the parent on the same flag.)
   const clipRecordingActive = clip?.phase === 'recording' || clip?.phase === 'processing'
 
   const closeShareChooser = () => {
@@ -567,26 +535,6 @@ export default function VibeToolbar({
               clearDisabled={!paintStatus || paintStatus.strokeCount === 0}
             />
           )}
-          {selectedTool === 'motion' && (
-            <MotionEffectsPanel config={config} onChange={onChange} />
-          )}
-          {selectedTool === 'ambient' && (
-            <AmbientPanel config={config.ambient} onChange={onChange} />
-          )}
-          {selectedTool === 'pond' && pond && onPondChange && (
-            <PondPanel pond={pond} onPondChange={onPondChange} />
-          )}
-          {selectedTool === 'sound' && sound && onSoundConfigChange && (
-            <SoundPanel
-              config={sound.config}
-              playback={sound.playback}
-              error={sound.error}
-              onPlay={onSoundPlay ?? (() => {})}
-              onPause={onSoundPause ?? (() => {})}
-              onConfigChange={onSoundConfigChange}
-              transportDisabled={clipRecordingActive}
-            />
-          )}
         </div>
       </div>
     )
@@ -795,14 +743,6 @@ function getPanelLabel(tool: NonNullable<VibeToolbarTool>): string {  switch (to
       return 'Color Styles'
     case 'paint':
       return 'Paint'
-    case 'motion':
-      return 'Motion Effects'
-    case 'ambient':
-      return 'Ambient'
-    case 'pond':
-      return 'Pond'
-    case 'sound':
-      return 'Sound'
     default:
       return tool
   }

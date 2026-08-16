@@ -1,21 +1,25 @@
 #!/usr/bin/env node
 // =============================================================================
-// Browser-level gating verification for the debug-only toolbar experiments
-// (Private Pond + Visual Sonification).
+// Browser-level gating verification for the promoted vibe controls (ambient
+// carousel, Private Pond, Visual Sonification) after the toolbar
+// simplification.
 //
 // Drives the real site in headless Chrome (system install) against
-// `next dev` — isTuningMode() requires NODE_ENV development AND ?debug=true,
-// so a dev server is the honest environment for this contract.
+// `next dev`.
 //
 //   node scripts/verify-debug-gating.js [port]
 //
 // Covers:
-//   - without ?debug=true: no Pond/Sound category renders, and no
-//     AudioContext is ever constructed
-//   - with ?debug=true: both categories render; still no AudioContext until
-//     the visitor presses Play in the Sound panel
-//   - Play creates exactly one AudioContext; the scan-line overlay appears
+//   - the center toolbar is exactly the four simplified categories
+//     (Upload/Text Effects/Color Styles/Paint) — with AND without ?debug=true;
+//     no Pond/Sound categories or debug panels exist in either mode
+//   - the Pond and Sound controls render for production visitors (no longer
+//     debug-gated); expanding Sound never starts audio
+//   - no AudioContext exists until the visitor presses Play in the Sound
+//     control; Play creates exactly one; the scan-line overlay appears
 //     (pointer-transparent, aria-hidden); Pause keeps the single context
+//   - Disable collapses the control and stops playback; leaving Vibe stops
+//     playback too (Play required again after returning)
 // =============================================================================
 
 const { spawn } = require('node:child_process')
@@ -70,8 +74,8 @@ const seedConsentAndAudioCounter = (context) =>
         JSON.stringify({ decision: 'denied', decidedAt: Date.now() }),
       )
     } catch {}
-    // Count every AudioContext construction: the production contract is that
-    // NONE exists until a debug-mode visitor presses Play.
+    // Count every AudioContext construction: the contract is that NONE exists
+    // until the visitor presses Play in the Sound control.
     window.__JH_AC_COUNT__ = 0
     const wrap = (Ctor) =>
       Ctor
@@ -139,76 +143,86 @@ async function openVibeToolbar(page) {
   await page.waitForSelector('.vibe-toolbar', { timeout: 15000 })
 }
 
+/** The simplified toolbar contract, checked in both production and debug. */
+async function checkSimplifiedToolbar(page, modeLabel) {
+  const counts = await page.evaluate(() => ({
+    categories: Array.from(document.querySelectorAll('button.vibe-toolbar-category')).map(
+      (button) => button.getAttribute('aria-label'),
+    ),
+    debugPanels: document.querySelectorAll('.vibe-sound-panel,.vibe-pond-panel').length,
+    pondToggle: document.querySelectorAll('button.vibe-pond-toggle').length,
+    soundToggle: document.querySelectorAll('button.vibe-sound-toggle').length,
+    overlay: document.querySelectorAll('.sonification-scan-overlay').length,
+  }))
+  check(
+    `${modeLabel}: toolbar is exactly the four simplified categories`,
+    JSON.stringify(counts.categories) ===
+      JSON.stringify(['Upload', 'Text Effects', 'Color Styles', 'Paint']),
+    JSON.stringify(counts.categories),
+  )
+  check(
+    `${modeLabel}: no debug pond/sound panels exist`,
+    counts.debugPanels === 0,
+    `got ${counts.debugPanels}`,
+  )
+  check(`${modeLabel}: Pond control renders (promoted, not debug-only)`, counts.pondToggle === 1)
+  check(`${modeLabel}: Sound control renders (promoted, not debug-only)`, counts.soundToggle === 1)
+  check(`${modeLabel}: no scan-line overlay before Play`, counts.overlay === 0)
+}
+
 async function scenarioProduction(page) {
   console.log('\n== Production (no ?debug=true)')
   await page.goto(`${ORIGIN}/`, { waitUntil: 'domcontentloaded' })
   await openVibeToolbar(page)
-  const counts = await page.evaluate(() => ({
-    pond: document.querySelectorAll('button.vibe-toolbar-category[aria-label="Pond"]').length,
-    sound: document.querySelectorAll('button.vibe-toolbar-category[aria-label="Sound"]').length,
-    panels: document.querySelectorAll('.vibe-sound-panel,.vibe-pond-panel').length,
-    overlay: document.querySelectorAll('.sonification-scan-overlay').length,
-  }))
-  check('production: Pond category is absent', counts.pond === 0, `got ${counts.pond}`)
-  check('production: Sound category is absent', counts.sound === 0, `got ${counts.sound}`)
-  check('production: no debug panels rendered', counts.panels === 0)
-  check('production: no scan-line overlay rendered', counts.overlay === 0)
+  await checkSimplifiedToolbar(page, 'production')
   check(
     'production: no AudioContext is ever created',
     (await audioContextCount(page)) === 0,
     `count ${await audioContextCount(page)}`,
   )
-}
 
-async function scenarioDebug(page) {
-  console.log('\n== Debug (?debug=true)')
-  await page.goto(`${ORIGIN}/?debug=true`, { waitUntil: 'domcontentloaded' })
-  await hideDevChrome(page)
-  await openVibeToolbar(page)
-
-  await waitFor(
-    async () =>
-      (await page.locator('button.vibe-toolbar-category[aria-label="Pond"]').count()) === 1,
-    { label: 'Pond category', timeout: 10000 },
-  )
-  check('debug: Pond category renders', true)
-  await waitFor(
-    async () =>
-      (await page.locator('button.vibe-toolbar-category[aria-label="Sound"]').count()) === 1,
-    { label: 'Sound category', timeout: 10000 },
-  )
-  check('debug: Sound category renders', true)
-  check(
-    'debug: no AudioContext before Play',
-    (await audioContextCount(page)) === 0,
-    `count ${await audioContextCount(page)}`,
-  )
-
-  await page.click('button.vibe-toolbar-category[aria-label="Sound"]')
-  await page.waitForSelector('.vibe-sound-panel', { timeout: 10000 })
-  check('debug: Sound panel opens', true)
-  check(
-    'debug: opening the panel still creates no AudioContext',
-    (await audioContextCount(page)) === 0,
-    `count ${await audioContextCount(page)}`,
-  )
-
-  // Panel controls: direction select, duration, volume, Play.
-  const controls = await page.evaluate(() => ({
-    play: !!document.querySelector('button.vibe-sound-play[aria-label="Play sound"]'),
-    direction: !!document.querySelector('.vibe-sound-select'),
-    overlayBefore: document.querySelectorAll('.sonification-scan-overlay').length,
+  // Pond: the toggle expands the character pill (session-only, no audio).
+  await page.click('button.vibe-pond-toggle')
+  await page.waitForSelector('.vibe-pond-pill', { timeout: 8000 })
+  const pond = await page.evaluate(() => ({
+    choices: Array.from(document.querySelectorAll('.vibe-pond-pill [role="radio"]')).map(
+      (button) => button.textContent,
+    ),
+    sourceChecked: document
+      .querySelector('.vibe-pond-pill [role="radio"]')
+      ?.getAttribute('aria-checked'),
   }))
-  check('debug: Play button is keyboard-accessible with a label', controls.play)
-  check('debug: direction select renders', controls.direction)
-  check('debug: no scan line before Play', controls.overlayBefore === 0)
+  check(
+    'production: pond pill offers Source/Fish/Jelly/Ray with Source selected',
+    JSON.stringify(pond.choices) === JSON.stringify(['Source', 'Fish', 'Jelly', 'Ray']) &&
+      pond.sourceChecked === 'true',
+    JSON.stringify(pond),
+  )
+  await page.click('.vibe-pond-pill [role="radio"]:has-text("Jelly")')
+  const jellyChecked = await page.evaluate(
+    () =>
+      Array.from(document.querySelectorAll('.vibe-pond-pill [role="radio"]')).find(
+        (button) => button.textContent === 'Jelly',
+      )?.getAttribute('aria-checked') === 'true',
+  )
+  check('production: selecting a pond character updates the radiogroup', jellyChecked)
 
-  await page.click('button.vibe-sound-play[aria-label="Play sound"]')
+  // Sound: expanding never starts audio.
+  await page.click('button.vibe-sound-toggle')
+  await page.waitForSelector('.vibe-sound-pill', { timeout: 8000 })
+  check(
+    'production: expanding Sound still creates no AudioContext',
+    (await audioContextCount(page)) === 0,
+    `count ${await audioContextCount(page)}`,
+  )
+
+  // Play: exactly one AudioContext, scan-line overlay appears.
+  await page.click('button.vibe-sound-transport[aria-label="Play sound"]')
   await waitFor(async () => (await audioContextCount(page)) === 1, {
     label: 'AudioContext after Play',
     timeout: 8000,
   })
-  check('debug: Play creates exactly one AudioContext', true)
+  check('production: Play creates exactly one AudioContext', true)
 
   await page.waitForSelector('.sonification-scan-overlay', { timeout: 8000 })
   const overlay = await page.evaluate(() => {
@@ -221,24 +235,57 @@ async function scenarioDebug(page) {
     }
   })
   check(
-    'debug: scan-line overlay is pointer-transparent and aria-hidden',
+    'production: scan-line overlay is pointer-transparent and aria-hidden',
     !!overlay && overlay.pointerEvents === 'none' && overlay.ariaHidden === 'true',
     JSON.stringify(overlay),
   )
-  check('debug: scan-line overlay has no aria-live', !!overlay && overlay.ariaLive === null)
+  check('production: scan-line overlay has no aria-live', !!overlay && overlay.ariaLive === null)
 
-  await page.waitForSelector('button.vibe-sound-play[aria-label="Pause sound"]', { timeout: 8000 })
-  await page.click('button.vibe-sound-play[aria-label="Pause sound"]')
+  // Direction cycles right → down.
+  const directionLabel = () =>
+    page.evaluate(
+      () => document.querySelector('button.vibe-sound-direction')?.getAttribute('aria-label'),
+    )
+  const before = await directionLabel()
+  await page.click('button.vibe-sound-direction')
+  const after = await directionLabel()
+  check(
+    'production: direction button cycles the sweep direction',
+    before === 'Sweep direction: right' && after === 'Sweep direction: down',
+    JSON.stringify({ before, after }),
+  )
+
+  // Pause keeps the single context.
+  await page.waitForSelector('button.vibe-sound-transport[aria-label="Pause sound"]', {
+    timeout: 8000,
+  })
+  await page.click('button.vibe-sound-transport[aria-label="Pause sound"]')
   await sleep(300)
   check(
-    'debug: Pause keeps the single AudioContext',
+    'production: Pause keeps the single AudioContext',
     (await audioContextCount(page)) === 1,
     `count ${await audioContextCount(page)}`,
   )
 
+  // Disable collapses the control and stops playback.
+  await page.click('button.vibe-sound-badge[aria-label="Turn sound off"]')
+  await page.waitForSelector('button.vibe-sound-toggle', { timeout: 8000 })
+  const disabled = await page.evaluate(() => ({
+    pill: document.querySelectorAll('.vibe-sound-pill').length,
+    overlay: document.querySelectorAll('.sonification-scan-overlay').length,
+  }))
+  check('production: Disable collapses the pill', disabled.pill === 0)
+  check('production: Disable removes the scan line', disabled.overlay === 0)
+
   // Leaving Vibe stops playback; returning requires Play again.
-  await page.click('button.vibe-sound-play[aria-label="Play sound"]')
-  await page.waitForSelector('button.vibe-sound-play[aria-label="Pause sound"]', { timeout: 8000 })
+  await page.click('button.vibe-sound-toggle')
+  await page.waitForSelector('button.vibe-sound-transport[aria-label="Play sound"]', {
+    timeout: 8000,
+  })
+  await page.click('button.vibe-sound-transport[aria-label="Play sound"]')
+  await page.waitForSelector('button.vibe-sound-transport[aria-label="Pause sound"]', {
+    timeout: 8000,
+  })
   await page.click('.experience-nav-button >> text=Work')
   await page.waitForSelector('.work-experience', { timeout: 15000 })
   await page.evaluate(() => {
@@ -247,17 +294,33 @@ async function scenarioDebug(page) {
   await page.waitForSelector('.vibe-cta', { timeout: 15000 })
   await page.click('.vibe-cta')
   await page.waitForSelector('.vibe-toolbar', { timeout: 15000 })
-  await page.click('button.vibe-toolbar-category[aria-label="Sound"]')
-  await page.waitForSelector('.vibe-sound-panel', { timeout: 10000 })
   const replay = await page.evaluate(() => ({
-    playVisible: !!document.querySelector('button.vibe-sound-play[aria-label="Play sound"]'),
+    collapsed: document.querySelectorAll('button.vibe-sound-toggle').length,
+    expandedPill: document.querySelectorAll('.vibe-sound-pill').length,
     overlay: document.querySelectorAll('.sonification-scan-overlay').length,
   }))
-  check('debug: leaving Vibe stops playback (Play required again)', replay.playVisible)
-  check('debug: scan line gone after leaving Vibe', replay.overlay === 0)
   check(
-    'debug: still exactly one AudioContext after the round trip',
+    'production: leaving Vibe stops playback (control collapsed, Play required again)',
+    replay.collapsed === 1 && replay.expandedPill === 0,
+    JSON.stringify(replay),
+  )
+  check('production: scan line gone after leaving Vibe', replay.overlay === 0)
+  check(
+    'production: still exactly one AudioContext after the round trip',
     (await audioContextCount(page)) === 1,
+    `count ${await audioContextCount(page)}`,
+  )
+}
+
+async function scenarioDebug(page) {
+  console.log('\n== Debug (?debug=true)')
+  await page.goto(`${ORIGIN}/?debug=true`, { waitUntil: 'domcontentloaded' })
+  await hideDevChrome(page)
+  await openVibeToolbar(page)
+  await checkSimplifiedToolbar(page, 'debug')
+  check(
+    'debug: no AudioContext before Play (unchanged gating)',
+    (await audioContextCount(page)) === 0,
     `count ${await audioContextCount(page)}`,
   )
 }

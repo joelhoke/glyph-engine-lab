@@ -8,7 +8,11 @@ import WorkExperience from './work/WorkExperience'
 import CollaborateExperience from './collaborate/CollaborateExperience'
 import VibeExperience, { VibeSurfaceStatus } from './vibe/VibeExperience'
 import VibeToolbar from './vibe/VibeToolbar'
+import AmbientCarousel from './vibe/AmbientCarousel'
+import PondControl from './vibe/PondControl'
+import SoundControl from './vibe/SoundControl'
 import SonificationOverlay from './vibe/SonificationOverlay'
+import { PAINT_DEFAULT_BACKGROUND_COLOR, PAINT_DEFAULT_GLYPH_COLOR } from './vibe/PaintPanel'
 import { useSonification } from './vibe/useSonification'
 import { useClipRecorder } from './vibe/useClipRecorder'
 import PrimaryActions, { ExperienceKey, PRIMARY_ACTION_COUNT } from './PrimaryActions'
@@ -62,6 +66,14 @@ import {
   resolveSeasonalAtmosphere,
 } from '../engine/seasonalAtmosphere'
 import { AmbientConfig } from '../engine/ambientConfig'
+import {
+  AMBIENT_SCENE_COUNT,
+  AMBIENT_SCENES,
+  ambientSceneIndex,
+  buildSceneAmbientConfig,
+  nextAmbientSceneId,
+  resolveAmbientSceneId,
+} from '../engine/ambientScenes'
 import { LANDING_CANVAS_GRADIENT, ThemeName, resolveThemedSourceUrl } from '../engine/theme'
 import { useSystemTheme } from '../engine/useSystemTheme'
 import { resolvePlaygroundConfig } from '../engine/playgroundTheme'
@@ -94,7 +106,8 @@ import {
   clonePaintSnapshot,
   createEmptyPaintSnapshot,
 } from '../engine/paint'
-import { clampPondConfig, POND_DEFAULTS, PondConfig } from '../engine/pondConfig'
+import { POND_DEFAULTS, PondCharacter, PondConfig } from '../engine/pondConfig'
+import { SonificationDirection } from '../engine/sonificationConfig'
 import { CLIP_DURATION_DEFAULT_MS } from '../engine/clipRecorder'
 import {
   VibeHistory,
@@ -446,6 +459,17 @@ export default function PortfolioExperience() {
   const vibeDockId = useId().replace(/:/g, '-')
   const vibeToolbarId = `vibe-toolbar-${vibeDockId}`
 
+  // Ambient scene carousel (session-only UI around the config transaction):
+  // the wipe lock disables the nav buttons while a scene transition runs,
+  // and the temporary top-center chip names the freshly applied scene.
+  const [ambientWipeActive, setAmbientWipeActive] = useState(false)
+  const [ambientSceneLabel, setAmbientSceneLabel] = useState<string | null>(null)
+  const ambientSceneLabelTimeoutRef = useRef<number | null>(null)
+
+  // Sound control (session-only): expansion state only — playback/config live
+  // in useSonification. Expanding never starts audio.
+  const [soundExpanded, setSoundExpanded] = useState(false)
+
   // Landing seasonal atmosphere (Stage 3): computed once on mount from the
   // local date/locale and applied at full intensity from the first landing
   // frame — no ramp.
@@ -456,7 +480,7 @@ export default function PortfolioExperience() {
   const [paintTool, setPaintTool] = useState<PaintToolConfig>({
     enabled: false,
     tool: 'paint',
-    glyphColor: '#8abaff',
+    glyphColor: PAINT_DEFAULT_GLYPH_COLOR,
     backgroundColor: 'none',
     brushDiameter: PAINT_BRUSH_DIAMETER_DEFAULT,
   })
@@ -680,20 +704,20 @@ export default function PortfolioExperience() {
     createDefaultDiagnosticsSnapshot(),
   )
 
-  // Private Pond experiment (debug-only, session-only): never enters
-  // PlaygroundConfig, presets, unified history, URL sharing, analytics, or
-  // uploaded-source state — the config lives only in this component state.
-  const [pondConfig, setPondConfig] = useState<PondConfig>({ ...POND_DEFAULTS })
-  const handlePondChange = (next: PondConfig) => {
-    setPondConfig(clampPondConfig(next))
-  }
+  // Private Pond (session-only): the pinned physics config (nothing edits it
+  // now that the debug panel is gone) plus the visitor-facing enable toggle
+  // and swimming-body character. None of this enters PlaygroundConfig,
+  // presets, unified history, URL sharing, or analytics.
+  const [pondConfig] = useState<PondConfig>(() => ({ ...POND_DEFAULTS }))
+  const [pondEnabled, setPondEnabled] = useState(false)
+  const [pondCharacter, setPondCharacter] = useState<PondCharacter>('source')
 
-  // Visual Sonification experiment (session-only): the scanner reads the
-  // live canvas and plays a tonal score. It never enters PlaygroundConfig,
-  // presets, unified history, URL sharing, analytics, or uploaded-source
-  // state. Enabled throughout Vibe Mode so production clip recording can
-  // drive it — the Sound panel and scan-line overlay stay debug-only, and
-  // no AudioContext exists until a user gesture (debug Play, or Record clip).
+  // Visual Sonification (session-only): the scanner reads the live canvas and
+  // plays a tonal score, driven by the Sound control. It never enters
+  // PlaygroundConfig, presets, unified history, URL sharing, analytics, or
+  // uploaded-source state. Enabled throughout Vibe Mode so clip recording can
+  // drive it too; no AudioContext exists until a user gesture (Sound Play, or
+  // Record clip).
   const sonification = useSonification({
     enabled: displayed === 'vibe',
     sceneCanvasRef,
@@ -1350,6 +1374,93 @@ export default function PortfolioExperience() {
     recordVibeTransaction('config', key, before, captureVibeSnapshot())
   }
 
+  // Ambient scene carousel: one history transaction per step (undo/redo
+  // restores scenes immediately — no wipe on replay). The outgoing canvas is
+  // captured BEFORE the new scene config applies; when beginAmbientWipe
+  // declines (reduced motion / wipe already running) it still fires
+  // onAmbientWipeEnd via microtask, so the nav lock always releases.
+  const handleAmbientNavigate = (direction: 'next' | 'prev') => {
+    if (ambientWipeActive) return
+    const current = resolveAmbientSceneId(playgroundConfigRef.current.ambient)
+    const next = nextAmbientSceneId(current, direction)
+    if (sceneCanvasRef.current?.beginAmbientWipe(direction)) {
+      setAmbientWipeActive(true)
+    }
+    handlePlaygroundConfigChange({ ambient: buildSceneAmbientConfig(next) }, 'ambient.scene')
+    const index = ambientSceneIndex(next)
+    setAmbientSceneLabel(`${AMBIENT_SCENES[index].label} · ${index + 1} of ${AMBIENT_SCENE_COUNT}`)
+    if (ambientSceneLabelTimeoutRef.current !== null) {
+      window.clearTimeout(ambientSceneLabelTimeoutRef.current)
+    }
+    ambientSceneLabelTimeoutRef.current = window.setTimeout(() => {
+      setAmbientSceneLabel(null)
+      ambientSceneLabelTimeoutRef.current = null
+    }, 1800)
+  }
+
+  // The wipe completed (or never started): release the nav lock.
+  const handleAmbientWipeEnd = () => setAmbientWipeActive(false)
+
+  // Sound control: the transport locks out while a clip records (same gate as
+  // the toolbar's Reset/Share), and the direction button cycles the sweep.
+  const clipRecordingActive =
+    clipRecorder.phase === 'recording' || clipRecorder.phase === 'processing'
+  const SOUND_DIRECTION_CYCLE: readonly SonificationDirection[] = [
+    'left-to-right',
+    'top-to-bottom',
+    'right-to-left',
+    'bottom-to-top',
+  ]
+  const handleSoundPlay = () => {
+    if (clipRecordingActive) return
+    sonification.play()
+  }
+  const handleSoundPause = () => {
+    if (clipRecordingActive) return
+    sonification.pause()
+  }
+  const handleSoundDisable = () => {
+    sonification.stop()
+    setSoundExpanded(false)
+  }
+  const handleSoundCycleDirection = () => {
+    const current = sonification.config.direction
+    const index = SOUND_DIRECTION_CYCLE.indexOf(current)
+    const next = SOUND_DIRECTION_CYCLE[(index + 1) % SOUND_DIRECTION_CYCLE.length]
+    sonification.updateConfig({ direction: next })
+  }
+
+  // Leaving vibe (or closing the control dock) stops the sonification scanner
+  // and collapses the sound control — playback never outlives its UI. The
+  // hook's own `enabled` gate already stops the engine on leaving vibe; this
+  // also covers the dock closing in place.
+  useEffect(() => {
+    if (displayed === 'vibe' && vibeControlsOpen) return
+    setSoundExpanded(false)
+    sonification.stop()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayed, vibeControlsOpen])
+
+  // The scene label chip never outlives vibe mode or the session.
+  useEffect(() => {
+    if (displayed !== 'vibe') {
+      if (ambientSceneLabelTimeoutRef.current !== null) {
+        window.clearTimeout(ambientSceneLabelTimeoutRef.current)
+        ambientSceneLabelTimeoutRef.current = null
+      }
+      setAmbientSceneLabel(null)
+      setAmbientWipeActive(false)
+    }
+  }, [displayed])
+  useEffect(
+    () => () => {
+      if (ambientSceneLabelTimeoutRef.current !== null) {
+        window.clearTimeout(ambientSceneLabelTimeoutRef.current)
+      }
+    },
+    [],
+  )
+
   // Glyph text commits as ONE transaction per editing session (the panel
   // normalizes and commits on blur), so undo restores the previous text.
   const handleCommitGlyphText = (text: string) => {
@@ -1380,7 +1491,7 @@ export default function PortfolioExperience() {
     const defaultPaintTool: PaintToolConfig = {
       enabled: false,
       tool: 'paint',
-      glyphColor: '#8abaff',
+      glyphColor: PAINT_DEFAULT_GLYPH_COLOR,
       backgroundColor: 'none',
       brushDiameter: PAINT_BRUSH_DIAMETER_DEFAULT,
     }
@@ -1403,9 +1514,20 @@ export default function PortfolioExperience() {
 
   const handlePaintToolChange = (patch: Partial<PaintToolConfig>, historyKey?: string) => {
     const before = captureVibeSnapshot()
-    setPaintTool((prev) => ({ ...prev, ...patch }))
-    paintToolRef.current = { ...paintToolRef.current, ...patch }
-    const key = historyKey ?? Object.keys(patch).sort().join(',')
+    // Off→on selects BOTH paint targets at their defaults, so enabling paint
+    // is immediately usable. Later target toggles are honored unchanged, and
+    // enabling never clears the existing paint overlay.
+    const applied =
+      patch.enabled === true && !paintToolRef.current.enabled
+        ? {
+            ...patch,
+            glyphColor: PAINT_DEFAULT_GLYPH_COLOR,
+            backgroundColor: PAINT_DEFAULT_BACKGROUND_COLOR,
+          }
+        : patch
+    setPaintTool((prev) => ({ ...prev, ...applied }))
+    paintToolRef.current = { ...paintToolRef.current, ...applied }
+    const key = historyKey ?? Object.keys(applied).sort().join(',')
     recordVibeTransaction('paint-tool', key, before, captureVibeSnapshot())
   }
 
@@ -1718,7 +1840,9 @@ export default function PortfolioExperience() {
         onQualityTierChange={(from, to) =>
           trackEvent({ name: 'tier_transition', params: { from_tier: from, to_tier: to } })
         }
-        pond={tuningMode && displayed === 'vibe' ? pondConfig : undefined}
+        pond={displayed === 'vibe' && pondEnabled ? pondConfig : undefined}
+        pondCharacter={pondCharacter}
+        onAmbientWipeEnd={handleAmbientWipeEnd}
         onDiagnosticsUpdate={(snapshot) => {
           setSceneDiagnostics(snapshot)
           if (snapshot.targetCount !== diagnostics.targetCount) {
@@ -1917,20 +2041,37 @@ export default function PortfolioExperience() {
           onClearPaint={handleClearPaint}
           canvasRef={sceneCanvasRef}
           debugMode={tuningMode}
-          pond={pondConfig}
-          onPondChange={handlePondChange}
-          sound={{
-            config: sonification.config,
-            playback: sonification.playback,
-            error: sonification.error,
-          }}
-          onSoundConfigChange={sonification.updateConfig}
-          onSoundPlay={sonification.play}
-          onSoundPause={sonification.pause}
           clip={clipRecorder}
         />
       )}
-      {tuningMode && displayed === 'vibe' && (
+      {displayed === 'vibe' && vibeControlsOpen && (
+        <>
+          <AmbientCarousel
+            onPrevious={() => handleAmbientNavigate('prev')}
+            onNext={() => handleAmbientNavigate('next')}
+            disabled={ambientWipeActive}
+            label={ambientSceneLabel}
+          />
+          <PondControl
+            enabled={pondEnabled}
+            character={pondCharacter}
+            onToggle={() => setPondEnabled((prev) => !prev)}
+            onSelect={setPondCharacter}
+          />
+          <SoundControl
+            expanded={soundExpanded}
+            playback={sonification.playback}
+            error={sonification.error}
+            direction={sonification.config.direction}
+            onExpand={() => setSoundExpanded(true)}
+            onDisable={handleSoundDisable}
+            onPlay={handleSoundPlay}
+            onPause={handleSoundPause}
+            onCycleDirection={handleSoundCycleDirection}
+          />
+        </>
+      )}
+      {displayed === 'vibe' && (
         <SonificationOverlay
           active={sonification.playback === 'playing' || sonification.playback === 'paused'}
           getSweepPosition={sonification.getSweepPosition}

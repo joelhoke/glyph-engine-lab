@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 /**
- * Structural verification for the Vibe toolbar (launch items 5 + 6 wiring):
- * reads the toolbar/panel sources and asserts the required structure —
+ * Structural verification for the Vibe toolbar (launch items 5 + 6 wiring and
+ * the control-simplification pass): reads the toolbar/panel sources and
+ * asserts the required structure —
  *
+ * - the center toolbar is exactly the four simplified categories
+ *   (upload/text/colorStyles/paint) — no motion/ambient/pond/sound, no
+ *   debug-only category filtering
  * - no <img> icon elements in VibeToolbar (icons are CSS masks)
  * - category buttons carry aria-expanded / aria-controls (and no aria-pressed,
  *   no aria-controls on the capsule)
@@ -49,9 +53,48 @@ const paintPanelSource = fs.readFileSync(
   path.join(projectRoot, 'components', 'vibe', 'PaintPanel.tsx'),
   'utf8',
 )
+const toolbarConfigSource = fs.readFileSync(
+  path.join(projectRoot, 'components', 'vibe', 'toolbarConfig.ts'),
+  'utf8',
+)
 const parentSource = fs.readFileSync(
   path.join(projectRoot, 'components', 'PortfolioExperience.tsx'),
   'utf8',
+)
+
+// --- simplified four-category toolbar -------------------------------------------
+
+assert(
+  ["'upload'", "'text'", "'colorStyles'", "'paint'"].every((id) =>
+    toolbarConfigSource.includes(id),
+  ) &&
+    !["'motion'", "'ambient'", "'pond'", "'sound'"].some((id) =>
+      toolbarConfigSource.includes(id),
+    ),
+  'the toolbar categories are exactly upload/text/colorStyles/paint (no motion/ambient/pond/sound)',
+)
+assert(
+  !toolbarConfigSource.includes('DEBUG_ONLY_CATEGORIES') &&
+    !toolbarSource.includes('DEBUG_ONLY_CATEGORIES'),
+  'debug-only category filtering is gone (no DEBUG_ONLY_CATEGORIES anywhere)',
+)
+for (const panel of ['MotionEffectsPanel', 'AmbientPanel', 'PondPanel', 'SoundPanel']) {
+  assert(
+    !toolbarSource.includes(panel),
+    `VibeToolbar no longer imports or renders ${panel}`,
+  )
+}
+assert(
+  !/pond\??:|onPondChange|sound\??:|onSoundConfigChange|onSoundPlay|onSoundPause/.test(
+    toolbarSource,
+  ),
+  'the pond/sound props are gone from the toolbar (the promoted controls own them)',
+)
+assert(
+  !fs.existsSync(path.join(projectRoot, 'components', 'vibe', 'MotionEffectsPanel.tsx')) &&
+    !fs.existsSync(path.join(projectRoot, 'components', 'vibe', 'AmbientPanel.tsx')) &&
+    !fs.existsSync(path.join(projectRoot, 'components', 'vibe', 'SoundPanel.tsx')),
+  'the motion/ambient/sound panel files are deleted',
 )
 
 // --- icons as CSS masks -------------------------------------------------------
@@ -254,8 +297,8 @@ assert(
   'Reset and duplicate Share disable while recording',
 )
 assert(
-  toolbarSource.includes('transportDisabled={clipRecordingActive}'),
-  'the debug Sound transport disables while recording',
+  !toolbarSource.includes('transportDisabled'),
+  'the toolbar no longer carries a sound transport (the Sound control owns it)',
 )
 
 // --- clip preview + share/download fallback -------------------------------------------------
@@ -397,6 +440,105 @@ assert(
 assert(
   parentSource.includes('clipTestMs'),
   'the dev-only ?clipTestMs= test hook is wired',
+)
+
+// --- promoted controls: ambient carousel, pond, sound (parent wiring) -----------
+
+assert(
+  /displayed === 'vibe' && vibeControlsOpen && \([\s\S]*?<AmbientCarousel[\s\S]*?<PondControl[\s\S]*?<SoundControl/.test(
+    parentSource,
+  ),
+  'AmbientCarousel, PondControl, and SoundControl mount under the vibe controls gate',
+)
+assert(
+  parentSource.includes('onPrevious={() => handleAmbientNavigate(\'prev\')}') &&
+    parentSource.includes('onNext={() => handleAmbientNavigate(\'next\')}') &&
+    parentSource.includes('disabled={ambientWipeActive}') &&
+    parentSource.includes('label={ambientSceneLabel}'),
+  'the ambient carousel is wired to handleAmbientNavigate with the wipe lock and label',
+)
+assert(
+  parentSource.includes(
+    "handlePlaygroundConfigChange({ ambient: buildSceneAmbientConfig(next) }, 'ambient.scene')",
+  ),
+  'carousel navigation applies the scene through the history transaction (key ambient.scene)',
+)
+assert(
+  /beginAmbientWipe\(direction\)[\s\S]*?setAmbientWipeActive\(true\)/.test(parentSource) &&
+    parentSource.includes('onAmbientWipeEnd={handleAmbientWipeEnd}'),
+  'the canvas wipe is captured before applying the scene and the end callback unlocks the nav',
+)
+assert(
+  /resolveAmbientSceneId\(playgroundConfigRef\.current\.ambient\)/.test(parentSource) &&
+    /nextAmbientSceneId\(current, direction\)/.test(parentSource),
+  'the carousel resolves the current scene from the live config and wraps via nextAmbientSceneId',
+)
+assert(
+  parentSource.includes('enabled={pondEnabled}') &&
+    parentSource.includes('character={pondCharacter}') &&
+    parentSource.includes('onToggle={() => setPondEnabled((prev) => !prev)}') &&
+    parentSource.includes('onSelect={setPondCharacter}'),
+  'the pond control drives session-only enabled/character state',
+)
+assert(
+  parentSource.includes("pond={displayed === 'vibe' && pondEnabled ? pondConfig : undefined}") &&
+    parentSource.includes('pondCharacter={pondCharacter}'),
+  'SceneCanvas receives the pond only while enabled in vibe, plus the character override',
+)
+assert(
+  parentSource.includes('expanded={soundExpanded}') &&
+    parentSource.includes('playback={sonification.playback}') &&
+    parentSource.includes('direction={sonification.config.direction}') &&
+    parentSource.includes('onDisable={handleSoundDisable}') &&
+    parentSource.includes('onPlay={handleSoundPlay}') &&
+    parentSource.includes('onPause={handleSoundPause}') &&
+    parentSource.includes('onCycleDirection={handleSoundCycleDirection}'),
+  'the sound control wires expansion, playback, and direction from useSonification',
+)
+assert(
+  /handleSoundDisable = \(\) => \{[\s\S]*?sonification\.stop\(\)[\s\S]*?setSoundExpanded\(false\)/.test(
+    parentSource,
+  ),
+  'disabling sound stops playback and collapses the control',
+)
+assert(
+  /clipRecordingActive[\s\S]*?if \(clipRecordingActive\) return[\s\S]*?sonification\.play\(\)/.test(
+    parentSource,
+  ),
+  'the sound transport locks out while a clip recording is active',
+)
+assert(
+  /SOUND_DIRECTION_CYCLE[\s\S]*?'left-to-right'[\s\S]*?'top-to-bottom'[\s\S]*?'right-to-left'[\s\S]*?'bottom-to-top'/.test(
+    parentSource,
+  ) && parentSource.includes('sonification.updateConfig({ direction: next })'),
+  'the direction button cycles right → down → left → up via updateConfig',
+)
+assert(
+  !/tuningMode && displayed === 'vibe' && \(\s*<SonificationOverlay/.test(parentSource) &&
+    /displayed === 'vibe' && \(\s*<SonificationOverlay/.test(parentSource),
+  'the scan-line overlay shows whenever sound plays in vibe (no longer debug-gated)',
+)
+
+// --- paint enablement: off→on selects both targets --------------------------------
+
+assert(
+  /patch\.enabled === true && !paintToolRef\.current\.enabled/.test(parentSource) &&
+    /glyphColor: PAINT_DEFAULT_GLYPH_COLOR,[\s\S]*?backgroundColor: PAINT_DEFAULT_BACKGROUND_COLOR,/.test(
+      parentSource,
+    ),
+  'enabling paint (off→on) forces both targets to the shared defaults',
+)
+assert(
+  paintPanelSource.includes('export const PAINT_DEFAULT_GLYPH_COLOR') &&
+    paintPanelSource.includes('export const PAINT_DEFAULT_BACKGROUND_COLOR') &&
+    parentSource.includes(
+      "import { PAINT_DEFAULT_BACKGROUND_COLOR, PAINT_DEFAULT_GLYPH_COLOR } from './vibe/PaintPanel'",
+    ),
+  'PaintPanel exports the defaults both sides agree on',
+)
+assert(
+  !/handlePaintToolChange[\s\S]{0,400}?clearPaint\(\)/.test(parentSource),
+  'enabling paint never clears the existing paint overlay',
 )
 
 if (failures > 0) {

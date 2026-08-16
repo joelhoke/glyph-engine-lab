@@ -19,8 +19,10 @@ export type PaintPanelProps = {
   clearDisabled: boolean
 }
 
-const DEFAULT_GLYPH_COLOR = '#8abaff'
-const DEFAULT_BG_COLOR = '#1a1026'
+/** Default channel colors applied when a target toggles on — also forced by
+ *  PortfolioExperience when painting is enabled (off→on selects both). */
+export const PAINT_DEFAULT_GLYPH_COLOR = '#8abaff'
+export const PAINT_DEFAULT_BACKGROUND_COLOR = '#1a1026'
 
 export default function PaintPanel({
   config,
@@ -39,9 +41,9 @@ export default function PaintPanel({
 
   const setTool = (tool: PaintTool) => onChange({ tool }, 'tool')
   const toggleGlyph = (checked: boolean) =>
-    onChange({ glyphColor: checked ? DEFAULT_GLYPH_COLOR : 'none' }, 'glyphColor')
+    onChange({ glyphColor: checked ? PAINT_DEFAULT_GLYPH_COLOR : 'none' }, 'glyphColor')
   const toggleBackground = (checked: boolean) =>
-    onChange({ backgroundColor: checked ? DEFAULT_BG_COLOR : 'none' }, 'backgroundColor')
+    onChange({ backgroundColor: checked ? PAINT_DEFAULT_BACKGROUND_COLOR : 'none' }, 'backgroundColor')
 
   return (
     <div className="vibe-paint-panel">
@@ -90,7 +92,7 @@ export default function PaintPanel({
           <input
             id={glyphColorId}
             type="color"
-            value={(glyphEnabled ? config.glyphColor : DEFAULT_GLYPH_COLOR) as string}
+            value={(glyphEnabled ? config.glyphColor : PAINT_DEFAULT_GLYPH_COLOR) as string}
             onChange={(e) => onChange({ glyphColor: e.target.value as PaintChannelColor }, 'glyphColor')}
             disabled={!glyphEnabled}
             className="vibe-color-input"
@@ -108,7 +110,7 @@ export default function PaintPanel({
           <input
             id={bgColorId}
             type="color"
-            value={(bgEnabled ? config.backgroundColor : DEFAULT_BG_COLOR) as string}
+            value={(bgEnabled ? config.backgroundColor : PAINT_DEFAULT_BACKGROUND_COLOR) as string}
             onChange={(e) => onChange({ backgroundColor: e.target.value as PaintChannelColor }, 'backgroundColor')}
             disabled={!bgEnabled}
             className="vibe-color-input"
