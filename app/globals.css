@@ -4938,7 +4938,8 @@ a.guide-source:focus-visible {
 
 .vibe-pond-control {
   position: fixed;
-  right: calc(0.75rem + env(safe-area-inset-right, 0px));
+  /* ~40% of the way from the right edge toward the center toolbar. */
+  right: calc(20vw + env(safe-area-inset-right, 0px));
   bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
   z-index: 30;
   display: flex;
@@ -5101,7 +5102,8 @@ a.guide-source:focus-visible {
 
 .vibe-sound-control {
   position: fixed;
-  left: calc(0.75rem + env(safe-area-inset-left, 0px));
+  /* ~40% of the way from the left edge toward the center toolbar. */
+  left: calc(20vw + env(safe-area-inset-left, 0px));
   bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
   z-index: 30;
   display: flex;
@@ -5282,6 +5284,16 @@ a.guide-source:focus-visible {
    pond above it. Offsets assume the mobile toolbar (~8.6rem tall at bottom
    0.5rem). */
 @media (max-width: 640px) {
+  /* Collapsed toggles keep the corner inset (20vw would collide with the
+     nearly full-width toolbar capsule). */
+  .vibe-sound-control:not(:has(.vibe-sound-pill)) {
+    left: calc(0.75rem + env(safe-area-inset-left, 0px));
+  }
+
+  .vibe-pond-control:not(:has(.vibe-pond-pill)) {
+    right: calc(0.75rem + env(safe-area-inset-right, 0px));
+  }
+
   .vibe-sound-control:has(.vibe-sound-pill) {
     left: 50%;
     right: auto;
