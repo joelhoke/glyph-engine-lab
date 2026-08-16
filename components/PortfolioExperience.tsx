@@ -106,7 +106,7 @@ import {
   clonePaintSnapshot,
   createEmptyPaintSnapshot,
 } from '../engine/paint'
-import { POND_DEFAULTS, PondCharacter, PondConfig } from '../engine/pondConfig'
+import { clampPondConfig, POND_DEFAULTS, PondCharacter, PondConfig } from '../engine/pondConfig'
 import { SonificationDirection } from '../engine/sonificationConfig'
 import { CLIP_DURATION_DEFAULT_MS } from '../engine/clipRecorder'
 import {
@@ -704,16 +704,20 @@ export default function PortfolioExperience() {
     createDefaultDiagnosticsSnapshot(),
   )
 
-  // Private Pond (session-only): the pinned physics config (nothing edits it
-  // now that the debug panel is gone) plus the visitor-facing enable toggle
-  // and swimming-body character. None of this enters PlaygroundConfig,
-  // presets, unified history, URL sharing, or analytics.
-  const [pondConfig] = useState<PondConfig>(() => ({ ...POND_DEFAULTS }))
+  // Private Pond (session-only): the physics config (editable only through
+  // the debug-only Pond panel) plus the visitor-facing enable toggle and
+  // swimming-body character. None of this enters PlaygroundConfig, presets,
+  // unified history, URL sharing, or analytics.
+  const [pondConfig, setPondConfig] = useState<PondConfig>(() => ({ ...POND_DEFAULTS }))
   const [pondEnabled, setPondEnabled] = useState(false)
   const [pondCharacter, setPondCharacter] = useState<PondCharacter>('source')
-  // POND_DEFAULTS ships disabled; the visitor toggle is the enable bit, so the
-  // canvas only ever sees an enabled config while the pond is on. Memoized:
-  // SceneCanvas re-runs its pond mirror effect on prop identity.
+  const handlePondChange = (next: PondConfig) => {
+    setPondConfig(clampPondConfig(next))
+  }
+  // POND_DEFAULTS ships disabled; the visitor toggle (or the debug panel's
+  // own enable checkbox) is the enable bit, so the canvas only ever sees an
+  // enabled config while the pond is on. Memoized: SceneCanvas re-runs its
+  // pond mirror effect on prop identity.
   const activePondConfig = useMemo<PondConfig>(
     () => ({ ...pondConfig, enabled: true }),
     [pondConfig],
@@ -1847,7 +1851,11 @@ export default function PortfolioExperience() {
         onQualityTierChange={(from, to) =>
           trackEvent({ name: 'tier_transition', params: { from_tier: from, to_tier: to } })
         }
-        pond={displayed === 'vibe' && pondEnabled ? activePondConfig : undefined}
+        pond={
+          displayed === 'vibe' && (pondEnabled || (tuningMode && pondConfig.enabled))
+            ? activePondConfig
+            : undefined
+        }
         pondCharacter={pondCharacter}
         onAmbientWipeEnd={handleAmbientWipeEnd}
         onDiagnosticsUpdate={(snapshot) => {
@@ -2048,6 +2056,16 @@ export default function PortfolioExperience() {
           onClearPaint={handleClearPaint}
           canvasRef={sceneCanvasRef}
           debugMode={tuningMode}
+          pond={pondConfig}
+          onPondChange={handlePondChange}
+          sound={{
+            config: sonification.config,
+            playback: sonification.playback,
+            error: sonification.error,
+          }}
+          onSoundConfigChange={sonification.updateConfig}
+          onSoundPlay={sonification.play}
+          onSoundPause={sonification.pause}
           clip={clipRecorder}
         />
       )}

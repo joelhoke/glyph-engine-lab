@@ -143,8 +143,9 @@ async function openVibeToolbar(page) {
   await page.waitForSelector('.vibe-toolbar', { timeout: 15000 })
 }
 
-/** The simplified toolbar contract, checked in both production and debug. */
-async function checkSimplifiedToolbar(page, modeLabel) {
+/** The simplified toolbar contract: production shows the four categories;
+ *  debug (?debug=true) additionally reveals Motion/Ambient/Pond/Sound. */
+async function checkSimplifiedToolbar(page, modeLabel, { debug = false } = {}) {
   const counts = await page.evaluate(() => ({
     categories: Array.from(document.querySelectorAll('button.vibe-toolbar-category')).map(
       (button) => button.getAttribute('aria-label'),
@@ -154,14 +155,25 @@ async function checkSimplifiedToolbar(page, modeLabel) {
     soundToggle: document.querySelectorAll('button.vibe-sound-toggle').length,
     overlay: document.querySelectorAll('.sonification-scan-overlay').length,
   }))
+  const expected = debug
+    ? [
+        'Upload',
+        'Text Effects',
+        'Color Styles',
+        'Paint',
+        'Motion Effects',
+        'Ambient',
+        'Pond',
+        'Sound',
+      ]
+    : ['Upload', 'Text Effects', 'Color Styles', 'Paint']
   check(
-    `${modeLabel}: toolbar is exactly the four simplified categories`,
-    JSON.stringify(counts.categories) ===
-      JSON.stringify(['Upload', 'Text Effects', 'Color Styles', 'Paint']),
+    `${modeLabel}: toolbar categories are ${debug ? 'the four simplified + four debug-only' : 'exactly the four simplified'}`,
+    JSON.stringify(counts.categories) === JSON.stringify(expected),
     JSON.stringify(counts.categories),
   )
   check(
-    `${modeLabel}: no debug pond/sound panels exist`,
+    `${modeLabel}: no pond/sound settings panels rendered before their category opens`,
     counts.debugPanels === 0,
     `got ${counts.debugPanels}`,
   )
@@ -317,9 +329,47 @@ async function scenarioDebug(page) {
   await page.goto(`${ORIGIN}/?debug=true`, { waitUntil: 'domcontentloaded' })
   await hideDevChrome(page)
   await openVibeToolbar(page)
-  await checkSimplifiedToolbar(page, 'debug')
+  await checkSimplifiedToolbar(page, 'debug', { debug: true })
   check(
     'debug: no AudioContext before Play (unchanged gating)',
+    (await audioContextCount(page)) === 0,
+    `count ${await audioContextCount(page)}`,
+  )
+
+  // The debug Pond settings panel opens from the toolbar and edits the live
+  // physics config (sliders render once the pond is enabled).
+  await page.click('button.vibe-toolbar-category[aria-label="Pond"]')
+  await page.waitForSelector('.vibe-pond-panel', { timeout: 8000 })
+  await page.click('.vibe-pond-panel input[type="checkbox"]')
+  await page.waitForSelector('.vibe-pond-panel input[type="range"]', { timeout: 8000 })
+  const pondPanel = await page.evaluate(() => {
+    const panel = document.querySelector('.vibe-pond-panel')
+    return {
+      labels: panel ? panel.textContent : '',
+      sliders: panel ? panel.querySelectorAll('input[type="range"],input[type="number"]').length : 0,
+    }
+  })
+  check(
+    'debug: Pond panel exposes the physics controls once enabled',
+    !!pondPanel.labels &&
+      pondPanel.labels.includes('Min bounce') &&
+      pondPanel.labels.includes('Impact torque') &&
+      pondPanel.sliders > 0,
+    JSON.stringify(pondPanel.sliders),
+  )
+
+  // The debug Sound settings panel opens from the toolbar.
+  await page.click('button.vibe-toolbar-category[aria-label="Sound"]')
+  await page.waitForSelector('.vibe-sound-panel', { timeout: 8000 })
+  check(
+    'debug: Sound panel exposes the sonification settings',
+    await page.evaluate(() => {
+      const panel = document.querySelector('.vibe-sound-panel')
+      return !!panel && panel.textContent.length > 20
+    }),
+  )
+  check(
+    'debug: opening the Sound settings panel still creates no AudioContext',
     (await audioContextCount(page)) === 0,
     `count ${await audioContextCount(page)}`,
   )

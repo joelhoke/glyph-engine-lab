@@ -62,39 +62,45 @@ const parentSource = fs.readFileSync(
   'utf8',
 )
 
-// --- simplified four-category toolbar -------------------------------------------
+// --- simplified four-category toolbar (production); debug restores the rest ----
 
 assert(
   ["'upload'", "'text'", "'colorStyles'", "'paint'"].every((id) =>
     toolbarConfigSource.includes(id),
-  ) &&
-    !["'motion'", "'ambient'", "'pond'", "'sound'"].some((id) =>
-      toolbarConfigSource.includes(id),
-    ),
-  'the toolbar categories are exactly upload/text/colorStyles/paint (no motion/ambient/pond/sound)',
+  ),
+  'the toolbar always offers upload/text/colorStyles/paint',
 )
 assert(
-  !toolbarConfigSource.includes('DEBUG_ONLY_CATEGORIES') &&
-    !toolbarSource.includes('DEBUG_ONLY_CATEGORIES'),
-  'debug-only category filtering is gone (no DEBUG_ONLY_CATEGORIES anywhere)',
+  ["'motion'", "'ambient'", "'pond'", "'sound'"].every((id) =>
+    toolbarConfigSource.includes(id),
+  ),
+  'motion/ambient/pond/sound categories still exist for debug mode',
+)
+assert(
+  /DEBUG_ONLY_CATEGORIES[^=]*= new Set\(\[[\s\S]*?'motion'[\s\S]*?'ambient'[\s\S]*?'pond'[\s\S]*?'sound'[\s\S]*?\]\)/.test(
+    toolbarConfigSource,
+  ),
+  'motion/ambient/pond/sound are all debug-only categories',
+)
+assert(
+  /VIBE_TOOLBAR_CATEGORIES\.filter\(\(category\) => !DEBUG_ONLY_CATEGORIES\.has\(category\.id\) \|\| debugMode\)/.test(
+    toolbarSource,
+  ),
+  'the toolbar filters debug-only categories unless its debugMode prop is set',
 )
 for (const panel of ['MotionEffectsPanel', 'AmbientPanel', 'PondPanel', 'SoundPanel']) {
   assert(
-    !toolbarSource.includes(panel),
-    `VibeToolbar no longer imports or renders ${panel}`,
+    fs.existsSync(path.join(projectRoot, 'components', 'vibe', `${panel}.tsx`)) &&
+      toolbarSource.includes(panel),
+    `${panel} is restored and rendered for its debug-only category`,
   )
 }
 assert(
-  !/pond\??:|onPondChange|sound\??:|onSoundConfigChange|onSoundPlay|onSoundPause/.test(
-    toolbarSource,
-  ),
-  'the pond/sound props are gone from the toolbar (the promoted controls own them)',
-)
-assert(
-  !fs.existsSync(path.join(projectRoot, 'components', 'vibe', 'MotionEffectsPanel.tsx')) &&
-    !fs.existsSync(path.join(projectRoot, 'components', 'vibe', 'AmbientPanel.tsx')) &&
-    !fs.existsSync(path.join(projectRoot, 'components', 'vibe', 'SoundPanel.tsx')),
-  'the motion/ambient/sound panel files are deleted',
+  /pond\?:.*PondConfig/.test(toolbarSource) &&
+    /onSoundConfigChange/.test(toolbarSource) &&
+    /onSoundPlay/.test(toolbarSource) &&
+    /onSoundPause/.test(toolbarSource),
+  'the toolbar carries the debug pond/sound panel props',
 )
 
 // --- icons as CSS masks -------------------------------------------------------
@@ -297,8 +303,8 @@ assert(
   'Reset and duplicate Share disable while recording',
 )
 assert(
-  !toolbarSource.includes('transportDisabled'),
-  'the toolbar no longer carries a sound transport (the Sound control owns it)',
+  toolbarSource.includes('transportDisabled={clipRecordingActive}'),
+  'the debug Sound panel transport stays locked while a clip recording is active',
 )
 
 // --- clip preview + share/download fallback -------------------------------------------------
@@ -481,14 +487,17 @@ assert(
   'the pond control drives session-only enabled/character state',
 )
 assert(
-  parentSource.includes(
-    "pond={displayed === 'vibe' && pondEnabled ? activePondConfig : undefined}",
+  /pond=\{[\s\S]*?displayed === 'vibe' && \(pondEnabled \|\| \(tuningMode && pondConfig\.enabled\)\)[\s\S]*?activePondConfig[\s\S]*?: undefined[\s\S]*?\}/.test(
+    parentSource,
   ) &&
     /activePondConfig = useMemo<PondConfig>\(\s*\(\) => \(\{ \.\.\.pondConfig, enabled: true \}\)/.test(
       parentSource,
     ) &&
+    /handlePondChange = \(next: PondConfig\)[\s\S]*?setPondConfig\(clampPondConfig\(next\)\)/.test(
+      parentSource,
+    ) &&
     parentSource.includes('pondCharacter={pondCharacter}'),
-  'SceneCanvas receives an ENABLED pond config only while toggled on in vibe, plus the character override',
+  'SceneCanvas receives an ENABLED pond config while toggled on (or debug-panel-enabled) in vibe, plus the character override',
 )
 assert(
   parentSource.includes('expanded={soundExpanded}') &&

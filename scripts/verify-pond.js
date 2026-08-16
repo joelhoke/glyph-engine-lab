@@ -782,9 +782,14 @@ const RESTING = Math.PI // original fish rests facing -X
     'only the main glyph loop runs the boundary pass (ambient pool untouched)',
   )
 
+  const toolbarConfigSrc = fs.readFileSync(
+    path.join(projectRoot, 'components', 'vibe', 'toolbarConfig.ts'),
+    'utf8',
+  )
   assert(
-    !fs.existsSync(path.join(projectRoot, 'components', 'vibe', 'PondPanel.tsx')),
-    'the debug PondPanel is retired (pond physics stay at hidden POND_DEFAULTS)',
+    fs.existsSync(path.join(projectRoot, 'components', 'vibe', 'PondPanel.tsx')) &&
+      /DEBUG_ONLY_CATEGORIES[^=]*= new Set\(\[[\s\S]*?'pond'[\s\S]*?\]\)/.test(toolbarConfigSrc),
+    'the Pond settings panel exists but is gated behind the debug-only pond category',
   )
 }
 
