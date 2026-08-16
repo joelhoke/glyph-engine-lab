@@ -4846,3 +4846,400 @@ a.guide-source:focus-visible {
     animation: none !important;
   }
 }
+
+/* -------------------------------------------------------------------------
+   Vibe playground floating controls: ambient carousel, pond control, sound
+   control. Same layer family as .vibe-toolbar (z-index 30), same idiom:
+   pointer-events none on fixed wrappers, auto on interactive children.
+   ------------------------------------------------------------------------- */
+
+/* Ambient scene carousel: prev/next edge buttons + temporary scene label */
+
+.vibe-ambient-nav {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.vibe-ambient-nav-button {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  background: var(--color-capsule-bg);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  pointer-events: auto;
+  backdrop-filter: blur(8px);
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease,
+    color 160ms ease, opacity 160ms ease;
+}
+
+.vibe-ambient-nav-button-prev {
+  left: calc(0.5rem + env(safe-area-inset-left, 0px));
+}
+
+.vibe-ambient-nav-button-next {
+  right: calc(0.5rem + env(safe-area-inset-right, 0px));
+}
+
+.vibe-ambient-nav-button:not(:disabled):hover {
+  background: var(--color-input-bg);
+  color: var(--color-accent);
+}
+
+.vibe-ambient-nav-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  color: var(--color-accent);
+}
+
+.vibe-ambient-nav-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.vibe-ambient-nav-chevron {
+  display: block;
+}
+
+/* Temporary scene chip: top-center keeps it clear of the toolbar, whose
+   panels pop upward from the bottom edge. */
+.vibe-ambient-label {
+  position: fixed;
+  top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  pointer-events: none;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  background: var(--color-capsule-bg);
+  backdrop-filter: blur(8px);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* Pond control: round fish button, lower-right; choice pill above it */
+
+.vibe-pond-control {
+  position: fixed;
+  right: calc(0.75rem + env(safe-area-inset-right, 0px));
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.vibe-pond-control > * {
+  pointer-events: auto;
+}
+
+.vibe-pond-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  background: var(--color-capsule-bg);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease,
+    color 160ms ease;
+}
+
+.vibe-pond-toggle:not(:disabled):hover {
+  background: var(--color-input-bg);
+  color: var(--color-accent);
+}
+
+.vibe-pond-toggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  color: var(--color-accent);
+}
+
+.vibe-pond-toggle-active {
+  color: var(--color-accent-vivid);
+  border-color: var(--color-accent-vivid);
+  box-shadow:
+    0 0 0 1px rgba(143, 227, 245, 0.25),
+    0 0 14px 2px rgba(143, 227, 245, 0.45),
+    0 0 28px 4px rgba(143, 227, 245, 0.18);
+}
+
+/* CSS mask over currentColor, same idiom as .vibe-toolbar-icon. */
+.vibe-pond-toggle-icon {
+  width: 24px;
+  height: 24px;
+  display: block;
+  background-color: currentColor;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+.vibe-pond-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  background: var(--color-capsule-bg);
+  backdrop-filter: blur(8px);
+}
+
+.vibe-pond-choice {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0.3rem 0.65rem;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.2;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease,
+    color 160ms ease;
+}
+
+.vibe-pond-choice:not(:disabled):hover {
+  background: var(--color-input-bg);
+  color: var(--color-accent);
+}
+
+.vibe-pond-choice:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  color: var(--color-accent);
+}
+
+.vibe-pond-choice-selected {
+  color: var(--color-accent-vivid);
+  border-color: var(--color-accent-vivid);
+  box-shadow:
+    0 0 0 1px rgba(143, 227, 245, 0.25),
+    0 0 14px 2px rgba(143, 227, 245, 0.45);
+}
+
+/* Sound control: round note button, lower-left; expanded artwork pill */
+
+.vibe-sound-control {
+  position: fixed;
+  left: calc(0.75rem + env(safe-area-inset-left, 0px));
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  pointer-events: none;
+}
+
+.vibe-sound-control > * {
+  pointer-events: auto;
+}
+
+.vibe-sound-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  background: var(--color-capsule-bg);
+  cursor: pointer;
+  overflow: hidden;
+  backdrop-filter: blur(8px);
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.vibe-sound-toggle:not(:disabled):hover {
+  border-color: var(--color-accent);
+}
+
+.vibe-sound-toggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.vibe-sound-toggle-icon {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+/* The pill composes the derived artwork layers (vibe-sound-*.png) at the
+   source artwork's aspect ratio; glyph buttons sit on their artwork spots. */
+.vibe-sound-pill {
+  position: relative;
+  height: 52px;
+  aspect-ratio: 232 / 103;
+}
+
+.vibe-sound-shell {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+.vibe-sound-badge,
+.vibe-sound-transport,
+.vibe-sound-direction {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.vibe-sound-badge:focus-visible,
+.vibe-sound-transport:focus-visible,
+.vibe-sound-direction:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Circular note badge occupies the left ~103/232 of the artwork. */
+.vibe-sound-badge {
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: calc(100% * 103 / 232);
+}
+
+/* Note spins in place around the badge centre. The animation is always
+   applied while expanded; .is-playing only flips the play state, so pausing
+   freezes the note mid-rotation instead of resetting it. Collapsing the
+   pill unmounts the layer, which resets the rotation. */
+.vibe-sound-note {
+  width: 56%;
+  height: auto;
+  display: block;
+  animation: vibe-sound-note-spin 6s linear infinite;
+  animation-play-state: paused;
+}
+
+.vibe-sound-pill.is-playing .vibe-sound-note {
+  animation-play-state: running;
+}
+
+@keyframes vibe-sound-note-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Play/pause glyph centre in the artwork: x=137/232, y=53/103. */
+.vibe-sound-transport {
+  left: calc(100% * 137 / 232);
+  top: calc(100% * 53 / 103);
+  transform: translate(-50%, -50%);
+  color: #ffffff;
+}
+
+.vibe-sound-play-icon {
+  height: 34%;
+  width: auto;
+  display: block;
+}
+
+.vibe-sound-pause-icon {
+  display: block;
+}
+
+/* Direction arrow centre in the artwork: x=188.5/232, y=51.5/103. */
+.vibe-sound-direction {
+  left: calc(100% * 188.5 / 232);
+  top: calc(100% * 51.5 / 103);
+  transform: translate(-50%, -50%);
+}
+
+.vibe-sound-direction-arrow {
+  height: 37%;
+  width: auto;
+  display: block;
+  transition: transform 200ms ease;
+}
+
+.vibe-sound-control-error {
+  margin: 0;
+  max-width: 16rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 12px;
+  background: var(--color-capsule-bg);
+  backdrop-filter: blur(8px);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--color-text-muted);
+}
+
+/* Narrow screens: the expanded pills leave the corners and stack (sound
+   first, pond above it) just over the center toolbar instead of overlapping
+   it. Offsets assume the mobile toolbar (~3.5rem tall at bottom 0.5rem). */
+@media (max-width: 640px) {
+  .vibe-sound-control {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+    align-items: center;
+  }
+
+  .vibe-pond-control {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(8.75rem + env(safe-area-inset-bottom, 0px));
+    align-items: center;
+  }
+}
+
+/* Explicit note-spin kill switch (the global reduce block above also
+   covers this, but the spin must never run under reduced motion). */
+@media (prefers-reduced-motion: reduce) {
+  .vibe-sound-note {
+    animation: none;
+  }
+}
