@@ -151,11 +151,12 @@ Two typefaces, both self-hosted (no remote font requests):
   excerpts (~1rem, line-height 1.6–1.7, `font-weight: 400`, letter-spacing
   0.02em for legibility). Loaded from the
   same self-hosted `next/font` build as Cabin Bold.
-- **Cutive Mono** — everything else: body copy, navigation, toolbar and
+- **Departure Mono** — everything else: body copy, navigation, toolbar and
   control text, Work mode labels, narrative section headings, dialogs,
   tuning UI, conversation metadata (timestamps, speaker labels), source
-  chips, suggested prompts, and the glyph particles themselves. Falls back
-  to the system mono stack (`--font-mono` in `globals.css`).
+  chips, suggested prompts, and the glyph particles themselves. Self-hosted
+  from `public/fonts` via `@font-face` in `globals.css` (SIL OFL, license
+  alongside the woff2); falls back to the system mono stack (`--font-mono`).
 
 | Style | Spec |
 |---|---|
@@ -168,7 +169,7 @@ Two typefaces, both self-hosted (no remote font requests):
 | Wordmark | lowercase always: "joel hoke design", letter-spacing 0.08em |
 
 Rules: Cabin never becomes a body, control, or particle font outside the
-conversation-copy exception above; Cutive Mono is never removed; sentence
+conversation-copy exception above; Departure Mono is never removed; sentence
 case for prose, lowercase for the wordmark, uppercase only for eyebrow
 labels.
 

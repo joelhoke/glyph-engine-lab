@@ -1,5 +1,14 @@
-/* No remote font dependencies: Cutive Mono is used when locally installed,
-   otherwise the system monospace stack takes over (M9 launch hardening). */
+/* Departure Mono (Helena Zhang — departuremono.com, SIL OFL; license at
+   /fonts/DepartureMono-OFL-LICENSE.txt) is self-hosted from public/fonts —
+   no remote font dependencies. If the file fails to load, the system
+   monospace stack takes over (M9 launch hardening). */
+@font-face {
+  font-family: 'Departure Mono';
+  src: url('/fonts/DepartureMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 
 /* Semantic theme tokens (feature/light-dark). Dark is the DEFAULT on :root;
    the light set overrides inside the prefers-color-scheme media query below —
@@ -8,7 +17,7 @@
    controls, states) is authored here. color-scheme keeps native controls
    (scrollbars, form fields) in step with the theme. */
 :root {
-  --font-mono: 'Cutive Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --font-mono: 'Departure Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
   color-scheme: dark;
   /* Theme cross-fade duration for theme-managed chrome (500ms exactly). Only
      applies once <html> carries .theme-ready (set after hydration). */
@@ -1492,7 +1501,7 @@ button:focus-visible {
 }
 
 /* Primary display headings only: Cabin Bold, self-hosted at build time via
-   next/font (--font-display on body). Everything else stays Cutive Mono. */
+   next/font (--font-display on body). Everything else stays Departure Mono. */
 .vibe-heading,
 .collaborate-heading,
 .work-story-title {
