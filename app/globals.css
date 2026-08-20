@@ -5296,7 +5296,9 @@ a.guide-source:focus-visible {
    the badge IS the FAB). :focus-visible outlines are separate 2px
    accessibility indicators. No :has()-driven relocation: desktop expands
    horizontally inward (Sound rightward, Pond leftward); ≤640px both expand
-   vertically upward from their lower corners. Pill shells are pure CSS
+   vertically upward from their lower corners, and at measured-tight mid
+   widths useVibeControlLayout switches a side to the same vertical expansion
+   via data-vibe-*-layout="vertical" on <html> (see below). Pill shells are pure CSS
    (border + gradient + box-shadow) so the 2px weight is exact; the supplied
    artwork (public/toolbar/vibe-sound-*.png, AmbientPond.png) is kept as
    reference — the gradient stops below are sampled from it.
@@ -5315,13 +5317,23 @@ a.guide-source:focus-visible {
 }
 
 .vibe-sound-control {
-  /* ~40% of the way from the left edge toward the center toolbar. */
-  left: calc(20vw + env(safe-area-inset-left, 0px));
+  /* ~40% of the way from the left edge toward the center toolbar, gliding
+     cornerward when the centered toolbar capsule needs the room: never closer
+     to center than the measured capsule half-width (--vibe-capsule-half,
+     published by useVibeControlLayout; 14rem fallback) + this FAB's 66px +
+     a 12px gap, and never pushed off the viewport edge. */
+  left: calc(
+    max(0.75rem, min(20vw, 50% - var(--vibe-capsule-half, 14rem) - 4.875rem)) +
+      env(safe-area-inset-left, 0px)
+  );
 }
 
 .vibe-pond-control {
-  /* ~40% of the way from the right edge toward the center toolbar. */
-  right: calc(20vw + env(safe-area-inset-right, 0px));
+  /* Mirror of the Sound control's glide, from the right edge. */
+  right: calc(
+    max(0.75rem, min(20vw, 50% - var(--vibe-capsule-half, 14rem) - 4.875rem)) +
+      env(safe-area-inset-right, 0px)
+  );
 }
 
 .vibe-sound-control > *,
@@ -5665,10 +5677,56 @@ a.guide-source:focus-visible {
   color: var(--color-text-muted);
 }
 
-/* Narrow screens (≤640px): both FABs keep the lower corners (20vw would
-   collide with the nearly full-width toolbar capsule; row center ≈ 3.2rem +
-   33px above the bottom) and each pill expands vertically UPWARD from behind
-   its FAB. The inner column-reverses so the DOM order reads from the anchor
+/* Measured vertical pill expansion at mid widths (>640px): when
+   useVibeControlLayout finds a side's horizontal pill no longer fits between
+   its 20vw anchor and the toolbar capsule, it sets
+   data-vibe-*-layout="vertical" on <html> and that side's pill expands
+   vertically UPWARD from behind its FAB — the same treatment as the ≤640px
+   media query below (keep the two in sync). The FAB keeps its glided position
+   on the capsule row (bottom: 5.0625rem); only the pill direction changes. */
+html[data-vibe-sound-layout='vertical'] .vibe-sound-pill,
+html[data-vibe-pond-layout='vertical'] .vibe-pond-pill {
+  top: auto;
+  bottom: 0;
+  width: 66px;
+  height: auto;
+  clip-path: inset(100% 0 0 0 round 999px);
+}
+
+html[data-vibe-sound-layout='vertical'] .vibe-sound-control[data-state='open'] .vibe-sound-pill,
+html[data-vibe-pond-layout='vertical'] .vibe-pond-control[data-state='open'] .vibe-pond-pill {
+  clip-path: inset(0 0 0 0 round 999px);
+}
+
+html[data-vibe-sound-layout='vertical'] .vibe-sound-pill-inner,
+html[data-vibe-pond-layout='vertical'] .vibe-pond-pill-inner {
+  flex-direction: column-reverse;
+  align-items: stretch;
+  height: auto;
+  gap: 6px;
+  /* 66px FAB + 8px gap reserved at the anchor (bottom) side. */
+  padding: 12px 6px 74px;
+  transform: translateY(8px);
+}
+
+html[data-vibe-sound-layout='vertical'] .vibe-sound-control[data-state='open'] .vibe-sound-pill-inner,
+html[data-vibe-pond-layout='vertical'] .vibe-pond-control[data-state='open'] .vibe-pond-pill-inner {
+  transform: none;
+}
+
+/* Narrower padding keeps "Source" inside the 66px-wide pill while the
+   stretched buttons keep ≥44px on both axes. */
+html[data-vibe-pond-layout='vertical'] .vibe-pond-choice {
+  width: 100%;
+  padding: 0.45rem 0.5rem;
+}
+
+/* Narrow screens (≤640px): both FABs keep the lower corners (the glide
+   anchor would collide with the nearly full-width toolbar capsule; row
+   center ≈ 3.2rem + 33px above the bottom) and each pill expands vertically
+   UPWARD from behind its FAB — the same vertical treatment the
+   data-vibe-*-layout="vertical" rules above apply at measured-tight mid
+   widths. The inner column-reverses so the DOM order reads from the anchor
    outward: Sound = Play/Pause then Direction; Pond = Source, Fish, Jelly,
    Ray. */
 @media (max-width: 640px) {

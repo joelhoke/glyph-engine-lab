@@ -25,6 +25,11 @@
 //     (Sound: Play/Pause then Direction; Pond: Source, Fish, Jelly, Ray), no
 //     horizontal overflow, no overlap with the center toolbar, controls stay
 //     visible when the viewport height shrinks (browser chrome)
+//   - mid widths (1100x800, then 800px): the measured layout
+//     (useVibeControlLayout) flips both pills to vertical expansion when
+//     their horizontal footprint no longer fits beside the toolbar capsule,
+//     the FAB glide (min(20vw, 50% - capsule half - FAB - gap)) engages as
+//     the width shrinks, and nothing overlaps the toolbar chrome
 //   - prefers-reduced-motion: expansion/retraction/spin transitions skipped
 //     (state changes still apply instantly)
 // =============================================================================
@@ -182,8 +187,12 @@ async function pollComputed(page, selector, prop, durationMs) {
 // --- desktop scenario -----------------------------------------------------------
 
 async function scenarioDesktop(browser) {
-  section('Desktop 1440x900: anchored FAB, persistent pill, 2px strokes, rotor')
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+  /* Wide viewport: BOTH pills fit horizontally from their 20vw anchors beside
+     the (debug-widened) toolbar capsule — the horizontal-expansion assertions
+     below assume that regime. Mid widths (where useVibeControlLayout flips a
+     side to vertical expansion) are covered by scenarioMidWidth. */
+  section('Desktop 2560x1080: anchored FAB, persistent pill, 2px strokes, rotor')
+  const context = await browser.newContext({ viewport: { width: 2560, height: 1080 } })
   await seedConsent(context)
   const page = await context.newPage()
   await page.goto(DEBUG_URL, { waitUntil: 'domcontentloaded' })
@@ -658,6 +667,120 @@ async function scenarioMobile(browser) {
   await context.close()
 }
 
+// --- mid-width scenario ---------------------------------------------------------
+
+async function scenarioMidWidth(browser) {
+  section('Mid width 1100x800 → 800px: measured layout, vertical pills, FAB glide')
+  const context = await browser.newContext({ viewport: { width: 1100, height: 800 } })
+  await seedConsent(context)
+  const page = await context.newPage()
+  await page.goto(DEBUG_URL, { waitUntil: 'domcontentloaded' })
+  await hideDevChrome(page)
+  await openVibeToolbar(page)
+
+  // useVibeControlLayout publishes the capsule half-width (for the FAB glide)
+  // and the per-side pill layout decision on <html>.
+  const layout = await page.evaluate(() => ({
+    capsuleHalf: document.documentElement.style.getPropertyValue('--vibe-capsule-half'),
+    sound: document.documentElement.dataset.vibeSoundLayout,
+    pond: document.documentElement.dataset.vibePondLayout,
+  }))
+  check(
+    'mid: capsule half-width is published for the FAB glide',
+    /^\d+px$/.test(layout.capsuleHalf) && parseInt(layout.capsuleHalf, 10) > 0,
+    layout.capsuleHalf,
+  )
+  check(
+    'mid: both pills flip to vertical expansion when horizontal no longer fits',
+    layout.sound === 'vertical' && layout.pond === 'vertical',
+    JSON.stringify(layout),
+  )
+
+  const soundFabBefore = await rectOf(page, '.vibe-sound-toggle')
+  const pondFabBefore = await rectOf(page, '.vibe-pond-toggle')
+  await page.click('button.vibe-sound-toggle')
+  await page.click('button.vibe-pond-toggle')
+  await waitFor(
+    async () =>
+      (await stateOf(page, 'sound')) === 'open' && (await stateOf(page, 'pond')) === 'open',
+    { label: 'both open (mid width)' },
+  )
+  await sleep(500) // open transitions settle (340ms shell + 140ms-delayed inner fade)
+  check(
+    'mid: FABs are fixed through open',
+    rectsEqual(soundFabBefore, await rectOf(page, '.vibe-sound-toggle')) &&
+      rectsEqual(pondFabBefore, await rectOf(page, '.vibe-pond-toggle')),
+  )
+
+  // Vertical expansion: each pill rises from behind its FAB (shared bottom).
+  const geometry = await page.evaluate(() => {
+    const pair = (pillSel, fabSel) => {
+      const p = document.querySelector(pillSel).getBoundingClientRect()
+      const f = document.querySelector(fabSel).getBoundingClientRect()
+      return { pillTop: p.top, pillBottom: p.bottom, fabTop: f.top, fabBottom: f.bottom }
+    }
+    return {
+      sound: pair('.vibe-sound-pill', '.vibe-sound-toggle'),
+      pond: pair('.vibe-pond-pill', '.vibe-pond-toggle'),
+    }
+  })
+  const expandsUpward = (g) =>
+    Math.abs(g.pillBottom - g.fabBottom) < 1 && g.pillTop < g.fabTop
+  check(
+    'mid: both pills expand vertically upward from behind their FABs',
+    expandsUpward(geometry.sound) && expandsUpward(geometry.pond),
+    JSON.stringify(geometry),
+  )
+
+  // Nothing overlaps the centered toolbar chrome (the original bug: the open
+  // pond pill slid under the capsule and clipped behind it).
+  const overlap = await page.evaluate(() => {
+    const intersects = (a, b) =>
+      a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+    const chrome = ['.vibe-toolbar-capsule', '.vibe-toolbar-utility-tray']
+      .map((sel) => document.querySelector(sel)?.getBoundingClientRect())
+      .filter(Boolean)
+    const pieces = [
+      '.vibe-sound-pill',
+      '.vibe-pond-pill',
+      '.vibe-sound-toggle',
+      '.vibe-pond-toggle',
+    ].map((sel) => document.querySelector(sel).getBoundingClientRect())
+    return pieces.some((piece) => chrome.some((c) => intersects(piece, c)))
+  })
+  check('mid: expanded controls do not overlap the center toolbar chrome', !overlap)
+
+  // Narrower still (800px): the FAB glide engages — the FABs leave their 20vw
+  // anchors, pull cornerward, and still clear the capsule.
+  await page.setViewportSize({ width: 800, height: 800 })
+  await sleep(250)
+  const glide = await page.evaluate(() => {
+    const rect = (sel) => document.querySelector(sel).getBoundingClientRect()
+    const soundFab = rect('.vibe-sound-toggle')
+    const pondFab = rect('.vibe-pond-toggle')
+    const capsule = rect('.vibe-toolbar-capsule')
+    return {
+      vw: window.innerWidth,
+      soundFabLeft: soundFab.left,
+      soundFabRight: soundFab.right,
+      pondFabLeft: pondFab.left,
+      pondFabRight: pondFab.right,
+      capsuleLeft: capsule.left,
+      capsuleRight: capsule.right,
+    }
+  })
+  check(
+    'mid: FAB glide engages — FABs pull cornerward and clear the capsule',
+    glide.soundFabLeft < glide.vw * 0.2 - 1 &&
+      glide.soundFabRight <= glide.capsuleLeft + 0.5 &&
+      glide.pondFabRight > glide.vw * 0.8 + 1 &&
+      glide.pondFabLeft >= glide.capsuleRight - 0.5,
+    JSON.stringify(glide),
+  )
+
+  await context.close()
+}
+
 // --- reduced-motion scenario ------------------------------------------------------
 
 async function scenarioReducedMotion(browser) {
@@ -738,6 +861,7 @@ async function main() {
     browser = await chromium.launch({ executablePath, headless: true })
 
     await scenarioDesktop(browser)
+    await scenarioMidWidth(browser)
     await scenarioMobile(browser)
     await scenarioReducedMotion(browser)
   } finally {

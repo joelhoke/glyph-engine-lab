@@ -15,6 +15,7 @@ import SonificationOverlay from './vibe/SonificationOverlay'
 import { PAINT_DEFAULT_BACKGROUND_COLOR, PAINT_DEFAULT_GLYPH_COLOR } from './vibe/PaintPanel'
 import { useSonification } from './vibe/useSonification'
 import { useClipRecorder } from './vibe/useClipRecorder'
+import { useVibeControlLayout } from './vibe/useVibeControlLayout'
 import PrimaryActions, { ExperienceKey, PRIMARY_ACTION_COUNT } from './PrimaryActions'
 import TuningPanel from './tuning/TuningPanel'
 import AnalyticsConsent from './AnalyticsConsent'
@@ -1000,6 +1001,11 @@ export default function PortfolioExperience() {
     beginCapture: sonification.beginCapture,
     durationOverrideMs: clipDurationOverrideMs,
   })
+
+  /* Floating vibe controls (Sound/Pond FABs + pills) vs the centered toolbar
+     capsule: publishes the measured capsule half-width and per-side
+     horizontal/vertical pill layout so nothing overlaps at mid-size widths. */
+  useVibeControlLayout(displayed === 'vibe' && vibeControlsOpen)
 
   const controllerRef = useRef<SequenceController>({
     startTime: 0,
