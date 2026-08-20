@@ -27,10 +27,10 @@
 //     visible when the viewport height shrinks (browser chrome)
 //   - mid widths (1440x800, then 800px): the measured layout
 //     (useVibeControlLayout) keeps pills horizontal whenever the real estate
-//     exists — the FAB anchor reserves the pill's measured footprint and
-//     glides cornerward to make the room — and falls back to vertical
-//     expansion only when no horizontal position fits; nothing overlaps the
-//     toolbar chrome either way
+//     exists — closed FABs rest at their 20vw anchors; on open each control
+//     pushes itself outward until its pill keeps a ~48px gap to the toolbar
+//     capsule — and falls back to vertical expansion only when no horizontal
+//     position fits; nothing overlaps the toolbar chrome either way
 //   - prefers-reduced-motion: expansion/retraction/spin transitions skipped
 //     (state changes still apply instantly)
 // =============================================================================
@@ -703,6 +703,12 @@ async function scenarioMidWidth(browser) {
 
   const soundFabBefore = await rectOf(page, '.vibe-sound-toggle')
   const pondFabBefore = await rectOf(page, '.vibe-pond-toggle')
+  check(
+    'mid: closed FABs rest at their 20vw anchors',
+    Math.abs(soundFabBefore.x - 0.2 * 1440) < 2 &&
+      Math.abs(pondFabBefore.x + pondFabBefore.w - 0.8 * 1440) < 2,
+    JSON.stringify({ soundFabBefore, pondFabBefore }),
+  )
   await page.click('button.vibe-sound-toggle')
   await page.click('button.vibe-pond-toggle')
   await waitFor(
@@ -710,24 +716,21 @@ async function scenarioMidWidth(browser) {
       (await stateOf(page, 'sound')) === 'open' && (await stateOf(page, 'pond')) === 'open',
     { label: 'both open (mid width)' },
   )
-  await sleep(500) // open transitions settle (340ms shell + 140ms-delayed inner fade)
-  check(
-    'mid: FABs are fixed through open',
-    rectsEqual(soundFabBefore, await rectOf(page, '.vibe-sound-toggle')) &&
-      rectsEqual(pondFabBefore, await rectOf(page, '.vibe-pond-toggle')),
-  )
+  await sleep(600) // push-out + shell (340ms) + inner fade settle
 
-  // Horizontal expansion from the reserved footprint: sound grows rightward
-  // from its FAB, pond leftward; the pond FAB leaves its 20vw anchor to make
-  // the room (the sound pill is narrow enough that its FAB can stay).
+  // Horizontal expansion after the push-out: sound grows rightward from its
+  // FAB, pond leftward, each pill keeping a ~48px gap to the capsule.
   const geometry = await page.evaluate(() => {
     const pair = (pillSel, fabSel) => {
       const p = document.querySelector(pillSel).getBoundingClientRect()
       const f = document.querySelector(fabSel).getBoundingClientRect()
       return { pillLeft: p.left, pillRight: p.right, fabLeft: f.left, fabRight: f.right }
     }
+    const capsule = document.querySelector('.vibe-toolbar-capsule').getBoundingClientRect()
     return {
       vw: window.innerWidth,
+      capsuleLeft: capsule.left,
+      capsuleRight: capsule.right,
       sound: pair('.vibe-sound-pill', '.vibe-sound-toggle'),
       pond: pair('.vibe-pond-pill', '.vibe-pond-toggle'),
     }
@@ -741,9 +744,12 @@ async function scenarioMidWidth(browser) {
     JSON.stringify(geometry),
   )
   check(
-    'mid: pond FAB glides cornerward to reserve the horizontal pill footprint',
-    geometry.pond.fabRight > geometry.vw * 0.8 + 1,
-    JSON.stringify(geometry.pond),
+    'mid: on open the controls push themselves outward, keeping a ~48px pill-to-capsule gap',
+    geometry.sound.fabLeft <= soundFabBefore.x + 0.5 &&
+      geometry.pond.fabRight >= pondFabBefore.x + pondFabBefore.w - 0.5 &&
+      geometry.capsuleLeft - geometry.sound.pillRight >= 44 &&
+      geometry.pond.pillLeft - geometry.capsuleRight >= 44,
+    JSON.stringify(geometry),
   )
 
   // Nothing overlaps the centered toolbar chrome (the original bug: the open
@@ -806,10 +812,10 @@ async function scenarioMidWidth(browser) {
       capsuleRight: capsule.right,
     }
   })
-  /* Mirrors useVibeControlLayout: pill width + 12px corner floor + 12px gap
-     must fit in the half-viewport beside the capsule. */
+  /* Mirrors useVibeControlLayout: pill width + 12px corner floor + the 48px
+     pill-to-capsule gap must fit in the half-viewport beside the capsule. */
   const expectedLayout = (pillW) =>
-    pillW + 24 <= narrow.vw / 2 - narrow.capsuleHalf ? 'horizontal' : 'vertical'
+    pillW + 60 <= narrow.vw / 2 - narrow.capsuleHalf ? 'horizontal' : 'vertical'
   check(
     'mid: layout decisions match the measured fit (vertical only as last resort, 800px)',
     expectedLayout(narrow.soundPillW) === narrow.soundLayout &&

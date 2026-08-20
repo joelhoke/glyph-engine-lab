@@ -5283,12 +5283,15 @@ a.guide-source:focus-visible {
 /* =============================================================================
    Vibe corner controls: Sound (lower-left) + Pond (lower-right)
 
-   One persistent, anchored DOM tree per control — no collapsed/expanded
-   swapping. The 66px circular FAB is the anchor: it keeps the exact same
-   screen position in every state (data-state="closed|open|closing" on
-   .vibe-sound-control / .vibe-pond-control). The pill stays mounted behind
-   the FAB (z-index 1 vs 2) and reveals via a clip-path transition, so it
-   visually grows out from behind the FAB and retracts back into it:
+   One persistent DOM tree per control — no collapsed/expanded swapping. The
+   66px circular FAB anchors the resting position (~20vw in from the corner);
+   on open the whole control pushes itself outward (animated left/right
+   transition) only as far as needed to keep the horizontal pill ~48px clear
+   of the measured toolbar capsule, then glides home once the exit completes
+   (data-state="closed|open|closing" on .vibe-sound-control /
+   .vibe-pond-control). The pill stays mounted behind the FAB (z-index 1 vs 2)
+   and reveals via a clip-path transition, so it visually grows out from
+   behind the FAB and retracts back into it:
 
      closed → open    clip-path opens over 340ms ease-out; the inner controls
                       fade + translate in after the shell starts moving
@@ -5323,50 +5326,79 @@ a.guide-source:focus-visible {
   bottom: calc(5.0625rem + env(safe-area-inset-bottom, 0px));
   z-index: 30;
   pointer-events: none;
+  /* The open-state push-out (below) animates: same timing as the pill's
+     340ms clip-path expansion so FAB and shell travel together. */
+  transition:
+    left 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    right 340ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .vibe-sound-control {
-  /* ~40% of the way from the left edge toward the center toolbar. On web the
-     pill opens horizontally whenever the real estate exists: the anchor
-     reserves the pill's full measured footprint (--vibe-sound-pill-w, 11rem
-     fallback) plus a 12px gap against the measured capsule half-width
-     (--vibe-capsule-half, 14rem fallback — both published by
-     useVibeControlLayout), gliding cornerward as the viewport narrows and
-     never past the 0.75rem corner floor. The anchor is identical closed and
-     open — the FAB never moves when the pill opens. */
-  left: calc(
-    max(
-        0.75rem,
-        min(20vw, 50% - var(--vibe-capsule-half, 14rem) - var(--vibe-sound-pill-w, 11rem) - 0.75rem)
-      ) + env(safe-area-inset-left, 0px)
-  );
-}
-
-.vibe-pond-control {
-  /* Mirror of the Sound control's pill-reserving glide, from the right edge
-     (23rem fallback: the pond pill is the wide one). */
-  right: calc(
-    max(
-        0.75rem,
-        min(20vw, 50% - var(--vibe-capsule-half, 14rem) - var(--vibe-pond-pill-w, 23rem) - 0.75rem)
-      ) + env(safe-area-inset-right, 0px)
-  );
-}
-
-/* Vertical expansion (the measured last resort, or ≤640px): no horizontal
-   footprint to reserve, so the glide only needs the FAB's own 66px + gap. */
-html[data-vibe-sound-layout='vertical'] .vibe-sound-control {
+  /* Resting anchor: ~40% of the way from the left edge toward the center
+     toolbar, gliding cornerward only enough to keep the FAB itself clear of
+     the measured capsule (--vibe-capsule-half, published by
+     useVibeControlLayout; 14rem fallback) and on-screen (0.75rem floor). */
   left: calc(
     max(0.75rem, min(20vw, 50% - var(--vibe-capsule-half, 14rem) - 4.875rem)) +
       env(safe-area-inset-left, 0px)
   );
 }
 
-html[data-vibe-pond-layout='vertical'] .vibe-pond-control {
+.vibe-pond-control {
+  /* Mirror of the Sound control's resting anchor, from the right edge. */
   right: calc(
     max(0.75rem, min(20vw, 50% - var(--vibe-capsule-half, 14rem) - 4.875rem)) +
       env(safe-area-inset-right, 0px)
   );
+}
+
+/* Open (and mid-close, so the exit geometry stays put): the control pushes
+   itself outward from its resting anchor until the horizontal pill keeps a
+   ~48px (3rem) gap to the toolbar capsule, reserving the pill's measured
+   footprint (--vibe-*-pill-w, published by useVibeControlLayout; 11rem /
+   23rem fallbacks). At wide viewports the min() keeps the 20vw anchor and
+   nothing moves. */
+.vibe-sound-control[data-state='open'],
+.vibe-sound-control[data-state='closing'] {
+  left: calc(
+    max(
+        0.75rem,
+        min(20vw, 50% - var(--vibe-capsule-half, 14rem) - var(--vibe-sound-pill-w, 11rem) - 3rem)
+      ) + env(safe-area-inset-left, 0px)
+  );
+}
+
+.vibe-pond-control[data-state='open'],
+.vibe-pond-control[data-state='closing'] {
+  right: calc(
+    max(
+        0.75rem,
+        min(20vw, 50% - var(--vibe-capsule-half, 14rem) - var(--vibe-pond-pill-w, 23rem) - 3rem)
+      ) + env(safe-area-inset-right, 0px)
+  );
+}
+
+/* Vertical expansion (the measured last resort at mid widths): the pill
+   grows upward, so there is no horizontal footprint to reserve and no
+   push-out — this FAB-only glide covers every state (it out-specifies the
+   open-state rules above). ≥641px only: ≤640px is the media query's own
+   corner pinning, and letting this override apply there would compute a
+   slightly different anchor (15px vs 0.75rem) and animate the FAB for no
+   reason when the layout attribute lands. */
+@media (min-width: 641px) {
+  html[data-vibe-sound-layout='vertical'] .vibe-sound-control {
+    left: calc(
+      max(0.75rem, min(20vw, 50% - var(--vibe-capsule-half, 14rem) - 4.875rem)) +
+        env(safe-area-inset-left, 0px)
+    );
+  }
+
+  html[data-vibe-pond-layout='vertical'] .vibe-pond-control {
+    right: calc(
+      max(0.75rem, min(20vw, 50% - var(--vibe-capsule-half, 14rem) - 4.875rem)) +
+        env(safe-area-inset-right, 0px)
+    );
+  }
 }
 
 .vibe-sound-control > *,
