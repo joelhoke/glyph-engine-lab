@@ -6,27 +6,27 @@
  * viewport width — the "object awareness" layer the fixed 20vw anchors can't
  * provide on their own.
  *
- * Two published signals, both set on <html> and consumed by globals.css:
+ * Published on <html>, consumed by globals.css:
  *
- *   --vibe-capsule-half      Half the measured toolbar capsule width (px).
- *                            The CSS FAB anchors glide toward the corners via
- *                            min(20vw, 50% - half - FAB - gap), so the FABs
- *                            never touch the capsule no matter how wide it is
- *                            (clamps, wrapping, debug-only categories).
+ *   --vibe-capsule-half        Half the measured toolbar capsule width (px).
+ *
+ *   --vibe-sound-pill-w / --vibe-pond-pill-w
+ *                              Each pill's natural HORIZONTAL width (px).
+ *                              The CSS FAB anchors reserve that footprint:
+ *                                min(20vw, 50% − capsule half − pill w − gap)
+ *                              so on web the FAB glides cornerward far enough
+ *                              that the pill can ALWAYS open horizontally when
+ *                              the real estate exists — the anchor never moves
+ *                              between closed and open.
  *
  *   data-vibe-sound-layout / data-vibe-pond-layout = "horizontal" | "vertical"
- *                            Per side: a pill may keep its desktop horizontal
- *                            inward expansion only while it fully fits between
- *                            its 20vw anchor and the capsule edge. The pill is
- *                            anchored AT the FAB's edge (it grows out from
- *                            behind the FAB), so its far edge is anchor +
- *                            pill width:
- *                              20vw + pill width + 12px clearance
- *                                ≤ 50vw − capsule half
- *                            Otherwise the pill expands vertically upward from
- *                            the FAB (same idiom as the ≤640px media query).
- *                            The sound pill is much narrower than the pond
- *                            pill, so the sides are decided independently.
+ *                              Vertical expansion (the ≤640px mobile idiom) is
+ *                              the last resort on web: it applies only when
+ *                              the pill would not fit horizontally even from a
+ *                              corner-pinned FAB:
+ *                                pill w + 24px > 50vw − capsule half
+ *                              The sound pill is much narrower than the pond
+ *                              pill, so the sides are decided independently.
  *
  * Pill widths are measured ONCE while the default (horizontal) styles apply
  * and cached for the session: measuring a vertically-expanded pill would
@@ -34,13 +34,14 @@
  * static per control, so a cached natural width stays valid.
  *
  * No-op unless `active` (the vibe surface with its controls is mounted);
- * cleanup removes the var + attributes so a remount starts fresh.
+ * cleanup removes the vars + attributes so a remount starts fresh.
  */
 
 import { useEffect } from 'react'
 
-const FAB_CAPSULE_GAP_PX = 12
-const HORIZONTAL_ANCHOR_VW = 20
+/* Corner floor (0.75rem) + clearance between pill and capsule edge. */
+const EDGE_INSET_PX = 12
+const PILL_CAPSULE_GAP_PX = 12
 
 export function useVibeControlLayout(active: boolean) {
   useEffect(() => {
@@ -55,17 +56,18 @@ export function useVibeControlLayout(active: boolean) {
       pill ? pill.getBoundingClientRect().width : 0
     const soundPillWidth = naturalPillWidth(soundPill)
     const pondPillWidth = naturalPillWidth(pondPill)
+    root.style.setProperty('--vibe-sound-pill-w', `${Math.round(soundPillWidth)}px`)
+    root.style.setProperty('--vibe-pond-pill-w', `${Math.round(pondPillWidth)}px`)
 
     const apply = () => {
       const vw = window.visualViewport?.width ?? window.innerWidth
       const capsuleHalf = capsule ? capsule.getBoundingClientRect().width / 2 : 0
       root.style.setProperty('--vibe-capsule-half', `${Math.round(capsuleHalf)}px`)
-      /* The pill grows out from behind the FAB (its anchor edge IS the FAB's
-         edge), so the horizontal footprint is anchor + pill width — the FAB
-         itself is not extra width. */
+      /* Horizontal whenever the pill fits beside the capsule even from the
+         corner floor — the CSS anchor glides the FAB out to make that room.
+         Vertical only when no horizontal position can fit the pill. */
       const horizontalFits = (pillWidth: number) =>
-        (HORIZONTAL_ANCHOR_VW / 100) * vw + pillWidth + FAB_CAPSULE_GAP_PX <=
-        vw / 2 - capsuleHalf
+        pillWidth + EDGE_INSET_PX + PILL_CAPSULE_GAP_PX <= vw / 2 - capsuleHalf
       root.dataset.vibeSoundLayout = horizontalFits(soundPillWidth) ? 'horizontal' : 'vertical'
       root.dataset.vibePondLayout = horizontalFits(pondPillWidth) ? 'horizontal' : 'vertical'
     }
@@ -85,6 +87,8 @@ export function useVibeControlLayout(active: boolean) {
       window.removeEventListener('resize', apply)
       window.removeEventListener('orientationchange', apply)
       root.style.removeProperty('--vibe-capsule-half')
+      root.style.removeProperty('--vibe-sound-pill-w')
+      root.style.removeProperty('--vibe-pond-pill-w')
       delete root.dataset.vibeSoundLayout
       delete root.dataset.vibePondLayout
     }

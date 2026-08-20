@@ -5326,19 +5326,43 @@ a.guide-source:focus-visible {
 }
 
 .vibe-sound-control {
-  /* ~40% of the way from the left edge toward the center toolbar, gliding
-     cornerward when the centered toolbar capsule needs the room: never closer
-     to center than the measured capsule half-width (--vibe-capsule-half,
-     published by useVibeControlLayout; 14rem fallback) + this FAB's 66px +
-     a 12px gap, and never pushed off the viewport edge. */
+  /* ~40% of the way from the left edge toward the center toolbar. On web the
+     pill opens horizontally whenever the real estate exists: the anchor
+     reserves the pill's full measured footprint (--vibe-sound-pill-w, 11rem
+     fallback) plus a 12px gap against the measured capsule half-width
+     (--vibe-capsule-half, 14rem fallback — both published by
+     useVibeControlLayout), gliding cornerward as the viewport narrows and
+     never past the 0.75rem corner floor. The anchor is identical closed and
+     open — the FAB never moves when the pill opens. */
+  left: calc(
+    max(
+        0.75rem,
+        min(20vw, 50% - var(--vibe-capsule-half, 14rem) - var(--vibe-sound-pill-w, 11rem) - 0.75rem)
+      ) + env(safe-area-inset-left, 0px)
+  );
+}
+
+.vibe-pond-control {
+  /* Mirror of the Sound control's pill-reserving glide, from the right edge
+     (23rem fallback: the pond pill is the wide one). */
+  right: calc(
+    max(
+        0.75rem,
+        min(20vw, 50% - var(--vibe-capsule-half, 14rem) - var(--vibe-pond-pill-w, 23rem) - 0.75rem)
+      ) + env(safe-area-inset-right, 0px)
+  );
+}
+
+/* Vertical expansion (the measured last resort, or ≤640px): no horizontal
+   footprint to reserve, so the glide only needs the FAB's own 66px + gap. */
+html[data-vibe-sound-layout='vertical'] .vibe-sound-control {
   left: calc(
     max(0.75rem, min(20vw, 50% - var(--vibe-capsule-half, 14rem) - 4.875rem)) +
       env(safe-area-inset-left, 0px)
   );
 }
 
-.vibe-pond-control {
-  /* Mirror of the Sound control's glide, from the right edge. */
+html[data-vibe-pond-layout='vertical'] .vibe-pond-control {
   right: calc(
     max(0.75rem, min(20vw, 50% - var(--vibe-capsule-half, 14rem) - 4.875rem)) +
       env(safe-area-inset-right, 0px)
@@ -5686,13 +5710,15 @@ a.guide-source:focus-visible {
   color: var(--color-text-muted);
 }
 
-/* Measured vertical pill expansion at mid widths (>640px): when
-   useVibeControlLayout finds a side's horizontal pill no longer fits between
-   its 20vw anchor and the toolbar capsule, it sets
-   data-vibe-*-layout="vertical" on <html> and that side's pill expands
-   vertically UPWARD from behind its FAB — the same treatment as the ≤640px
-   media query below (keep the two in sync). The FAB keeps its glided position
-   on the capsule row (bottom: 5.0625rem); only the pill direction changes. */
+/* Measured vertical pill expansion at mid widths (>640px): on web the pills
+   open horizontally whenever the real estate exists (the FAB anchor reserves
+   the footprint — see the glide rules above); useVibeControlLayout sets
+   data-vibe-*-layout="vertical" on <html> only when a side's pill would not
+   fit horizontally even from a corner-pinned FAB. That side's pill then
+   expands vertically UPWARD from behind its FAB — the same treatment as the
+   ≤640px media query below (keep the two in sync). The FAB keeps its glided
+   position on the capsule row (bottom: 5.0625rem); only the pill direction
+   changes. */
 html[data-vibe-sound-layout='vertical'] .vibe-sound-pill,
 html[data-vibe-pond-layout='vertical'] .vibe-pond-pill {
   top: auto;
