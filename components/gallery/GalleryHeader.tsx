@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { SITE_IDENTITY } from '../../content/site'
 import Logo from '../Logo'
 import styles from './gallery.module.css'
 
@@ -22,7 +21,9 @@ export default function GalleryHeader({ crumb }: GalleryHeaderProps) {
       <Link href="/" className={styles.brand} aria-label="joel hoke design — back to home">
         <img
           className={styles.avatar}
-          src={SITE_IDENTITY.avatarSrc}
+          // Monogram placeholder; swap to SITE_IDENTITY.avatarSrc once
+          // feature/persistent-header (content/site.ts) merges in.
+          src="/JHLogo-180.png"
           alt=""
           width={28}
           height={28}
