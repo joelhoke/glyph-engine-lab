@@ -33,3 +33,18 @@ MOONSHOT_MODEL = "kimi-k2.6"
 # [[r2_buckets]]
 # binding = "PROTECTED_BUCKET"
 # bucket_name = "jh-protected-work"
+
+# R2 binding for hosted prototypes (docs/prototypes-plan.md). Create the
+# bucket once with:
+#   wrangler r2 bucket create jh-prototypes
+# then bind it in the Pages dashboard (Settings → Functions → R2 bucket
+# bindings) as PROTOTYPES_BUCKET — dashboard bindings are the source of
+# truth. Bundles are uploaded under /<stack>/<slug>/<file> with
+# `wrangler r2 object put` and served through functions/p/[[path]].ts;
+# they NEVER go into public/ or the static export. For local dev, uncomment
+# the binding below (wrangler pages dev emulates R2 locally) or pass
+# --r2=PROTOTYPES_BUCKET on the command line.
+#
+# [[r2_buckets]]
+# binding = "PROTOTYPES_BUCKET"
+# bucket_name = "jh-prototypes"
