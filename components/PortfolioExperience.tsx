@@ -2,7 +2,7 @@
 
 import SceneCanvas, { SceneCanvasHandle, SceneTargetRegion } from './SceneCanvas'
 import CanvasFallback from './CanvasFallback'
-import ExperienceNav from './ExperienceNav'
+import SiteHeader from './SiteHeader'
 import ExperienceTransition, { useExperienceTransition } from './ExperienceTransition'
 import WorkExperience, { MIN_EXPANSION_RANGE_PX } from './work/WorkExperience'
 import CollaborateExperience from './collaborate/CollaborateExperience'
@@ -21,6 +21,7 @@ import AnalyticsConsent from './AnalyticsConsent'
 import { ExperienceMode, ExperienceSceneKey } from '../engine/types'
 import { EXPERIENCE_SCENES, resolveScenePlayground } from '../engine/sceneConfig'
 import { getWorkSlide, getWorkSlideHeroFit, getWorkSlideId, resolveWorkSlideScene, WORK_SLIDES } from '../content/work'
+import { SITE_IDENTITY } from '../content/site'
 import {
   COLLABORATE_AI_GUIDE,
   COLLABORATE_CONTACT,
@@ -230,6 +231,12 @@ export default function PortfolioExperience() {
   // deep-link hash resolves to a mode on mount (handled below).
   const [experience, setExperience] = useState<ExperienceMode>('intro')
   const [selected, setSelected] = useState<ExperienceKey | null>(null)
+  // Stable mirror for the mount-once hash listener, whose closure would
+  // otherwise capture the initial mode forever.
+  const experienceRef = useRef<ExperienceMode>('intro')
+  useEffect(() => {
+    experienceRef.current = experience
+  }, [experience])
   const [tuningMode, setTuningMode] = useState(false)
   const [qualityTierOverride, setQualityTierOverride] = useState<QualityTier | null>(null)
   const { displayed, phase: transitionPhase } = useExperienceTransition(experience)
@@ -1167,7 +1174,7 @@ export default function PortfolioExperience() {
     return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [])
 
-  const navigateTo = (key: ExperienceSceneKey) => {
+  const navigateTo = (key: ExperienceSceneKey | null) => {
     const doNavigate = () => {
       // Leaving the full chat page via the nav retains the conversation as
       // the companion (wide) or the minimized resume bar (narrow); entering
@@ -1181,16 +1188,32 @@ export default function PortfolioExperience() {
         setGuideOverlayOpen(false)
       }
       setSelected(key)
-      setExperience(key)
+      setExperience(key ?? 'intro')
+      // Home (null): the scene-adoption effect skips the intro mode, so the
+      // landing's behavior/layout are restored explicitly here — otherwise
+      // the canvas would keep the last section's descriptor behind the
+      // logotype.
+      if (key === null) {
+        setSceneConfig({ ...APPROVED_SCENE_DEFAULTS })
+        setSourceLayout({ ...APPROVED_SOURCE_LAYOUT_DEFAULTS })
+      }
       // Selecting Collaborate from Work/Vibe ALWAYS opens the landing, even
       // when a conversation exists in memory (the landing previews it).
       if (key === 'collaborate') setCollaborateView('landing')
-      if (typeof window !== 'undefined' && window.location.hash !== formatExperienceHash(key)) {
+      // Home strips the hash entirely (pathname + search) instead of
+      // introducing a #home sentinel, so `/` stays the canonical landing URL.
+      const nextUrl = key
+        ? formatExperienceHash(key)
+        : `${window.location.pathname}${window.location.search}`
+      if (
+        typeof window !== 'undefined' &&
+        (key === null ? window.location.hash !== '' : window.location.hash !== nextUrl)
+      ) {
         // pushState (not location.hash assignment) so no hashchange event fires;
         // the listener below owns back/forward navigation only. Every state
         // update simply replaces the previous one, so rapid navigation always
         // resolves to the last selected mode.
-        window.history.pushState(null, '', formatExperienceHash(key))
+        window.history.pushState(null, '', nextUrl)
       }
     }
     // Leaving vibe with paint on the field asks before discarding it.
@@ -1210,7 +1233,10 @@ export default function PortfolioExperience() {
   // bare work mode (slide untouched). `#collaborate/chat` deep links open the
   // chat subview while a conversation exists in memory; without turns (e.g. a
   // direct load or reload — page memory only) the hash canonicalizes to the
-  // bare `#collaborate` landing via replaceState.
+  // bare `#collaborate` landing via replaceState. An EMPTY hash is the
+  // canonical home URL: back/forward onto `/` settles the landing (without
+  // replaying the intro) and restores the landing scene defaults. Unrecognized
+  // non-empty hashes (e.g. `#main-content` from the skip link) stay untouched.
   useEffect(() => {
     const applyHash = () => {
       const target = parseExperienceHashTarget(window.location.hash)
@@ -1240,6 +1266,15 @@ export default function PortfolioExperience() {
             setGuideUnseenAnswer(false)
           }
         }
+      } else if (window.location.hash.replace(/^#/, '').trim() === '') {
+        // Home: raw settle (same pattern as the deep-link branch above),
+        // skipped when the landing is already showing so the intro's first
+        // paint never sees a fresh sceneConfig identity mid-sequence.
+        if (experienceRef.current === 'intro') return
+        setSelected(null)
+        setExperience('intro')
+        setSceneConfig({ ...APPROVED_SCENE_DEFAULTS })
+        setSourceLayout({ ...APPROVED_SOURCE_LAYOUT_DEFAULTS })
       }
     }
     applyHash()
@@ -2385,13 +2420,16 @@ export default function PortfolioExperience() {
           }
         }}
       />
-      {experience !== 'intro' && (
-        <ExperienceNav
-          active={displayed === 'intro' ? null : displayed}
-          onSelect={navigateTo}
-          className={collaborateChatActive ? 'experience-nav--chat-active' : undefined}
-        />
-      )}
+      {/* Persistent frame (homepage-redesign phase 1): always rendered — on
+          the landing and inside every section — so home, the section tabs,
+          and the recruiter links are one click away from anywhere. Sits
+          above the canvas (z-index contract in globals.css .site-header). */}
+      <SiteHeader
+        active={displayed === 'intro' ? null : displayed}
+        onSelect={navigateTo}
+        onHome={() => navigateTo(null)}
+        className={collaborateChatActive ? 'site-header--chat-active' : undefined}
+      />
       <AnalyticsConsent onClient={(client) => (analyticsClientRef.current = client)} />
       <main
         id="main-content"
@@ -2404,13 +2442,28 @@ export default function PortfolioExperience() {
           <div
             className={`foreground-content${
               collaborateChatActive ? ' foreground-content-chat' : ''
-            }`}
+            }${displayed === 'intro' ? ' foreground-content--home' : ''}`}
           >
             {displayed === 'intro' ? (
               <>
-                {/* Accessible landing heading: the visible mark is the canvas
-                    glyph logotype, so the h1 stays visually hidden. */}
-                <h1 className="visually-hidden">joel hoke design</h1>
+                {/* Visible identity block (homepage-redesign phase 2): the
+                    recruiter's 5-second answer — who, what level, what proof —
+                    rendered as static HTML so it's the LCP candidate, not the
+                    WebGL scene. The h1 is genuinely visible now; the canvas
+                    logotype behind it stays ambient. The portrait placeholder
+                    (monogram) is owed a treated photo from phase 0. */}
+                <header className="home-identity">
+                  <img
+                    className="home-identity-portrait"
+                    src={SITE_IDENTITY.portraitSrc}
+                    alt={SITE_IDENTITY.portraitAlt}
+                    width={200}
+                    height={200}
+                  />
+                  <h1 className="home-identity-name">{SITE_IDENTITY.name}</h1>
+                  <p className="home-identity-role">{SITE_IDENTITY.role}</p>
+                  <p className="home-identity-positioning">{SITE_IDENTITY.positioning}</p>
+                </header>
                 <PrimaryActions
                   selected={selected}
                   onSelect={navigateTo}

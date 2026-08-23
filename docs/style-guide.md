@@ -159,7 +159,7 @@ Two typefaces, both self-hosted (no remote font requests):
 
 | Style | Spec |
 |---|---|
-| Hero (landing) | glyph-built logotype/monogram on the canvas — no HTML hero text |
+| Hero (landing) | glyph-built logotype/monogram on the canvas as ambient backdrop; the HTML identity block (`.home-identity`: portrait chip, Cabin 700 name, mono role eyebrow, positioning sentence) is the visible H1 first impression |
 | Display headings | Cabin 700; Work titles `clamp(1.7rem, 3vw, 2.4rem)`, line-height 1.05, letter-spacing −0.03em |
 | Section heading | 1.05rem, mono, `#f5f7fb` |
 | Mode eyebrow | 0.78rem, uppercase, letter-spacing 0.22em, accent blue |
@@ -192,9 +192,13 @@ labels.
 - **Buttons**: pill (radius 999px), min-height 44px, mono at 0.82rem;
   default = translucent panel + border, hover = border to `#8abaff` and
   text to `#f7fbff`; primary (consent) = `#8fe3f5` fill on `#06090e`.
-  Landing primary actions (`.primary-action-button`) are larger: min-height
-  60px desktop / 56px mobile, padding `1.25rem 2rem` desktop /
-  `1rem 1.25rem` mobile — always above the 44px accessibility floor.
+  Landing doorways (`.doorway-card` in `components/DoorwayCard.tsx`) are
+  cards, not pills: cycling 3:2 preview + section name + one-line promise
+  (+ Work role/timeframe meta), wrapped in the intro's `BorderBeam` reveal.
+  The persistent site frame (`.site-header`, z-index 45 — above the
+  foreground layer, below the tuning panel) carries the home lockup, the
+  section tabs (`.experience-nav-list` pill classes), and the recruiter
+  links; on ≤560px phones it wraps to two rows (lockup + links, then tabs).
 - **Focus**: 2px `#8abaff` outline, 3–4px offset, `:focus-visible` only —
   never remove it.
 - **Motion**: 160–320ms ease transitions; opacity + ≤18px translate for

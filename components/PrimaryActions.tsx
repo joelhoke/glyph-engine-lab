@@ -1,7 +1,8 @@
 'use client'
 
-import { Ref, RefObject } from 'react'
-import PrimaryAction from './PrimaryAction'
+import { Ref } from 'react'
+import DoorwayCard from './DoorwayCard'
+import { DOORWAY_CARDS } from '../content/site'
 
 type PrimaryActionsProps = {
   selected: ExperienceKey | null
@@ -11,14 +12,21 @@ type PrimaryActionsProps = {
 
 export type ExperienceKey = 'work' | 'vibe' | 'collaborate'
 
-export const primaryActions = [
-  { key: 'work' as const, label: 'Work', hue: '20deg' },
-  { key: 'vibe' as const, label: 'Vibe', hue: '200deg' },
-  { key: 'collaborate' as const, label: 'Collaborate', hue: '320deg' },
-]
+/** BorderBeam hue per doorway, keyed to match DOORWAY_CARDS order. */
+const DOORWAY_HUES: Record<ExperienceKey, string> = {
+  work: '20deg',
+  vibe: '200deg',
+  collaborate: '320deg',
+}
 
-export const PRIMARY_ACTION_COUNT = primaryActions.length
+export const PRIMARY_ACTION_COUNT = DOORWAY_CARDS.length
 
+/**
+ * The homepage doorway group (homepage-redesign phase 3): one DoorwayCard per
+ * section. Keeps the intro-sequence contract — the shell's rAF loop toggles
+ * options-hidden/options-inert/aria-hidden/inert on this group and drives
+ * --option-progress-{i}, consumed per slot via the stable data-action-index.
+ */
 export default function PrimaryActions({ selected, onSelect, groupRef }: PrimaryActionsProps) {
   return (
     <div
@@ -28,17 +36,17 @@ export default function PrimaryActions({ selected, onSelect, groupRef }: Primary
       aria-label="Primary portfolio actions"
       aria-hidden="true"
     >
-      {primaryActions.map((action, index) => (
+      {DOORWAY_CARDS.map((card, index) => (
         <div
-          key={action.key}
+          key={card.key}
           className="primary-action-slot"
           data-action-index={index}
         >
-          <PrimaryAction
-            label={action.label}
-            selected={selected === action.key}
-            onClick={() => onSelect(action.key)}
-            hue={action.hue}
+          <DoorwayCard
+            card={card}
+            selected={selected === card.key}
+            onClick={() => onSelect(card.key)}
+            hue={DOORWAY_HUES[card.key]}
             style={{ '--option-index': String(index) } as React.CSSProperties}
           />
         </div>
