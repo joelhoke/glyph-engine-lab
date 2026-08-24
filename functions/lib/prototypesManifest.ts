@@ -94,6 +94,30 @@ export const STACKS: PrototypeStack[] = [
       },
     ],
   },
+  {
+    slug: 'golden-age-collectables',
+    title: 'Golden Age Collectables',
+    access: { mode: 'public' },
+    listed: true,
+    framing:
+      'Two budget-tier site proposals for the Pike Place Market comic shop — same shop, escalating features and finish.',
+    prototypes: [
+      {
+        slug: 'mild',
+        title: 'Mild',
+        tier: 'Tier 1',
+        summary: 'Static brochure site — new releases, events, visit info; no CMS.',
+        thumb: 'thumb.jpg',
+      },
+      {
+        slug: 'medium',
+        title: 'Medium',
+        tier: 'Tier 2',
+        summary: 'Zine-stand redesign with a staff-editable CMS and featured collectibles.',
+        thumb: 'thumb.jpg',
+      },
+    ],
+  },
 ]
 
 // --- Lookups ---------------------------------------------------------------------

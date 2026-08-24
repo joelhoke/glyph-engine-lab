@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Comics, Manga &amp; Graphic Novels | Golden Age Collectables | Seattle</title>
+  <meta name="description" content="New comics every Wednesday from Marvel, DC, Image and more, plus vintage and graded comics, manga, graphic novels, and rare collectibles at Golden Age Collectables in Seattle.">
+  <link rel="canonical" href="https://goldenagecollectables.com/comics/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Comics, Manga &amp; Graphic Novels | Golden Age Collectables | Seattle">
+  <meta property="og:description" content="New comics every Wednesday from Marvel, DC, Image and more, plus vintage and graded comics, manga, graphic novels, and rare collectibles at Golden Age Collectables in Seattle.">
+  <meta property="og:url" content="https://goldenagecollectables.com/comics/">
+  <meta property="og:image" content="https://goldenagecollectables.com/images/hero.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Comics, Manga &amp; Graphic Novels | Golden Age Collectables | Seattle">
+  <meta name="twitter:description" content="New comics every Wednesday from Marvel, DC, Image and more, plus vintage and graded comics, manga, graphic novels, and rare collectibles at Golden Age Collectables in Seattle.">
+  <meta name="twitter:image" content="https://goldenagecollectables.com/images/hero.png">
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/p/golden-age-collectables/mild/images/favicon-32.png">
+  <link rel="apple-touch-icon" href="/p/golden-age-collectables/mild/images/apple-touch-icon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bangers&family=Inter:wght@400;600;700&display=swap">
+
+  <script>document.documentElement.classList.add('js');</script>
+  <style>/* Golden Age Collectables — vintage Americana meets comic book pop */
+
+:root {
+  --cream: #F5F1E8;
+  --navy: #1A1A2E;
+  --red: #C41E3A;
+  --gold: #D4AF37;
+  --white: #FFFFFF;
+  --font-display: "Bangers", "Impact", "Arial Black", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --border: 3px solid var(--navy);
+  --shadow: 6px 6px 0 var(--navy);
+  --halftone: radial-gradient(circle, rgba(26, 26, 46, 0.08) 2px, transparent 2.5px);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background-color: var(--cream);
+  background-image: var(--halftone);
+  background-size: 26px 26px;
+  color: var(--navy);
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+
+img, svg, iframe { max-width: 100%; }
+img { height: auto; display: block; }
+
+h1, h2, h3, .display {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: 0.03em;
+  margin: 0 0 0.5em;
+}
+
+h1 { font-size: clamp(2.4rem, 6vw, 4rem); }
+h2 { font-size: clamp(1.8rem, 4vw, 2.6rem); }
+h3 { font-size: 1.5rem; }
+
+a { color: var(--red); text-underline-offset: 0.15em; }
+a:hover { color: var(--navy); }
+
+:focus-visible {
+  outline: 3px solid var(--red);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -4rem;
+  z-index: 100;
+  background: var(--navy);
+  color: var(--white);
+  padding: 0.6rem 1rem;
+  font-weight: 700;
+  transition: top 0.15s ease;
+}
+.skip-link:focus { top: 0.5rem; color: var(--white); }
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  letter-spacing: 0.05em;
+  text-decoration: none;
+  padding: 0.55em 1.3em;
+  border: var(--border);
+  box-shadow: var(--shadow);
+  background: var(--red);
+  color: var(--white);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.btn:hover { color: var(--white); transform: translate(2px, 2px); box-shadow: 4px 4px 0 var(--navy); }
+.btn:active { transform: translate(6px, 6px); box-shadow: 0 0 0 var(--navy); }
+
+.btn--secondary {
+  background: var(--cream);
+  color: var(--navy);
+}
+.btn--secondary:hover { color: var(--red); }
+
+/* ---------- Header ---------- */
+
+.site-header {
+  background: var(--cream);
+  border-bottom: var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+@media (min-width: 769px) {
+  .site-header { position: static; }
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-decoration: none;
+  color: var(--navy);
+}
+.logo-badge { flex: 0 0 auto; display: block; line-height: 0; }
+.logo-text {
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 4vw, 1.9rem);
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+.logo-accent { color: var(--red); }
+
+.nav-toggle {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  font: inherit;
+  font-weight: 700;
+  color: var(--navy);
+  background: var(--gold);
+  border: var(--border);
+  box-shadow: 4px 4px 0 var(--navy);
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+}
+.nav-toggle-bars,
+.nav-toggle-bars::before,
+.nav-toggle-bars::after {
+  display: block;
+  width: 20px;
+  height: 3px;
+  background: var(--navy);
+  position: relative;
+}
+.nav-toggle-bars::before,
+.nav-toggle-bars::after { content: ""; position: absolute; left: 0; }
+.nav-toggle-bars::before { top: -6px; }
+.nav-toggle-bars::after { top: 6px; }
+
+.site-nav ul {
+  display: flex;
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.site-nav a {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  letter-spacing: 0.05em;
+  color: var(--navy);
+  text-decoration: none;
+  padding: 0.35rem 0.9rem;
+  border: 3px solid transparent;
+}
+.site-nav a:hover { color: var(--red); }
+.site-nav a[aria-current="page"] {
+  border: var(--border);
+  background: var(--gold);
+  box-shadow: 3px 3px 0 var(--navy);
+  color: var(--navy);
+}
+
+@media (max-width: 768px) {
+  .js .nav-toggle { display: inline-flex; }
+  .js .site-nav { display: none; }
+  .js .site-nav.is-open {
+    display: block;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    background: var(--cream);
+    border-bottom: var(--border);
+    padding: 0.5rem 1.25rem 1rem;
+  }
+  .js .site-nav.is-open ul { flex-direction: column; gap: 0.2rem; }
+  .js .site-nav.is-open a { font-size: 1.5rem; padding: 0.5rem 0.25rem; }
+}
+
+/* ---------- Info bar ---------- */
+
+.info-bar {
+  background: var(--navy);
+  color: var(--cream);
+  font-size: 0.9rem;
+}
+.info-bar-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 1.25rem;
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+}
+.info-item { color: var(--cream); }
+.info-bar a { color: var(--gold); text-decoration: none; font-weight: 600; }
+.info-bar a:hover { color: var(--white); text-decoration: underline; }
+#hours-data { display: none; }
+
+/* ---------- Hero ---------- */
+
+.hero { padding: 2rem 0 3rem; }
+.hero-grid {
+  display: grid;
+  gap: 2rem;
+  align-items: center;
+}
+@media (min-width: 860px) {
+  .hero-grid { grid-template-columns: 1.05fr 1fr; }
+}
+.hero-art {
+  border: var(--border);
+  box-shadow: var(--shadow);
+  background: var(--cream);
+}
+.hero-kicker {
+  display: inline-block;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.8rem;
+  background: var(--gold);
+  border: var(--border);
+  box-shadow: 3px 3px 0 var(--navy);
+  padding: 0.25rem 0.7rem;
+  margin-bottom: 1rem;
+}
+.hero h1 { margin-bottom: 0.35em; }
+.hero-sub { font-size: 1.2rem; max-width: 34rem; }
+.hero-actions { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1.5rem; align-items: center; }
+.hero-secondary { font-weight: 700; }
+
+/* ---------- Cards ---------- */
+
+.section { padding: 3rem 0; }
+.section-head { margin-bottom: 1.75rem; }
+
+.cards {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 860px) {
+  .cards { grid-template-columns: repeat(3, 1fr); }
+}
+.card {
+  background: var(--white);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.card-icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  background: var(--gold);
+  border: var(--border);
+  box-shadow: 3px 3px 0 var(--navy);
+  margin-bottom: 0.5rem;
+}
+.card h3 { margin-bottom: 0.15em; }
+.card p { margin: 0 0 0.6rem; }
+.card-link { font-weight: 700; margin-top: auto; }
+
+/* ---------- Press band ---------- */
+
+.press-band {
+  background: var(--navy);
+  color: var(--cream);
+  padding: 2.5rem 0;
+  border-top: var(--border);
+  border-bottom: var(--border);
+}
+.press-band h2 { color: var(--gold); text-align: center; }
+.press-logos {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 1.25rem 2.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  filter: grayscale(1);
+}
+.press-logos li { color: #cfcabb; white-space: nowrap; }
+.press-met { font-family: Georgia, serif; font-style: italic; font-weight: 700; font-size: 1.35rem; }
+.press-atlas { font-family: Georgia, serif; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; font-size: 1rem; }
+.press-lp { font-family: var(--font-body); font-weight: 700; font-size: 1.25rem; letter-spacing: -0.02em; }
+.press-times { font-family: "Times New Roman", Times, serif; font-weight: 700; font-size: 1.3rem; }
+.press-wiki { font-family: "Times New Roman", Times, serif; font-size: 1.35rem; letter-spacing: 0.06em; }
+
+/* ---------- About teaser / generic split ---------- */
+
+.split {
+  display: grid;
+  gap: 2rem;
+  align-items: center;
+}
+@media (min-width: 860px) {
+  .split { grid-template-columns: 1fr 1fr; }
+}
+.split-art { border: var(--border); box-shadow: var(--shadow); }
+
+.badge {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  letter-spacing: 0.06em;
+  color: var(--navy);
+  background: var(--gold);
+  border: var(--border);
+  box-shadow: 3px 3px 0 var(--navy);
+  padding: 0.3rem 0.8rem;
+  transform: rotate(-2deg);
+}
+
+/* ---------- Quotes ---------- */
+
+.quote {
+  background: var(--white);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  padding: 1.5rem;
+  margin: 0;
+}
+.quote p { font-size: 1.15rem; margin: 0 0 0.75rem; }
+.quote footer { font-weight: 700; }
+.quote footer cite { font-style: normal; color: var(--red); }
+.quotes-grid { display: grid; gap: 1.5rem; }
+@media (min-width: 860px) {
+  .quotes-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* ---------- Hours table ---------- */
+
+.hours-table {
+  width: 100%;
+  max-width: 30rem;
+  border-collapse: collapse;
+  background: var(--white);
+  border: var(--border);
+  box-shadow: var(--shadow);
+}
+.hours-table caption {
+  text-align: left;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  letter-spacing: 0.04em;
+  padding-bottom: 0.5rem;
+}
+.hours-table th,
+.hours-table td {
+  text-align: left;
+  padding: 0.55rem 1rem;
+  border-bottom: 2px solid var(--navy);
+}
+.hours-table tr:last-child th,
+.hours-table tr:last-child td { border-bottom: 0; }
+.hours-table td { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------- Info list / map ---------- */
+
+.info-panel {
+  background: var(--white);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  padding: 1.5rem;
+}
+.map-frame {
+  border: var(--border);
+  box-shadow: var(--shadow);
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  display: block;
+  background: var(--white);
+}
+
+.big-phone {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 6vw, 3rem);
+  letter-spacing: 0.04em;
+  text-decoration: none;
+}
+
+.grid-2 { display: grid; gap: 2rem; }
+@media (min-width: 860px) {
+  .grid-2 { grid-template-columns: 1fr 1fr; }
+}
+
+.page-head {
+  padding: 3rem 0 1rem;
+}
+.page-head p.lede { font-size: 1.2rem; max-width: 44rem; }
+
+.cta-band {
+  background: var(--red);
+  color: var(--white);
+  border-top: var(--border);
+  border-bottom: var(--border);
+  padding: 2.5rem 0;
+  text-align: center;
+}
+.cta-band h2 { color: var(--white); }
+.cta-band p { max-width: 38rem; margin: 0 auto 1.25rem; }
+.cta-band .btn { background: var(--navy); box-shadow: 6px 6px 0 rgba(0,0,0,0.45); }
+.cta-band .btn:hover { color: var(--gold); }
+
+/* ---------- Footer ---------- */
+
+.site-footer {
+  background: var(--navy);
+  color: var(--cream);
+  margin-top: 3rem;
+  border-top: 6px solid var(--red);
+  padding: 2.5rem 0 1.5rem;
+}
+.site-footer h2 { color: var(--gold); font-size: 1.6rem; }
+.site-footer a { color: var(--cream); }
+.site-footer a:hover { color: var(--gold); }
+.footer-grid {
+  display: grid;
+  gap: 2rem;
+}
+@media (min-width: 860px) {
+  .footer-grid { grid-template-columns: 1fr 1fr 1.2fr; }
+}
+.footer-col address { font-style: normal; line-height: 1.7; }
+.footer-note { color: #b9b4a4; font-size: 0.9rem; }
+.footer-social { display: flex; gap: 1.25rem; font-weight: 700; }
+.hours-list { list-style: none; margin: 0; padding: 0; }
+.hours-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: 17rem;
+  padding: 0.2rem 0;
+  border-bottom: 1px dashed rgba(245, 241, 232, 0.25);
+}
+.footer-map iframe {
+  border: 3px solid var(--gold);
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  display: block;
+}
+.footer-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 2rem;
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(245, 241, 232, 0.25);
+  font-size: 0.9rem;
+}
+.footer-bottom p { margin: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .btn, .skip-link { transition: none; }
+}
+
+/* ---------- This Week's New Comics (harvested spotlight) ---------- */
+
+.spotlight-card {
+  display: grid;
+  gap: 1.5rem;
+  background: var(--white);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  padding: 1.5rem;
+}
+@media (min-width: 760px) {
+  .spotlight-card { grid-template-columns: minmax(180px, 260px) 1fr; }
+}
+.spotlight-cover {
+  border: var(--border);
+  box-shadow: 4px 4px 0 var(--navy);
+  align-self: start;
+}
+.spotlight-body h3 { margin: 0.4rem 0 0.2rem; }
+.badge--pub { background: var(--red); color: var(--white); }
+.spotlight-creators {
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+  margin: 0 0 0.75rem;
+}
+.spotlight-synopsis { font-size: 0.95rem; }
+.spotlight-extras {
+  margin: 0 0 0.75rem;
+  padding-left: 1.25rem;
+  font-size: 0.95rem;
+}
+.spotlight-extras li::marker { color: var(--red); }
+.spotlight-meta { font-weight: 700; margin: 0 0 0.5rem; }
+.spotlight-reserve { font-weight: 700; margin: 0; }
+
+/* ---------- Figures & captions ---------- */
+
+figure { margin: 0; }
+.caption {
+  font-size: 0.85rem;
+  color: #55533f;
+  margin-top: 0.5rem;
+}
+.site-footer .caption { color: #b9b4a4; }
+</style>
+  <script src="/p/golden-age-collectables/mild/js/main.js" defer></script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": ["LocalBusiness", "Store"],
+    "name": "Golden Age Collectables",
+    "image": "https://goldenagecollectables.com/images/hero.png",
+    "url": "https://goldenagecollectables.com",
+    "telephone": "206-622-9799",
+    "priceRange": "$$",
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": "1501 Pike Place #401",
+      "addressLocality": "Seattle",
+      "addressRegion": "WA",
+      "postalCode": "98101",
+      "addressCountry": "US"
+    },
+    "geo": {
+      "@type": "GeoCoordinates",
+      "latitude": 47.6086,
+      "longitude": -122.3409
+    },
+    "openingHoursSpecification": [
+      {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": "https://schema.org/Monday",
+        "opens": "09:00",
+        "closes": "19:00"
+      },
+      {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": "https://schema.org/Tuesday",
+        "opens": "09:00",
+        "closes": "19:00"
+      },
+      {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": "https://schema.org/Wednesday",
+        "opens": "09:30",
+        "closes": "19:00"
+      },
+      {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": "https://schema.org/Thursday",
+        "opens": "09:00",
+        "closes": "19:00"
+      },
+      {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": "https://schema.org/Friday",
+        "opens": "09:00",
+        "closes": "19:00"
+      },
+      {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": "https://schema.org/Saturday",
+        "opens": "09:00",
+        "closes": "19:00"
+      },
+      {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": "https://schema.org/Sunday",
+        "opens": "09:00",
+        "closes": "19:00"
+      }
+    ],
+    "sameAs": [
+      "https://www.facebook.com/GoldenAgeCollectables/",
+      "https://www.instagram.com/goldenagecollectables/",
+      "https://en.wikipedia.org/wiki/Golden_Age_Collectables"
+    ]
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <header class="site-header">
+  <div class="container header-inner">
+    <a class="logo" href="/p/golden-age-collectables/mild/" aria-label="Golden Age Collectables — home">
+      <picture class="logo-badge">
+        <source srcset="/p/golden-age-collectables/mild/images/logo-badge.webp" type="image/webp">
+        <img src="/p/golden-age-collectables/mild/images/logo-badge-144.png" alt="" width="44" height="44" fetchpriority="high">
+      </picture>
+      <span class="logo-text">Golden Age <span class="logo-accent">Collectables</span></span>
+    </a>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">
+      <span class="nav-toggle-bars" aria-hidden="true"></span>
+      <span class="nav-toggle-label">Menu</span>
+    </button>
+    <nav class="site-nav" id="site-nav" aria-label="Main navigation">
+      <ul>
+        <li><a href="/p/golden-age-collectables/mild/about/">About</a></li>
+        <li><a href="/p/golden-age-collectables/mild/visit/">Visit</a></li>
+        <li><a href="/p/golden-age-collectables/mild/comics/" aria-current="page">Comics</a></li>
+        <li><a href="/p/golden-age-collectables/mild/contact/">Contact</a></li>
+      </ul>
+    </nav>
+  </div>
+  <div class="info-bar">
+    <div class="container info-bar-inner">
+      <span class="info-item">
+        <span id="open-today">Open 7 Days a Week — 9:00am–7:00pm (Wed from 9:30am)</span>
+        <script type="application/json" id="hours-data">
+          {"1": "Monday 9:00am–7:00pm","2": "Tuesday 9:00am–7:00pm","3": "Wednesday 9:30am–7:00pm","4": "Thursday 9:00am–7:00pm","5": "Friday 9:00am–7:00pm","6": "Saturday 9:00am–7:00pm","0": "Sunday 9:00am–7:00pm" }
+        </script>
+      </span>
+      <a class="info-item info-phone" href="tel:+12066229799">206-622-9799</a>
+      <a class="info-item info-directions" href="https://www.google.com/maps/dir/?api=1&amp;destination=Golden+Age+Collectables,+1501+Pike+Place+%23401,+Seattle,+WA+98101" target="_blank" rel="noopener">Get Directions &rarr;</a>
+    </div>
+  </div>
+</header>
+
+  <main id="main">
+    
+<section class="page-head">
+  <div class="container">
+    <span class="badge">New &amp; Vintage</span>
+    <h1>Comics, Manga &amp; Graphic Novels</h1>
+    <p class="lede">Rows and rows of comics, walls of collectibles, and sixty years of hunting experience. This is a small taste &mdash; the real selection is in the shop.</p>
+  </div>
+</section>
+
+
+
+<section class="section new-this-week" aria-labelledby="ntw-heading">
+  <div class="container">
+    <span class="badge">New Comics &mdash; Wednesday, July 29, 2026</span>
+    <h2 id="ntw-heading">This Week&rsquo;s New Comics</h2>
+    
+    <article class="spotlight-card">
+      <picture class="spotlight-cover">
+        <source srcset="/p/golden-age-collectables/mild/images/newthisweek-queen-in-black-1.webp" type="image/webp">
+        <img src="/p/golden-age-collectables/mild/images/newthisweek-queen-in-black-1.jpg" alt="Queen in Black #1 — cover, Marvel Comics" width="700" height="1062" loading="lazy">
+      </picture>
+      <div class="spotlight-body">
+        <span class="badge badge--pub">Spotlight &middot; Marvel Comics</span>
+        <h3>Queen in Black #1</h3>
+        <p class="spotlight-creators">Written by AL EWING · Art by IBAN COELLO · Cover by RYAN STEGMAN</p>
+        <p>The King is dead (not really) … but all hail the queen anyway! Knull summons an army to destroy Earth, but Hela beats him to them. And then all Hel(a) breaks loose! The Queen In Black makes Knull seem like the kid next door. Don’t miss out on this battle of evil vs evil in Queen in Black #1, which hits the racks on Wednesday!</p>
+        <p class="spotlight-synopsis">HEL ON EARTH! On the farthest edges of the solar system, KNULL, GOD OF THE VOID, builds a brand-new army to destroy Earth…but HELA OF ASGARD might have gotten there first – as she makes planetfall with a legion of the galaxy’s deadliest symbiotes! Two of the most powerful evils in the galaxy are at war…and the SON OF VENOM is caught right in the middle! Writer Al Ewing (IMMORTAL HULK, MORTAL THOR) and Iban Coello (IMPERIAL, FANTASTIC FOUR) – the team behind VENOM WAR – bring you a cosmic collision of evil versus evil with the good caught in the middle!</p>
+        
+        <ul class="spotlight-extras">
+          <li>Also available in a True Believers Blind Bag — one exclusive variant cover per bag (Stegman, Nakayama, Artgerm, Momoko and more).</li><li>True Believers 20-Bag Display Box — 19 blind-bagged variants plus a display-exclusive Hela [Black] foil variant — $149.99.</li>
+        </ul>
+        
+        
+        <p class="spotlight-meta">Rated T+ &middot; $7.99</p>
+        
+        <p class="spotlight-reserve">Available in-store &mdash; call <a href="tel:+12066229799">206-622-9799</a> to reserve.</p>
+      </div>
+    </article>
+    
+  </div>
+</section>
+
+
+
+<section class="section" aria-labelledby="new-comics">
+  <div class="container split">
+    <div>
+      <h2 id="new-comics">New Comics Every Wednesday</h2>
+      <p>Wednesday is new comic book day, and we&rsquo;ve celebrated it for decades. Every week we stock the latest issues from Marvel, DC, Image, and more &mdash; plus trade paperbacks and new graphic novels.</p>
+      <p>Don&rsquo;t see your title on the rack? <strong>Call us to reserve a copy</strong> and we&rsquo;ll set one aside: <a href="tel:+12066229799">206-622-9799</a>.</p>
+    </div>
+    <picture class="split-art">
+      <source srcset="/p/golden-age-collectables/mild/images/comics-covers.webp" type="image/webp">
+      <img src="/p/golden-age-collectables/mild/images/comics-covers.jpg" alt="Shelves packed with Spider-Man comics and graphic novels in the shop" width="1000" height="667" loading="lazy">
+    </picture>
+  </div>
+</section>
+
+<section class="section" aria-labelledby="vintage-rare">
+  <div class="container split">
+    <picture class="split-art">
+      <source srcset="/p/golden-age-collectables/mild/images/vintage-books.webp" type="image/webp">
+      <img src="/p/golden-age-collectables/mild/images/vintage-books.jpg" alt="Vintage comics and collected editions filling the shelves" width="1000" height="667" loading="lazy">
+    </picture>
+    <div>
+      <h2 id="vintage-rare">Vintage &amp; Rare Finds</h2>
+      <p>As the world&rsquo;s oldest comic shop, we know vintage. Browse graded comics, vintage Star Wars toys, Japanese and retro toys, movie scripts, autographs, posters, and collectibles you won&rsquo;t find anywhere else.</p>
+      <p>Our rarest pieces never make it online &mdash; <strong>you have to see them in person</strong>. Ask at the counter and we&rsquo;ll show you what&rsquo;s new in the cases.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section" aria-labelledby="manga-graphic-novels">
+  <div class="container split">
+    <div class="info-panel">
+      <h2 id="manga-graphic-novels">Manga &amp; Graphic Novels</h2>
+      <p>From shonen classics to the newest releases, our manga section keeps growing. We also carry a deep selection of graphic novels and trade paperbacks &mdash; superhero epics, indie favorites, and everything in between.</p>
+      <p>Beyond the page: Funko Pop figures, figurines, board games, novelties, and costumes round out the full pop culture emporium.</p>
+    </div>
+    <picture class="split-art">
+      <source srcset="/p/golden-age-collectables/mild/images/funko-wall.webp" type="image/webp">
+      <img src="/p/golden-age-collectables/mild/images/funko-wall.jpg" alt="A full wall of Funko Pop figures in the shop" width="1000" height="667" loading="lazy">
+    </picture>
+  </div>
+</section>
+
+<section class="cta-band" aria-labelledby="comics-cta">
+  <div class="container">
+    <h2 id="comics-cta">The Best Selection Is in the Shop</h2>
+    <p>Come dig through the longboxes in the DownUnder of Pike Place Market &mdash; or call ahead and we&rsquo;ll check the shelves for you.</p>
+    <a class="btn" href="/p/golden-age-collectables/mild/visit/">Plan Your Visit</a>
+    <a class="btn btn--secondary" href="tel:+12066229799" style="margin-left:1rem">Call 206-622-9799</a>
+  </div>
+</section>
+
+  </main>
+  <footer class="site-footer">
+  <div class="container footer-grid">
+    <section class="footer-col" aria-labelledby="footer-visit">
+      <h2 id="footer-visit">Visit Us</h2>
+      <address>
+        1501 Pike Place #401<br>
+        Seattle, WA 98101<br>
+        <span class="footer-note">In the DownUnder of Pike Place Market</span>
+      </address>
+      <p><a href="tel:+12066229799">206-622-9799</a></p>
+      
+      <p class="footer-social">
+        <a href="https://www.facebook.com/GoldenAgeCollectables/" target="_blank" rel="noopener">Facebook</a>
+        <a href="https://www.instagram.com/goldenagecollectables/" target="_blank" rel="noopener">Instagram</a>
+      </p>
+    </section>
+    <section class="footer-col" aria-labelledby="footer-hours">
+      <h2 id="footer-hours">Hours</h2>
+      <ul class="hours-list">
+        
+        <li><span>Monday</span> <span>9:00am–7:00pm</span></li>
+        
+        <li><span>Tuesday</span> <span>9:00am–7:00pm</span></li>
+        
+        <li><span>Wednesday</span> <span>9:30am–7:00pm</span></li>
+        
+        <li><span>Thursday</span> <span>9:00am–7:00pm</span></li>
+        
+        <li><span>Friday</span> <span>9:00am–7:00pm</span></li>
+        
+        <li><span>Saturday</span> <span>9:00am–7:00pm</span></li>
+        
+        <li><span>Sunday</span> <span>9:00am–7:00pm</span></li>
+        
+      </ul>
+    </section>
+    <section class="footer-col footer-map" aria-labelledby="footer-map">
+      <h2 id="footer-map">Find Us</h2>
+      <iframe src="https://www.google.com/maps?q=Golden+Age+Collectables,+1501+Pike+Place+%23401,+Seattle,+WA+98101&amp;output=embed" width="400" height="300" style="border:0" loading="lazy"
+              allowfullscreen referrerpolicy="no-referrer-when-downgrade"
+              title="Map showing Golden Age Collectables at 1501 Pike Place, Seattle"></iframe>
+    </section>
+  </div>
+  <div class="container footer-bottom">
+    <p>&copy; 2026 Golden Age Collectables. All Rights Reserved.</p>
+    <p><a href="/p/golden-age-collectables/mild/privacy/">Privacy Policy</a></p>
+  </div>
+</footer>
+
+</body>
+</html>

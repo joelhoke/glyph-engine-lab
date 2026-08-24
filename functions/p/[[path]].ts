@@ -89,10 +89,24 @@ export const onRequestGet: PagesFunction<PrototypesEnv, 'path'> = async (context
   if (fileSegments.length === 0 || fileSegments.every((segment) => segment === '')) {
     return context.next()
   }
+  // Directory URLs from multi-page bundles (e.g. an Eleventy site linking to
+  // /about/) resolve to that directory's index.html — trailing empty
+  // segments are dropped, and an extensionless final segment is treated as a
+  // directory. Explicit file requests pass through untouched.
+  const normalizedSegments = [...fileSegments]
+  while (normalizedSegments.length > 0 && normalizedSegments[normalizedSegments.length - 1] === '') {
+    normalizedSegments.pop()
+  }
+  if (normalizedSegments.length === 0) {
+    return context.next()
+  }
+  if (!normalizedSegments[normalizedSegments.length - 1].includes('.')) {
+    normalizedSegments.push('index.html')
+  }
   if (!isValidPrototypeSlug(stackSlug) || !isValidPrototypeSlug(prototypeSlug)) {
     return notFound()
   }
-  if (!isValidPrototypeFilePath(fileSegments)) {
+  if (!isValidPrototypeFilePath(normalizedSegments)) {
     return notFound()
   }
 
@@ -105,7 +119,9 @@ export const onRequestGet: PagesFunction<PrototypesEnv, 'path'> = async (context
   }
 
   const contentType = PROTOTYPE_MIME_BY_EXTENSION.get(
-    fileSegments[fileSegments.length - 1].slice(fileSegments[fileSegments.length - 1].lastIndexOf('.')),
+    normalizedSegments[normalizedSegments.length - 1].slice(
+      normalizedSegments[normalizedSegments.length - 1].lastIndexOf('.'),
+    ),
   )
   if (!contentType) {
     return notFound()
@@ -118,7 +134,7 @@ export const onRequestGet: PagesFunction<PrototypesEnv, 'path'> = async (context
     return notFound()
   }
 
-  const object = await bucket.get(`${stackSlug}/${prototypeSlug}/${fileSegments.join('/')}`)
+  const object = await bucket.get(`${stackSlug}/${prototypeSlug}/${normalizedSegments.join('/')}`)
   if (!object) {
     return notFound()
   }
