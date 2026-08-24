@@ -196,9 +196,11 @@ labels.
   cards, not pills: cycling 3:2 preview + section name + one-line promise
   (+ Work role/timeframe meta), wrapped in the intro's `BorderBeam` reveal.
   The persistent site frame (`.site-header`, z-index 45 — above the
-  foreground layer, below the tuning panel) carries the home lockup, the
-  section tabs (`.experience-nav-list` pill classes), and the recruiter
-  links; on ≤560px phones it wraps to two rows (lockup + links, then tabs).
+  foreground layer, below the tuning panel) carries the home lockup (the
+  `JHMark` monogram, currentColor so it follows the theme), the section
+  tabs (`.experience-nav-list` pill classes — Gallery is a route link, not
+  a mode), and the recruiter links; on ≤560px phones the recruiter links
+  move to a fixed bottom bar (`.site-footer`) so the header stays one row.
 - **Focus**: 2px `#8abaff` outline, 3–4px offset, `:focus-visible` only —
   never remove it.
 - **Motion**: 160–320ms ease transitions; opacity + ≤18px translate for

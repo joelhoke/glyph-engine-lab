@@ -181,17 +181,17 @@ button.privacy-settings-button {
 }
 
 @media (max-width: 640px) {
-  /* Below the two-row phone header (~7rem tall). */
+  /* Below the single-row phone header (~3.6rem tall). */
   button.privacy-settings-button {
-    top: calc(env(safe-area-inset-top, 0px) + 7.5rem);
+    top: calc(env(safe-area-inset-top, 0px) + 4rem);
     right: calc(env(safe-area-inset-right, 0px) + 0.75rem);
     bottom: auto;
   }
 
   .privacy-panel {
-    top: calc(env(safe-area-inset-top, 0px) + 10.9rem);
+    top: calc(env(safe-area-inset-top, 0px) + 7.4rem);
     right: calc(env(safe-area-inset-right, 0px) + 0.75rem);
     width: calc(100vw - 1.5rem - env(safe-area-inset-right, 0px));
-    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 11.65rem);
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 8.15rem);
   }
 }

@@ -152,6 +152,7 @@
   html.theme-ready .conversation-surface,
   html.theme-ready .experience-nav-list,
   html.theme-ready .site-header,
+  html.theme-ready .site-footer,
   html.theme-ready .doorway-card,
   html.theme-ready .work-experience,
   html.theme-ready .collaborate-experience,
@@ -182,6 +183,7 @@
   html.theme-ready .conversation-surface,
   html.theme-ready .experience-nav-list,
   html.theme-ready .site-header,
+  html.theme-ready .site-footer,
   html.theme-ready .doorway-card,
   html.theme-ready .work-experience,
   html.theme-ready .collaborate-experience,
@@ -728,9 +730,10 @@ button:focus-visible {
 }
 @media (max-width: 560px) {
   .foreground-layer {
-    /* Two-row header (≤560px block near the end of this file) needs ~7rem
-       of top clearance on phones. */
-    padding: calc(7.25rem + env(safe-area-inset-top, 0px)) 1rem 2rem;
+    /* Single-row phone header on top, recruiter-link footer bar at the
+       bottom — clear both. */
+    padding: calc(4.5rem + env(safe-area-inset-top, 0px)) 1rem
+      calc(4.5rem + env(safe-area-inset-bottom, 0px));
   }
   .primary-actions {
     gap: 0.5rem;
@@ -1551,10 +1554,10 @@ button:focus-visible {
   outline-offset: 3px;
 }
 
-/* The logotype lockup: inlined with currentColor (components/JHLogotype.tsx)
+/* The monogram lockup: inlined with currentColor (components/JHMark.tsx)
    so it follows --color-text — near-white on dark, near-black on light. */
-.site-header-logotype {
-  height: 20px;
+.site-header-mark {
+  height: 24px;
   width: auto;
   display: block;
 }
@@ -1595,6 +1598,52 @@ button:focus-visible {
   outline-offset: 3px;
 }
 
+/* Phone-only bottom bar (≤560px block at the end of this file reveals it):
+   the recruiter links that don't fit the phone header. Mirrors the header's
+   translucent frame treatment; z-index 45 like the header. */
+.site-footer {
+  display: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 45;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-panel);
+  backdrop-filter: blur(10px);
+  padding: 0.4rem 0.6rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
+}
+
+.site-footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 0.15rem;
+}
+
+.site-footer-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.site-footer-links a:hover,
+.site-footer-links a:focus-visible {
+  color: var(--color-text);
+  background: var(--color-input-bg);
+}
+
+.site-footer-links a:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
 .experience-nav-list {
   display: flex;
   gap: 0.4rem;
@@ -1617,6 +1666,13 @@ button:focus-visible {
   color: var(--color-text-muted);
   cursor: pointer;
   transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+/* The Gallery tab is a route link (not a mode button) wearing the same pill. */
+a.experience-nav-button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
 }
 
 .experience-nav-button:hover,
@@ -3822,30 +3878,20 @@ a.guide-source:focus-visible {
 }
 
 @media (max-width: 560px) {
-  /* Phone header: two rows — lockup + recruiter links, then the tab list
-     full-width below. Keeps every control reachable without shrinking past
-     the 44px tap-target floor. Lives in THIS late block (after the base
-     .site-header rule) so the equal-specificity display swap wins. */
-  .site-header {
-    display: flex;
-    flex-wrap: wrap;
-    row-gap: 0.4rem;
-  }
-
-  .site-header-home {
-    order: 1;
-  }
-
+  /* Phone frame: the recruiter links don't fit the header, so they move to a
+     fixed bottom bar and the header stays one row (lockup + tabs). The
+     duplicate footer links are display:none on wider viewports, so only one
+     copy is ever visible/focusable. */
   .site-header-links {
-    order: 2;
-    margin-left: auto;
+    display: none;
   }
 
   .site-header-nav {
-    order: 3;
-    width: 100%;
-    display: flex;
-    justify-content: center;
+    justify-self: end;
+  }
+
+  .site-footer {
+    display: block;
   }
 
   .chat-turns {
