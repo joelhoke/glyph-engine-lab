@@ -21,7 +21,6 @@ import AnalyticsConsent from './AnalyticsConsent'
 import { ExperienceMode, ExperienceSceneKey } from '../engine/types'
 import { EXPERIENCE_SCENES, resolveScenePlayground } from '../engine/sceneConfig'
 import { getWorkSlide, getWorkSlideHeroFit, getWorkSlideId, resolveWorkSlideScene, WORK_SLIDES } from '../content/work'
-import { SITE_IDENTITY } from '../content/site'
 import {
   COLLABORATE_AI_GUIDE,
   COLLABORATE_CONTACT,
@@ -2442,28 +2441,13 @@ export default function PortfolioExperience() {
           <div
             className={`foreground-content${
               collaborateChatActive ? ' foreground-content-chat' : ''
-            }${displayed === 'intro' ? ' foreground-content--home' : ''}`}
+            }`}
           >
             {displayed === 'intro' ? (
               <>
-                {/* Visible identity block (homepage-redesign phase 2): the
-                    recruiter's 5-second answer — who, what level, what proof —
-                    rendered as static HTML so it's the LCP candidate, not the
-                    WebGL scene. The h1 is genuinely visible now; the canvas
-                    logotype behind it stays ambient. The portrait placeholder
-                    (monogram) is owed a treated photo from phase 0. */}
-                <header className="home-identity">
-                  <img
-                    className="home-identity-portrait"
-                    src={SITE_IDENTITY.portraitSrc}
-                    alt={SITE_IDENTITY.portraitAlt}
-                    width={200}
-                    height={200}
-                  />
-                  <h1 className="home-identity-name">{SITE_IDENTITY.name}</h1>
-                  <p className="home-identity-role">{SITE_IDENTITY.role}</p>
-                  <p className="home-identity-positioning">{SITE_IDENTITY.positioning}</p>
-                </header>
+                {/* Accessible landing heading: the visible mark is the canvas
+                    glyph logotype, so the h1 stays visually hidden. */}
+                <h1 className="visually-hidden">joel hoke design</h1>
                 <PrimaryActions
                   selected={selected}
                   onSelect={navigateTo}
