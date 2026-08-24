@@ -150,3 +150,53 @@ export async function hasPrototypeAccess(
     new TextEncoder().encode(expected),
   )
 }
+
+// --- Magic-link tokens (link mode, Phase 1) -------------------------------------
+//
+// Same payload shape as the access cookie, but the signature is
+// domain-separated ("link.<stack>.<payload>") so a cookie value can never
+// be replayed as a link token, nor a link token as a cookie. The link IS
+// the credential: /s/<stack>?k=<token> validates it, issues the cookie, and
+// redirects to the clean stack URL. Expiry is baked into the token; bumping
+// the stack's tokenVersion revokes every outstanding link and cookie.
+
+/** Mint a magic-link token for a stack (scripts/prototype-link.mjs). */
+export async function issuePrototypeLinkToken(
+  stackSlug: string,
+  tokenVersion: number,
+  secret: string,
+  expMs: number,
+): Promise<string> {
+  const payload = `v${tokenVersion}.${expMs}`
+  const signature = await signPayload(secret, `link.${stackSlug}.${payload}`)
+  return `${bytesToB64u(new TextEncoder().encode(payload))}.${signature}`
+}
+
+/** Validate a magic-link token: shape, signature, expiry, tokenVersion. */
+export async function verifyPrototypeLinkToken(
+  token: string,
+  stackSlug: string,
+  tokenVersion: number,
+  secret: string,
+  nowMs: number,
+): Promise<boolean> {
+  const dot = token.lastIndexOf('.')
+  if (dot <= 0) return false
+  const payloadB64 = token.slice(0, dot)
+  const signature = token.slice(dot + 1)
+  let payload: string
+  try {
+    payload = new TextDecoder().decode(b64uToBytes(payloadB64))
+  } catch {
+    return false
+  }
+  const match = payload.match(/^v(\d+)\.(\d+)$/)
+  if (!match) return false
+  if (Number(match[1]) !== tokenVersion) return false
+  if (Number(match[2]) <= nowMs) return false
+  const expected = await signPayload(secret, `link.${stackSlug}.${payload}`)
+  return timingSafeEqual(
+    new TextEncoder().encode(signature),
+    new TextEncoder().encode(expected),
+  )
+}

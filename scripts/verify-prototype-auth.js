@@ -67,6 +67,20 @@ async function main() {
     setCookie.includes('Path=/p/golden-age-collectables;') && setCookie.includes('HttpOnly') && setCookie.includes('Secure'),
   )
 
+  // --- Magic-link tokens ---
+  const exp = now + 30 * 24 * 3600 * 1000
+  const token = await auth.issuePrototypeLinkToken('golden-age-collectables', 3, secret, exp)
+  check('link: minted token verifies', await auth.verifyPrototypeLinkToken(token, 'golden-age-collectables', 3, secret, now))
+  check('link: wrong stack rejected', !(await auth.verifyPrototypeLinkToken(token, 'type-lab', 3, secret, now)))
+  check('link: tokenVersion bump revokes', !(await auth.verifyPrototypeLinkToken(token, 'golden-age-collectables', 4, secret, now)))
+  check('link: expiry enforced', !(await auth.verifyPrototypeLinkToken(token, 'golden-age-collectables', 3, secret, exp + 1)))
+  check(
+    'link: cookie value not replayable as token',
+    !(await auth.verifyPrototypeLinkToken(cookiePair.split('=')[1], 'golden-age-collectables', 3, secret, now)),
+  )
+  const tamperedToken = token.replace(/.$/, token.endsWith('A') ? 'B' : 'A')
+  check('link: tampered token rejected', !(await auth.verifyPrototypeLinkToken(tamperedToken, 'golden-age-collectables', 3, secret, now)))
+
   fs.rmSync(tmpDir, { recursive: true, force: true })
   if (failures > 0) {
     console.error(`\n${failures} check(s) failed`)

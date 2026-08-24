@@ -234,17 +234,25 @@ export const onRequestGet: PagesFunction<PrototypesEnv, 'path'> = async (context
   }
 
   const stack = findStack(stackSlug)
-  if (!stack || !findPrototype(stack, prototypeSlug)) {
+  const prototype = stack ? findPrototype(stack, prototypeSlug) : null
+  if (!stack || !prototype) {
     return notFound()
   }
-  const allowed = await hasStackAccess(
-    context.request,
-    stack,
-    context.env.PROTOTYPES_AUTH_SECRET,
-    Date.now(),
-  )
-  if (!allowed) {
-    return notFound()
+  // Card thumbnails stay public even on gated stacks: the /gallery index and
+  // the stack page show them to everyone. The carve-out is precise — only
+  // the manifest-declared thumb file at the bundle root, never other assets.
+  const isDeclaredThumb =
+    normalizedSegments.length === 1 && normalizedSegments[0] === prototype.thumb
+  if (!isDeclaredThumb) {
+    const allowed = await hasStackAccess(
+      context.request,
+      stack,
+      context.env.PROTOTYPES_AUTH_SECRET,
+      Date.now(),
+    )
+    if (!allowed) {
+      return notFound()
+    }
   }
 
   const contentType = PROTOTYPE_MIME_BY_EXTENSION.get(
