@@ -90,7 +90,7 @@ export const STACKS: PrototypeStack[] = [
         slug: 'orbit-toy',
         title: 'Orbit toy',
         summary: 'A tiny canvas gravity sketch — move the pointer, click to scatter.',
-        thumb: 'thumb.webp',
+        thumb: 'thumb.jpg',
       },
     ],
   },
