@@ -162,7 +162,16 @@ export const onRequestPost: PagesFunction<PrototypesEnv, 'path'> = async (contex
     !!secret &&
     (await verifyPrototypePassword(password, stack.access.passwordHash))
   if (!verified) {
-    return gateResponse(stack.slug, stack.title, true)
+    // TEMPORARY diagnostic (remove after the preview 403 is fixed): names the
+    // failing branch so the deployment can be debugged without guessing.
+    const branch = !secret
+      ? 'no-secret'
+      : typeof password !== 'string'
+        ? 'no-password-field'
+        : 'verify-failed'
+    const gate = gateResponse(stack.slug, stack.title, true)
+    gate.headers.set('X-Gate-Debug', branch)
+    return gate
   }
   const cookie = await issuePrototypeCookie(
     stack.slug,
