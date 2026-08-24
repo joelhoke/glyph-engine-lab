@@ -64,7 +64,7 @@ async function main() {
   check('cookie: tampered value rejected', !(await auth.hasPrototypeAccess(req(tampered), 'golden-age-collectables', 3, secret, now)))
   check(
     'cookie: path scoping present',
-    setCookie.includes('Path=/p/golden-age-collectables/') && setCookie.includes('HttpOnly') && setCookie.includes('Secure'),
+    setCookie.includes('Path=/p/golden-age-collectables;') && setCookie.includes('HttpOnly') && setCookie.includes('Secure'),
   )
 
   fs.rmSync(tmpDir, { recursive: true, force: true })

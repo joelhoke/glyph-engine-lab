@@ -102,7 +102,11 @@ export async function issuePrototypeCookie(
   const signature = await signPayload(secret, `${stackSlug}.${payload}`)
   return (
     `${prototypeCookieName(stackSlug)}=${bytesToB64u(new TextEncoder().encode(payload))}.${signature}; ` +
-    `Path=/p/${stackSlug}/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(COOKIE_TTL_MS / 1000)}`
+    // No trailing slash: Pages normalizes directory URLs to the clean
+    // (/p/<stack>) form, and RFC 6265 path-match rejects a cookie whose path
+    // is LONGER than the request path — with a trailing slash the browser
+    // would never send this cookie back to the stack shell.
+    `Path=/p/${stackSlug}; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(COOKIE_TTL_MS / 1000)}`
   )
 }
 
