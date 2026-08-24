@@ -1,8 +1,8 @@
 'use client'
 
 import { ExperienceSceneKey } from '../engine/types'
-import { RECRUITER_LINKS, SITE_IDENTITY } from '../content/site'
-import Logo from './Logo'
+import { RECRUITER_LINKS } from '../content/site'
+import JHLogotype from './JHLogotype'
 
 type SiteHeaderProps = {
   /** The settled section, or null on the home/landing state. */
@@ -38,15 +38,9 @@ export default function SiteHeader({ active, onSelect, onHome, className }: Site
         onClick={onHome}
         aria-label="joel hoke design — back to home"
       >
-        <img
-          className="site-header-avatar"
-          src={SITE_IDENTITY.avatarSrc}
-          alt=""
-          width={28}
-          height={28}
-        />
-        <Logo className="site-header-logo" aria-hidden="true" />
-        <span className="site-header-wordmark">joel hoke design</span>
+        {/* The logotype is the whole lockup: inlined with currentColor so the
+            theme sets it (near-white on dark, near-black on light). */}
+        <JHLogotype className="site-header-logotype" aria-hidden="true" />
       </button>
       <nav className="site-header-nav" aria-label="Experience">
         <ul className="experience-nav-list">

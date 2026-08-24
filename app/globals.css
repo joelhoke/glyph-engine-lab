@@ -1530,9 +1530,8 @@ button:focus-visible {
   justify-self: start;
   display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
   min-height: 44px;
-  padding: 0.25rem 0.7rem 0.25rem 0.25rem;
+  padding: 0.25rem 0.9rem;
   border: 1px solid transparent;
   border-radius: 999px;
   background: transparent;
@@ -1552,28 +1551,12 @@ button:focus-visible {
   outline-offset: 3px;
 }
 
-.site-header-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  /* Phase 0 placeholder: the monogram is white-on-transparent, so it sits on
-     a fixed dark chip (both themes) until the treated portrait ships. */
-  object-fit: contain;
-  padding: 3px;
-  background: #0d0a14;
-  border: 1px solid var(--color-border);
-  filter: grayscale(1) contrast(1.05);
-}
-
-.site-header-logo {
-  width: 16px;
-  height: 18px;
-}
-
-.site-header-wordmark {
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  white-space: nowrap;
+/* The logotype lockup: inlined with currentColor (components/JHLogotype.tsx)
+   so it follows --color-text — near-white on dark, near-black on light. */
+.site-header-logotype {
+  height: 20px;
+  width: auto;
+  display: block;
 }
 
 .site-header-nav {
@@ -3783,16 +3766,12 @@ a.guide-source:focus-visible {
     display: none;
   }
 
-  /* Mobile frame compaction: the wordmark drops (avatar + monogram carry the
-     home target), links shrink but never drop below the 44px tap target. */
+  /* Mobile frame compaction: links shrink but never drop below the 44px tap
+     target; the logotype lockup stays (it IS the home target). */
   .site-header {
     gap: 0.4rem;
     padding-left: 0.6rem;
     padding-right: 0.6rem;
-  }
-
-  .site-header-wordmark {
-    display: none;
   }
 
   .site-header-links a {
