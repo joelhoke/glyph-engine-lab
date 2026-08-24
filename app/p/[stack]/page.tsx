@@ -10,10 +10,11 @@ type StackPageProps = {
   params: { stack: string }
 }
 
-// Static export: every stack in the manifest gets a shell. Public stacks
-// render their option cards directly; non-public stacks render only the
-// generic gate placeholder below — no stack content enters the export
-// (Phase 1 swaps the placeholder for the password/magic-link gate UI).
+// Static export: every stack in the manifest gets a shell. Gated stacks
+// render the same full content as public ones — access control lives in the
+// /p/* Pages Function catch-all, which runs before this export is served
+// for EVERY /p/* request and swaps unauthenticated requests for the
+// password gate (functions/p/[[path]].ts, Phase 1).
 export function generateStaticParams() {
   return STACKS.map((stack) => ({ stack: stack.slug }))
 }
@@ -22,9 +23,8 @@ export const dynamicParams = false
 
 export function generateMetadata({ params }: StackPageProps): Metadata {
   const stack = findStack(params.stack)
-  const isPublic = stack?.access.mode === 'public'
   return {
-    title: isPublic ? stack.title : 'Shared prototypes',
+    title: stack?.title ?? 'Shared prototypes',
     robots: { index: false, follow: false },
   }
 }
@@ -32,29 +32,11 @@ export function generateMetadata({ params }: StackPageProps): Metadata {
 /**
  * Stack page: framing note up top, then option cards (thumbnail, title, tier,
  * summary). The route is noindex; gated access control is enforced by the
- * Pages Function serving the bundle files, not by this shell.
+ * Pages Function in front of this shell, not by the shell itself.
  */
 export default function StackPage({ params }: StackPageProps) {
   const stack = findStack(params.stack)
   if (!stack) notFound()
-
-  if (stack.access.mode !== 'public') {
-    // Phase 1 seam: the gate UI (password form / expired-link state) lands
-    // here, backed by the /s/<stack> Functions. Until then the placeholder
-    // says nothing about the stack itself.
-    return (
-      <div className={styles.shell}>
-        <GalleryHeader crumb="Shared prototypes" />
-        <main id="main-content" className={styles.main}>
-          <h1 className={styles.title}>Shared prototypes</h1>
-          <p className={styles.gate}>
-            This stack is shared privately. Open it through the link you were sent, or ask
-            Joel for a fresh one.
-          </p>
-        </main>
-      </div>
-    )
-  }
 
   return (
     <div className={styles.shell}>

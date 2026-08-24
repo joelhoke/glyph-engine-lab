@@ -9,9 +9,10 @@ type ViewerPageProps = {
   params: { stack: string; slug: string }
 }
 
-// Static export: one viewer shell per prototype. For non-public stacks the
-// shell carries no prototype content — the gate seam mirrors the stack page
-// (Phase 1/2); Phase 0 only has the public dummy anyway.
+// Static export: one viewer shell per prototype. Like the stack page, gated
+// stacks render the full viewer — the /p/* Function gates the request before
+// this export is ever served (and the bundle files themselves 404 without
+// the access cookie regardless).
 export function generateStaticParams() {
   return STACKS.flatMap((stack) =>
     stack.prototypes.map((prototype) => ({ stack: stack.slug, slug: prototype.slug })),
@@ -23,9 +24,8 @@ export const dynamicParams = false
 export function generateMetadata({ params }: ViewerPageProps): Metadata {
   const stack = findStack(params.stack)
   const prototype = stack ? findPrototype(stack, params.slug) : null
-  const isPublic = stack?.access.mode === 'public'
   return {
-    title: isPublic && prototype ? `${prototype.title} — ${stack.title}` : 'Shared prototypes',
+    title: stack && prototype ? `${prototype.title} — ${stack.title}` : 'Shared prototypes',
     robots: { index: false, follow: false },
   }
 }
@@ -42,23 +42,6 @@ export default function ViewerPage({ params }: ViewerPageProps) {
   if (!stack) notFound()
   const prototype = findPrototype(stack, params.slug)
   if (!prototype) notFound()
-
-  if (stack.access.mode !== 'public') {
-    // Phase 1/2 seam: without a valid access cookie the bundle files 404, so
-    // rendering the iframe would be pointless — the gate UI lands here.
-    return (
-      <div className={styles.shell}>
-        <GalleryHeader crumb="Shared prototypes" />
-        <main id="main-content" className={styles.main}>
-          <h1 className={styles.title}>Shared prototypes</h1>
-          <p className={styles.gate}>
-            This stack is shared privately. Open it through the link you were sent, or ask
-            Joel for a fresh one.
-          </p>
-        </main>
-      </div>
-    )
-  }
 
   return (
     <div className={styles.shell}>
