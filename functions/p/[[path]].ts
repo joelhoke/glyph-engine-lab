@@ -1,18 +1,21 @@
 /**
  * GET /p/* — catch-all serving hosted-prototype bundle files from the
- * private PROTOTYPES_BUCKET R2 bucket (docs/prototypes-plan.md, Phase 0).
+ * private PROTOTYPES_BUCKET R2 bucket (docs/prototypes-plan.md).
  *
  * Path layout: /p/<stack>/<slug>/<file…> maps to the R2 key
  * "<stack>/<slug>/<file…>"; the stack and viewer shells (/p/<stack>,
  * /p/<stack>/<slug>) are static-export pages and are handed back to the
- * Pages asset server via context.next(). Every file segment is validated
- * and looked up in the manifest BEFORE any R2 access; anything invalid,
- * unknown, or disallowed answers a plain 404 — fail closed,
+ * Pages asset server via context.next() — unless the stack is gated.
+ * Directory URLs (…/about/) resolve to their index.html. Every file segment
+ * is validated and looked up in the manifest BEFORE any R2 access; anything
+ * invalid, unknown, or disallowed answers a plain 404 — fail closed,
  * indistinguishable from missing.
  *
- * Phase 0 serves public stacks without a cookie. The `hasStackAccess` seam
- * below is where Phase 1 drops in the HMAC cookie check for password/link
- * stacks (functions/lib/prototypeAuth.ts).
+ * Phase 1 access control (functions/lib/prototypeAuth.ts): public stacks
+ * serve openly; password/link stacks need a valid HMAC-signed cookie scoped
+ * to /p/<stack>/. Gated shells render the password gate instead of the
+ * export; POST /p/<stack>/_unlock verifies the manifest's PBKDF2 record and
+ * issues the cookie. No configured PROTOTYPES_AUTH_SECRET fails closed.
  */
 
 import { buildProtectedHeaders } from '../lib/protectedShared'
@@ -23,9 +26,16 @@ import {
   isValidPrototypeSlug,
   PrototypeStack,
 } from '../lib/prototypesManifest'
+import {
+  hasPrototypeAccess,
+  issuePrototypeCookie,
+  verifyPrototypePassword,
+} from '../lib/prototypeAuth'
 
 type PrototypesEnv = {
   PROTOTYPES_BUCKET?: R2Bucket
+  /** HMAC signing secret for access cookies — dashboard-managed, never in the repo. */
+  PROTOTYPES_AUTH_SECRET?: string
 }
 
 /**
@@ -54,19 +64,118 @@ const PROTOTYPE_MIME_BY_EXTENSION = new Map([
 ])
 
 /**
- * Access seam (Phase 0): public stacks serve openly; password/link stacks
- * fail closed until the HMAC cookie check lands here (Phase 1,
- * docs/prototypes-plan.md §3). The cookie will be scoped to /p/<stack>/ and
- * verified against the stack's tokenVersion.
+ * Access check (Phase 1): public stacks serve openly; password/link stacks
+ * need a valid signed cookie (functions/lib/prototypeAuth.ts), scoped to
+ * /p/<stack>/ and revocable via the manifest's tokenVersion. No secret
+ * configured fails closed — same 404 as everything else.
  */
-function hasStackAccess(_request: Request, stack: PrototypeStack): boolean {
-  return stack.access.mode === 'public'
+async function hasStackAccess(
+  request: Request,
+  stack: PrototypeStack,
+  secret: string | undefined,
+  nowMs: number,
+): Promise<boolean> {
+  if (stack.access.mode === 'public') return true
+  if (!secret) return false
+  return hasPrototypeAccess(request, stack.slug, stack.access.tokenVersion ?? 1, secret, nowMs)
 }
 
 function notFound(): Response {
   return new Response('Not found', {
     status: 404,
     headers: buildProtectedHeaders({ 'Content-Type': 'text/plain; charset=utf-8' }),
+  })
+}
+
+/**
+ * The password gate (Phase 1): served in place of a gated stack's shell
+ * pages when no valid cookie rides the request. Intentionally bare — one
+ * form posting to /p/<stack>/_unlock — and always noindexed.
+ */
+function gateResponse(stackSlug: string, stackTitle: string, failed = false): Response {
+  const html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>${stackTitle} — private prototype</title>
+    <style>
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #090c12; color: #c5d4ea; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      form { display: grid; gap: 1rem; width: min(90vw, 22rem); padding: 2rem; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; background: rgba(14,18,24,0.9); }
+      h1 { margin: 0; font-size: 1rem; letter-spacing: 0.08em; color: #f5f7fb; }
+      p { margin: 0; font-size: 0.82rem; line-height: 1.6; }
+      .error { color: #f2b28a; }
+      input { font: inherit; padding: 0.65rem 0.8rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.06); color: #f5f7fb; }
+      button { font: inherit; padding: 0.65rem; border-radius: 999px; border: 1px solid #8abaff; background: transparent; color: #bcd7ff; cursor: pointer; }
+      button:hover { background: rgba(138,186,255,0.12); }
+    </style>
+  </head>
+  <body>
+    <form method="post" action="/p/${stackSlug}/_unlock">
+      <h1>${stackTitle}</h1>
+      <p>This prototype is shared privately. Enter the password Joel sent you.</p>
+      ${failed ? '<p class="error">That password didn\u2019t work — try again, or ask Joel for a fresh one.</p>' : ''}
+      <input type="password" name="password" autocomplete="current-password" required autofocus aria-label="Password" />
+      <button type="submit">Unlock</button>
+    </form>
+  </body>
+</html>`
+  return new Response(html, {
+    status: failed ? 403 : 200,
+    headers: buildProtectedHeaders({
+      'Content-Type': 'text/html; charset=utf-8',
+      'X-Robots-Tag': 'noindex, nofollow',
+    }),
+  })
+}
+
+/**
+ * POST /p/<stack>/_unlock (Phase 1): verify the password against the
+ * manifest's PBKDF2 record; success sets the signed access cookie and
+ * redirects to the stack shell, failure re-renders the gate with an error.
+ * The `_unlock` action can never collide with a real prototype — slug rules
+ * require a leading [a-z0-9].
+ */
+export const onRequestPost: PagesFunction<PrototypesEnv, 'path'> = async (context) => {
+  const raw = context.params.path as string | string[]
+  const segments = (Array.isArray(raw) ? raw : [raw]).map((segment) => {
+    try {
+      return decodeURIComponent(segment)
+    } catch {
+      return ''
+    }
+  })
+  const [stackSlug, action] = segments
+  if (segments.length !== 2 || action !== '_unlock' || !isValidPrototypeSlug(stackSlug)) {
+    return notFound()
+  }
+  const stack = findStack(stackSlug)
+  if (!stack || stack.access.mode !== 'password' || !stack.access.passwordHash) {
+    return notFound()
+  }
+  const form = await context.request.formData().catch(() => null)
+  const password = form?.get('password')
+  const secret = context.env.PROTOTYPES_AUTH_SECRET
+  const verified =
+    typeof password === 'string' &&
+    !!secret &&
+    (await verifyPrototypePassword(password, stack.access.passwordHash))
+  if (!verified) {
+    return gateResponse(stack.slug, stack.title, true)
+  }
+  const cookie = await issuePrototypeCookie(
+    stack.slug,
+    stack.access.tokenVersion ?? 1,
+    secret,
+    Date.now(),
+  )
+  return new Response(null, {
+    status: 303,
+    headers: buildProtectedHeaders({
+      Location: `/p/${stack.slug}/`,
+      'Set-Cookie': cookie,
+    }),
   })
 }
 
@@ -84,9 +193,23 @@ export const onRequestGet: PagesFunction<PrototypesEnv, 'path'> = async (context
 
   const [stackSlug, prototypeSlug, ...fileSegments] = segments
   // The stack and viewer pages (/p/<stack>, /p/<stack>/<slug>) are static
-  // shells from the export — hand them back to the Pages asset server. Only
-  // paths with an actual file segment are bundle requests.
+  // shells from the export — EXCEPT gated stacks (Phase 1): without a valid
+  // access cookie their shells are replaced by the password gate before the
+  // request ever reaches the static export. Unknown stacks hand through to
+  // the export's own 404.
   if (fileSegments.length === 0 || fileSegments.every((segment) => segment === '')) {
+    if (isValidPrototypeSlug(stackSlug)) {
+      const shellStack = findStack(stackSlug)
+      if (shellStack && shellStack.access.mode !== 'public') {
+        const allowed = await hasStackAccess(
+          context.request,
+          shellStack,
+          context.env.PROTOTYPES_AUTH_SECRET,
+          Date.now(),
+        )
+        if (!allowed) return gateResponse(shellStack.slug, shellStack.title)
+      }
+    }
     return context.next()
   }
   // Directory URLs from multi-page bundles (e.g. an Eleventy site linking to
@@ -114,7 +237,13 @@ export const onRequestGet: PagesFunction<PrototypesEnv, 'path'> = async (context
   if (!stack || !findPrototype(stack, prototypeSlug)) {
     return notFound()
   }
-  if (!hasStackAccess(context.request, stack)) {
+  const allowed = await hasStackAccess(
+    context.request,
+    stack,
+    context.env.PROTOTYPES_AUTH_SECRET,
+    Date.now(),
+  )
+  if (!allowed) {
     return notFound()
   }
 

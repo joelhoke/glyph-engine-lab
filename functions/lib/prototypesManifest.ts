@@ -97,7 +97,14 @@ export const STACKS: PrototypeStack[] = [
   {
     slug: 'golden-age-collectables',
     title: 'Golden Age Collectables',
-    access: { mode: 'public' },
+    access: {
+      mode: 'password',
+      // Hash for the shared client password (scripts/prototype-password.mjs);
+      // plaintext never enters the repo. Bump tokenVersion to revoke every
+      // outstanding cookie for this stack.
+      passwordHash: 'pbkdf2$100000$LfVloONEk0yXZwSsAJzWarvzE0hgcNnBg1afZ38eIQM$Z1Xc3boimcIFAXD7qFxTv1_z3HJw0YrdyN_A41OTuGA',
+      tokenVersion: 1,
+    },
     listed: true,
     framing:
       'Two budget-tier site proposals for the Pike Place Market comic shop — same shop, escalating features and finish.',
