@@ -386,10 +386,12 @@ export default function PortfolioExperience() {
   // reports (compactCardTop - expandedCardTop) — but never inside the
   // measured glyph region, which stays dedicated to canvas interaction. The
   // gaps are pointer-transparent, so these gestures land on the canvas; the
-  // window listeners observe them without intercepting (all passive). The
-  // card's own viewport handles in-card gestures (WorkExperience). Upward gap
-  // input contracts only when the card content is at its top — gap gestures
-  // never scroll content. Non-overflowing slides ignore gap input entirely.
+  // window listeners observe them without intercepting (all passive). Gap
+  // input mirrors the card's own state machine (WorkExperience): downward
+  // input expands first, then scrolls the card content once expansion
+  // saturates; upward input scrolls the content back to its top first, then
+  // contracts with the remainder. Non-overflowing slides ignore gap input
+  // entirely.
   useEffect(() => {
     if (displayed !== 'work') return
     const commitGapProgress = (next: number) => {
@@ -405,19 +407,49 @@ export default function PortfolioExperience() {
       }
     }
     const gapRangePx = () => Math.max(workExpansionRangeRef.current, MIN_EXPANSION_RANGE_PX)
-    const contentScrolled = () => {
-      const viewport = document.querySelector('.work-experience-viewport')
-      return !!viewport && viewport.scrollTop > 1
-    }
+    const gapViewport = () => document.querySelector('.work-experience-viewport')
+    // Top-of-content threshold, matching WorkExperience's TOP_EPSILON.
+    const TOP_EPSILON = 1
+    // Mirrors the card's applyVerticalInput (WorkExperience) for gestures
+    // landing in the gap: expansion consumes downward input first and the
+    // excess scrolls the card content; upward input scrolls the content back
+    // to its top before contracting.
     const applyGapDelta = (deltaPx: number) => {
       if (!workOverflowEligibleRef.current || deltaPx === 0) return
-      if (deltaPx < 0 && contentScrolled()) return
+      const viewport = gapViewport()
       const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      if (reduced) {
-        commitGapProgress(deltaPx > 0 ? 1 : 0)
+      if (deltaPx > 0) {
+        const progress = workExpansionProgressRef.current
+        if (progress < 1) {
+          if (reduced) {
+            commitGapProgress(1)
+            return
+          }
+          const range = gapRangePx()
+          const used = Math.min(deltaPx, (1 - progress) * range)
+          commitGapProgress(progress + used / range)
+          const excess = deltaPx - used
+          if (viewport) viewport.scrollTop = excess > 0 ? viewport.scrollTop + excess : 0
+        } else if (viewport) {
+          // Fully expanded: the gap delta scrolls the card content.
+          viewport.scrollTop += deltaPx
+        }
         return
       }
-      commitGapProgress(workExpansionProgressRef.current + deltaPx / gapRangePx())
+      const up = -deltaPx
+      const scrollTop = viewport ? viewport.scrollTop : 0
+      if (viewport && scrollTop > TOP_EPSILON) {
+        if (scrollTop - up > TOP_EPSILON) {
+          viewport.scrollTop = scrollTop - up
+        } else {
+          // Crossing the top boundary: finish the content scroll, then
+          // contract with the unused delta.
+          viewport.scrollTop = 0
+          commitGapProgress(reduced ? 0 : workExpansionProgressRef.current - (up - scrollTop) / gapRangePx())
+        }
+        return
+      }
+      commitGapProgress(reduced ? 0 : workExpansionProgressRef.current - up / gapRangePx())
     }
     const isInCard = (target: EventTarget | null) =>
       target instanceof Element &&
@@ -441,9 +473,14 @@ export default function PortfolioExperience() {
     }
     // Gesture dedication is decided where the touch BEGINS: a swipe that
     // starts in the glyph region never scrubs the card, even if it travels
-    // over the gap. Like the card, gap touch progress is ABSOLUTE — computed
-    // from the gesture's starting Y and starting progress.
-    let touch: { startY: number; startProgress: number; allowed: boolean } | null = null
+    // over the gap. Like the card, gap touch is ABSOLUTE — computed from the
+    // gesture's starting Y, starting progress, and starting content scroll.
+    let touch: {
+      startY: number
+      startProgress: number
+      startScrollTop: number
+      allowed: boolean
+    } | null = null
     const handleTouchStart = (event: globalThis.TouchEvent) => {
       const point = event.touches[0]
       if (!point) {
@@ -453,22 +490,42 @@ export default function PortfolioExperience() {
       touch = {
         startY: point.clientY,
         startProgress: workExpansionProgressRef.current,
+        startScrollTop: gapViewport()?.scrollTop ?? 0,
         allowed: !isInCard(event.target) && !isInGlyphRegion(point.clientX, point.clientY),
       }
     }
+    // The gesture's total distance maps onto progress * range + scrollTop:
+    // it completes expansion first, then scrolls the card content; reversing
+    // scrolls the content back to its top before contracting (the same
+    // handoff as the card's own touch scrub in WorkExperience).
     const handleTouchMove = (event: globalThis.TouchEvent) => {
       if (!touch?.allowed) return
       const point = event.touches[0]
       if (!point) return
-      const dy = touch.startY - point.clientY
       if (!workOverflowEligibleRef.current) return
-      if (dy < 0 && contentScrolled()) return
+      const dy = touch.startY - point.clientY
+      const viewport = gapViewport()
       const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
       if (reduced) {
-        commitGapProgress(dy > 0 ? 1 : 0)
+        if (dy > 0 && workExpansionProgressRef.current < 1) {
+          commitGapProgress(1)
+        } else if (
+          dy < 0 &&
+          (!viewport || viewport.scrollTop <= TOP_EPSILON) &&
+          workExpansionProgressRef.current > 0
+        ) {
+          if (viewport) viewport.scrollTop = 0
+          commitGapProgress(0)
+        } else if (viewport && workExpansionProgressRef.current === 1) {
+          // Expansion already snapped open: the gesture scrolls content.
+          viewport.scrollTop = Math.max(0, touch.startScrollTop + dy)
+        }
         return
       }
-      commitGapProgress(touch.startProgress + dy / gapRangePx())
+      const range = gapRangePx()
+      const total = Math.max(0, touch.startProgress * range + touch.startScrollTop + dy)
+      commitGapProgress(total / range)
+      if (viewport) viewport.scrollTop = Math.max(0, total - range)
     }
     const handleTouchEnd = () => {
       touch = null
