@@ -3,32 +3,34 @@
  *
  * The base FAB look (size, colors, hover) still comes from
  * `.privacy-settings-button` in app/globals.css; the rules below only
- * relocate it top-right with safe-area offsets and style the new panel,
- * tabs, and feedback form. `button.`/`div.` prefixes keep specificity at or
- * above the globals.css rules they override (including its mobile media
- * query, which media queries alone cannot outrank).
+ * relocate it bottom-right (inline with the footer band) and style the
+ * panel, tabs, and feedback form. `button.`/`div.` prefixes keep
+ * specificity at or above the globals.css rules they override (including
+ * its mobile media query, which media queries alone cannot outrank).
  *
  * All colors resolve through the globals.css theme tokens, so the panel
  * follows the system light/dark theme like the rest of the chrome.
  */
 
-/* FAB: below the fixed site header (header band ≈ 3.6rem incl. padding), so
-   it never overlaps the header's recruiter links. */
+/* FAB: bottom-right corner, on the footer line — the phone footer bar is
+   ~3.6rem tall, so the mobile rule below lifts it clear of that. */
 button.privacy-settings-button {
-  top: calc(env(safe-area-inset-top, 0px) + 4.25rem);
+  top: auto;
   right: calc(env(safe-area-inset-right, 0px) + 1rem);
-  bottom: auto;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
   left: auto;
 }
 
-/* Panel: anchored beneath the FAB, scrolls internally, stays in 100dvh. */
+/* Panel: anchored ABOVE the FAB (1rem offset + 44px FAB + gap ≈ 4rem),
+   scrolls internally, stays in 100dvh clear of the fixed header. */
 .privacy-panel {
   position: fixed;
-  top: calc(env(safe-area-inset-top, 0px) + 7.5rem);
+  top: auto;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 4rem);
   right: calc(env(safe-area-inset-right, 0px) + 1rem);
   z-index: 71;
   width: min(24rem, calc(100vw - 2rem - env(safe-area-inset-right, 0px)));
-  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 5rem);
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 9rem);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -181,17 +183,18 @@ button.privacy-settings-button {
 }
 
 @media (max-width: 640px) {
-  /* Below the single-row phone header (~3.6rem tall). */
+  /* Clear of the phone footer bar (~3.6rem tall) at the bottom edge. */
   button.privacy-settings-button {
-    top: calc(env(safe-area-inset-top, 0px) + 4rem);
+    top: auto;
     right: calc(env(safe-area-inset-right, 0px) + 0.75rem);
-    bottom: auto;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 4.25rem);
   }
 
   .privacy-panel {
-    top: calc(env(safe-area-inset-top, 0px) + 7.4rem);
+    top: auto;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 7.5rem);
     right: calc(env(safe-area-inset-right, 0px) + 0.75rem);
     width: calc(100vw - 1.5rem - env(safe-area-inset-right, 0px));
-    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 8.15rem);
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 12rem);
   }
 }

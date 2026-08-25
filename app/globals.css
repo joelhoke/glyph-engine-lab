@@ -1532,14 +1532,18 @@ button:focus-visible {
 
 /* Phone-only bottom bar (≤560px block at the end of this file reveals it):
    the recruiter links that don't fit the phone header. Mirrors the header's
-   dissolving frame treatment (fading upward); z-index 45 like the header. */
+   dissolving frame treatment (fading upward). */
 .site-footer {
   display: none;
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 45;
+  /* z-index 15: below the foreground layer (20), so bottom-docked scene
+     controls (the work card's Prev/Next) keep tap priority — the footer
+     visually hides under them rather than blocking their taps. Still above
+     the canvas and scene layers. */
+  z-index: 15;
   padding: 0.4rem 0.6rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
   --header-surface: var(--color-surface-panel);
   transition: --header-surface 600ms ease;
