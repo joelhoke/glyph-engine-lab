@@ -3845,6 +3845,13 @@ a.guide-source:focus-visible {
     display: block;
   }
 
+  /* Reserve the privacy FAB's footprint at the footer bar's right end so
+     the centered links never slide under it (components/AnalyticsConsent.css
+     docks the FAB inside the bar on phones). */
+  .site-footer-links {
+    padding-right: 3.25rem;
+  }
+
   .chat-turns {
     padding: 0.15rem;
   }
@@ -5415,9 +5422,9 @@ a.guide-source:focus-visible {
     box-sizing: border-box;
   }
 
+  /* Position comes from components/AnalyticsConsent.css (docked inside the
+     phone footer bar); only the shrunk size lives here. */
   .privacy-settings-button {
-    right: 0.75rem;
-    bottom: calc(8.6rem + env(safe-area-inset-bottom, 0px));
     width: 40px;
     height: 40px;
     font-size: 1rem;
@@ -5425,7 +5432,7 @@ a.guide-source:focus-visible {
 
   .consent-banner {
     right: 0.75rem;
-    bottom: calc(11.8rem + env(safe-area-inset-bottom, 0px));
+    bottom: calc(4.25rem + env(safe-area-inset-bottom, 0px));
     width: calc(100vw - 1.5rem);
   }
 }

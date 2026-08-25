@@ -183,16 +183,20 @@ button.privacy-settings-button {
 }
 
 @media (max-width: 640px) {
-  /* Clear of the phone footer bar (~3.6rem tall) at the bottom edge. */
+  /* ≤560px the FAB sits INSIDE the phone footer bar at its right end (the
+     links reserve its footprint via padding-right in globals.css) — "bottom
+     right, inline with the footer". At 561–640px there is no footer bar, so
+     it simply rests at the bottom-right corner. Either way it stays clear
+     of the vibe corner toggles, which own the band just above the footer. */
   button.privacy-settings-button {
     top: auto;
     right: calc(env(safe-area-inset-right, 0px) + 0.75rem);
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 4.25rem);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.45rem);
   }
 
   .privacy-panel {
     top: auto;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 7.5rem);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 4.25rem);
     right: calc(env(safe-area-inset-right, 0px) + 0.75rem);
     width: calc(100vw - 1.5rem - env(safe-area-inset-right, 0px));
     max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 12rem);
