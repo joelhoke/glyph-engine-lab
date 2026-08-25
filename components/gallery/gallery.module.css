@@ -10,72 +10,16 @@
   font-family: 'Cutive Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
   display: flex;
   flex-direction: column;
+  /* Top clearance for the fixed site header (app/globals.css .site-header,
+     ~3.85rem tall incl. safe-area inset). */
+  padding-top: calc(4rem + env(safe-area-inset-top, 0px));
 }
 
-/* --- Header lockup (matches .site-header's visual language, static-only) --- */
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: calc(0.55rem + env(safe-area-inset-top, 0px)) 1rem 0.55rem;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface-panel);
-}
-
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  min-height: 44px;
-  padding: 0.25rem 0.7rem 0.25rem 0.25rem;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  color: var(--color-text);
-  text-decoration: none;
-  transition: background 180ms ease, border-color 180ms ease;
-}
-
-.brand:hover,
-.brand:focus-visible {
-  background: var(--color-input-bg);
-}
-
-.brand:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 3px;
-}
-
-.avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  /* Same fixed dark chip as .site-header-avatar while the monogram is the
-     placeholder avatar. */
-  object-fit: contain;
-  padding: 3px;
-  background: #0d0a14;
-  border: 1px solid var(--color-border);
-  filter: grayscale(1) contrast(1.05);
-}
-
-.logo {
-  width: 16px;
-  height: 18px;
-}
-
-.wordmark {
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  white-space: nowrap;
-}
-
-.crumb {
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  color: var(--color-text-faint);
-  white-space: nowrap;
+/* Phone: the recruiter-link footer bar overlays the bottom edge. */
+@media (max-width: 560px) {
+  .shell {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 /* --- Page body -------------------------------------------------------------- */

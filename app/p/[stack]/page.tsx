@@ -40,7 +40,7 @@ export default function StackPage({ params }: StackPageProps) {
 
   return (
     <div className={styles.shell}>
-      <GalleryHeader crumb={stack.title} />
+      <GalleryHeader />
       <main id="main-content" className={styles.main}>
         {stack.listed ? (
           <Link href="/gallery" className={styles.backLink}>

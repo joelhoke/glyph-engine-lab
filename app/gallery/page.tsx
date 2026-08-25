@@ -20,7 +20,7 @@ export default function GalleryPage() {
   const stacks = listedStacks()
   return (
     <div className={styles.shell}>
-      <GalleryHeader crumb="Gallery" />
+      <GalleryHeader />
       <main id="main-content" className={styles.main}>
         <h1 className={styles.title}>Gallery</h1>
         <p className={styles.intro}>
