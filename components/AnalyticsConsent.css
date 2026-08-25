@@ -12,9 +12,10 @@
  * follows the system light/dark theme like the rest of the chrome.
  */
 
-/* FAB: top-right with safe-area offsets (was bottom-right). */
+/* FAB: below the fixed site header (header band ≈ 3.6rem incl. padding), so
+   it never overlaps the header's recruiter links. */
 button.privacy-settings-button {
-  top: calc(env(safe-area-inset-top, 0px) + 1rem);
+  top: calc(env(safe-area-inset-top, 0px) + 4.25rem);
   right: calc(env(safe-area-inset-right, 0px) + 1rem);
   bottom: auto;
   left: auto;
@@ -23,7 +24,7 @@ button.privacy-settings-button {
 /* Panel: anchored beneath the FAB, scrolls internally, stays in 100dvh. */
 .privacy-panel {
   position: fixed;
-  top: calc(env(safe-area-inset-top, 0px) + 4rem);
+  top: calc(env(safe-area-inset-top, 0px) + 7.5rem);
   right: calc(env(safe-area-inset-right, 0px) + 1rem);
   z-index: 71;
   width: min(24rem, calc(100vw - 2rem - env(safe-area-inset-right, 0px)));
@@ -180,16 +181,17 @@ button.privacy-settings-button {
 }
 
 @media (max-width: 640px) {
+  /* Below the single-row phone header (~3.6rem tall). */
   button.privacy-settings-button {
-    top: calc(env(safe-area-inset-top, 0px) + 0.75rem);
+    top: calc(env(safe-area-inset-top, 0px) + 4rem);
     right: calc(env(safe-area-inset-right, 0px) + 0.75rem);
     bottom: auto;
   }
 
   .privacy-panel {
-    top: calc(env(safe-area-inset-top, 0px) + 3.6rem);
+    top: calc(env(safe-area-inset-top, 0px) + 7.4rem);
     right: calc(env(safe-area-inset-right, 0px) + 0.75rem);
     width: calc(100vw - 1.5rem - env(safe-area-inset-right, 0px));
-    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 4.35rem);
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 8.15rem);
   }
 }

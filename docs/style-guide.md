@@ -192,9 +192,12 @@ labels.
 - **Buttons**: pill (radius 999px), min-height 44px, mono at 0.82rem;
   default = translucent panel + border, hover = border to `#8abaff` and
   text to `#f7fbff`; primary (consent) = `#8fe3f5` fill on `#06090e`.
-  Landing primary actions (`.primary-action-button`) are larger: min-height
-  60px desktop / 56px mobile, padding `1.25rem 2rem` desktop /
-  `1rem 1.25rem` mobile — always above the 44px accessibility floor.
+  The persistent site frame (`.site-header`, z-index 45 — above the
+  foreground layer, below the tuning panel) carries the home lockup (the
+  `JHMark` monogram, currentColor so it follows the theme), the section
+  tabs (`.experience-nav-list` pill classes — Gallery is a route link, not
+  a mode), and the recruiter links; on ≤560px phones the recruiter links
+  move to a fixed bottom bar (`.site-footer`) so the header stays one row.
 - **Focus**: 2px `#8abaff` outline, 3–4px offset, `:focus-visible` only —
   never remove it.
 - **Motion**: 160–320ms ease transitions; opacity + ≤18px translate for
