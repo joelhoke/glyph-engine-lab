@@ -107,7 +107,7 @@ export const STACKS: PrototypeStack[] = [
     },
     listed: true,
     framing:
-      'Two budget-tier site proposals for the Pike Place Market comic shop — same shop, escalating features and finish.',
+      'Two website options for the Pike Place comic shop — both affordable, one just a little fancier than the other.',
     prototypes: [
       {
         slug: 'mild',
