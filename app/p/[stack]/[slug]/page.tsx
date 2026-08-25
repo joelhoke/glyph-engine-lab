@@ -45,7 +45,7 @@ export default function ViewerPage({ params }: ViewerPageProps) {
 
   return (
     <div className={styles.shell}>
-      <GalleryHeader crumb={stack.title} />
+      <GalleryHeader />
       <main id="main-content" className={styles.viewerMain}>
         <div className={styles.viewerBar}>
           <h1 className={styles.viewerTitle}>{prototype.title}</h1>
