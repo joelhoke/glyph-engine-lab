@@ -280,12 +280,21 @@ assert(
   'leaving Work resets the expansion progress to compact',
 )
 assert(
-  portfolioSource.includes('deltaPx / gapRangePx()'),
-  'gap wheel input accumulates against the reported expansion range',
+  portfolioSource.includes('viewport.scrollTop += deltaPx'),
+  'gap wheel input scrolls the card content once expansion saturates',
 )
 assert(
-  portfolioSource.includes('touch.startProgress + dy / gapRangePx()'),
-  'gap touch progress is computed from the gesture start Y and start progress',
+  portfolioSource.includes('(up - scrollTop) / gapRangePx()'),
+  'gap wheel input crossing the content top contracts with the unused delta',
+)
+assert(
+  portfolioSource.includes('startScrollTop') &&
+    portfolioSource.includes('viewport.scrollTop = Math.max(0, total - range)'),
+  'gap touch maps the gesture onto progress * range + scrollTop (content scrolls past full expansion)',
+)
+assert(
+  !portfolioSource.includes('contentScrolled'),
+  'the old gap-gesture dead zone (contentScrolled early return) is gone',
 )
 
 // --- 7b. per-slide hero fit (PortfolioExperience + content/work) ------------

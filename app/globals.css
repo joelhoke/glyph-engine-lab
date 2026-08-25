@@ -1388,13 +1388,12 @@ button:focus-visible {
 /* Experience shell: persistent site frame, mode transition, and mode
    surfaces. */
 
-/* Site header (homepage-redesign phase 1): the persistent frame around the
-   scene — home lockup left, section tabs center, recruiter links right.
-   z-index 45: above the foreground layer (20) and the old nav band (40),
-   below the tuning panel (50) and the guide chrome (60+). Translucent with a
-   backdrop blur so it reads as a frame around the canvas, not UI pasted on
-   it; unlike the foreground layer it OWNS its band's hit-testing, so the
-   canvas can never swallow header clicks. */
+/* Site header (persistent frame, every route): home lockup left, section
+   tabs center, recruiter links right. z-index 45: above the foreground layer
+   (20) and the old nav band (40), below the tuning panel (50) and the guide
+   chrome (60+). Translucent with a backdrop blur so it reads as a frame
+   around the page, not UI pasted on it; it OWNS its band's hit-testing, so
+   the canvas can never swallow header clicks. */
 .site-header {
   position: fixed;
   top: 0;
@@ -3705,7 +3704,7 @@ a.guide-source:focus-visible {
   }
 
   /* Mobile frame compaction: links shrink but never drop below the 44px tap
-     target; the logotype lockup stays (it IS the home target). */
+     target; the monogram lockup stays (it IS the home target). */
   .site-header {
     gap: 0.4rem;
     padding-left: 0.6rem;

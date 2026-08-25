@@ -33,3 +33,19 @@ MOONSHOT_MODEL = "kimi-k2.6"
 # [[r2_buckets]]
 # binding = "PROTECTED_BUCKET"
 # bucket_name = "jh-protected-work"
+
+# R2 binding for hosted prototypes (docs/prototypes-plan.md). The bucket was
+# created once with:
+#   wrangler r2 bucket create jh-prototypes
+# The binding is declared HERE because this project's dashboard bindings are
+# locked to wrangler.toml ("Bindings for this project are being managed
+# through wrangler.toml") — it takes effect on the next deployment. Bundles
+# are uploaded under /<stack>/<slug>/<file> with
+# scripts/publish-prototypes.mjs (`wrangler r2 object put`) and served through
+# functions/p/[[path]].ts; they NEVER go into public/ or the static export.
+# For local dev, `wrangler pages dev` emulates R2 from this same binding (or
+# pass --r2=PROTOTYPES_BUCKET on the command line).
+
+[[r2_buckets]]
+binding = "PROTOTYPES_BUCKET"
+bucket_name = "jh-prototypes"
