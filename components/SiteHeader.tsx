@@ -49,7 +49,13 @@ export default function SiteHeader({ active, onSelect, onHome, className }: Site
 
   return (
     <>
-      <header className={`site-header${className ? ` ${className}` : ''}`}>
+      {/* data-scene tints the dissolving surface toward the active scene's
+          canvas palette (globals.css --header-surface-*); unset on the home
+          landing, so it keeps the neutral panel tone. */}
+      <header
+        className={`site-header${className ? ` ${className}` : ''}`}
+        data-scene={active ?? undefined}
+      >
         <button
           type="button"
           className="site-header-home"
@@ -86,7 +92,7 @@ export default function SiteHeader({ active, onSelect, onHome, className }: Site
       {/* Phone-only bottom bar: the recruiter links that don't fit the
           header. Hidden on wider viewports (display:none removes it from
           focus order and AT, so the header copy is the only one). */}
-      <footer className="site-footer">
+      <footer className="site-footer" data-scene={active ?? undefined}>
         <div className="site-footer-links">{recruiterLinks}</div>
       </footer>
     </>

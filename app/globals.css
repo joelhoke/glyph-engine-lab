@@ -53,6 +53,12 @@
   --color-surface-panel: rgba(8, 12, 18, 0.72);
   --color-surface-panel-soft: rgba(6, 9, 14, 0.62);
   --color-surface-panel-strong: rgba(6, 9, 14, 0.92);
+  /* Scene-tinted header surfaces: each scene's canvas background2 at the
+     panel's alpha, so the fixed header dissolves into the active scene's
+     tone (engine/sceneConfig.ts) instead of sitting on it. */
+  --header-surface-work: rgba(16, 24, 38, 0.72);
+  --header-surface-collaborate: rgba(32, 20, 16, 0.72);
+  --header-surface-vibe: rgba(26, 16, 38, 0.72);
   --color-surface-warm-panel: rgba(16, 10, 10, 0.62);
   --color-surface-warm: rgba(24, 14, 12, 0.72);
   --color-action-bg: rgba(14, 18, 24, 0.9);
@@ -119,6 +125,11 @@
     --color-surface-panel: rgba(255, 255, 255, 0.78);
     --color-surface-panel-soft: rgba(255, 255, 255, 0.72);
     --color-surface-panel-strong: rgba(255, 255, 255, 0.94);
+    /* Scene-tinted header surfaces (light): each scene's light background1
+       at the panel's alpha. */
+    --header-surface-work: rgba(232, 238, 246, 0.78);
+    --header-surface-collaborate: rgba(255, 247, 242, 0.78);
+    --header-surface-vibe: rgba(250, 247, 255, 0.78);
     --color-surface-warm-panel: rgba(255, 247, 242, 0.8);
     --color-surface-warm: rgba(255, 247, 242, 0.9);
     --color-action-bg: rgba(255, 255, 255, 0.9);
@@ -1388,12 +1399,19 @@ button:focus-visible {
 /* Experience shell: persistent site frame, mode transition, and mode
    surfaces. */
 
+/* Registered so the header's scene tint animates (scene switches tween the
+   custom property; unregistered browsers just snap — same visual result). */
+@property --header-surface {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: rgba(8, 12, 18, 0.72);
+}
+
 /* Site header (persistent frame, every route): home lockup left, section
    tabs center, recruiter links right. z-index 45: above the foreground layer
    (20) and the old nav band (40), below the tuning panel (50) and the guide
-   chrome (60+). Translucent with a backdrop blur so it reads as a frame
-   around the page, not UI pasted on it; it OWNS its band's hit-testing, so
-   the canvas can never swallow header clicks. */
+   chrome (60+). It OWNS its band's hit-testing, so the canvas can never
+   swallow header clicks. */
 .site-header {
   position: fixed;
   top: 0;
@@ -1405,12 +1423,42 @@ button:focus-visible {
   align-items: center;
   gap: 0.75rem;
   padding: calc(0.55rem + env(safe-area-inset-top, 0px)) 1rem 0.55rem;
-  /* Card surface recipe (.vibe-invitation-card), minus the beam: accent-tinted
-     border and the deeper 14px blur. */
-  border-bottom: 1px solid var(--color-accent-border);
-  background: var(--color-surface-panel);
+  /* The active scene's tinted surface (falls back to the neutral panel on
+     the landing and gallery routes); the transition tweens scene switches. */
+  --header-surface: var(--color-surface-panel);
+  transition: --header-surface 600ms ease;
+}
+
+.site-header[data-scene='work'],
+.site-footer[data-scene='work'] {
+  --header-surface: var(--header-surface-work);
+}
+
+.site-header[data-scene='collaborate'],
+.site-footer[data-scene='collaborate'] {
+  --header-surface: var(--header-surface-collaborate);
+}
+
+.site-header[data-scene='vibe'],
+.site-footer[data-scene='vibe'] {
+  --header-surface: var(--header-surface-vibe);
+}
+
+/* The surface is a masked layer behind the content: solid at the top edge,
+   dissolved to transparent ~55% down — no hard edge, and the scene shows
+   through the lower half. The mask fades the backdrop blur along the same
+   ramp; content stays fully opaque above it. */
+.site-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--header-surface);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
+  mask-image: linear-gradient(to bottom, black 0%, transparent 55%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, transparent 55%);
+  pointer-events: none;
 }
 
 .site-header-home {
@@ -1484,7 +1532,7 @@ button:focus-visible {
 
 /* Phone-only bottom bar (≤560px block at the end of this file reveals it):
    the recruiter links that don't fit the phone header. Mirrors the header's
-   translucent frame treatment; z-index 45 like the header. */
+   dissolving frame treatment (fading upward); z-index 45 like the header. */
 .site-footer {
   display: none;
   position: fixed;
@@ -1492,11 +1540,22 @@ button:focus-visible {
   right: 0;
   bottom: 0;
   z-index: 45;
-  border-top: 1px solid var(--color-accent-border);
-  background: var(--color-surface-panel);
+  padding: 0.4rem 0.6rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
+  --header-surface: var(--color-surface-panel);
+  transition: --header-surface 600ms ease;
+}
+
+.site-footer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--header-surface);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  padding: 0.4rem 0.6rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
+  mask-image: linear-gradient(to top, black 0%, transparent 55%);
+  -webkit-mask-image: linear-gradient(to top, black 0%, transparent 55%);
+  pointer-events: none;
 }
 
 .site-footer-links {
