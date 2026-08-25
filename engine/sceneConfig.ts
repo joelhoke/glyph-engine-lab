@@ -114,7 +114,7 @@ export const LANDING_SOURCE_URL = '/assets/JH-Logotype.svg'
  */
 export const VIBE_THEMED_PLAYGROUND: ThemedPlaygroundConfig = {
   glyphText: 'play · bend · make it yours · vibe · ',
-  glyphFont: "'Cutive Mono', monospace",
+  glyphFont: "'Departure Mono', monospace",
   glyphColorMode: 'image-gradient',
   glyphSizePt: 12,
   motion: { ...APPROVED_PLAYGROUND_DEFAULTS.motion, custom: { ...APPROVED_PLAYGROUND_DEFAULTS.motion.custom } },

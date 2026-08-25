@@ -25,6 +25,12 @@
 //     (Sound: Play/Pause then Direction; Pond: Source, Fish, Jelly, Ray), no
 //     horizontal overflow, no overlap with the center toolbar, controls stay
 //     visible when the viewport height shrinks (browser chrome)
+//   - mid widths (1440x800, then 800px): the measured layout
+//     (useVibeControlLayout) keeps pills horizontal whenever the real estate
+//     exists — closed FABs rest at their 20vw anchors; on open each control
+//     pushes itself outward until its pill keeps a ~48px gap to the toolbar
+//     capsule — and falls back to vertical expansion only when no horizontal
+//     position fits; nothing overlaps the toolbar chrome either way
 //   - prefers-reduced-motion: expansion/retraction/spin transitions skipped
 //     (state changes still apply instantly)
 // =============================================================================
@@ -182,8 +188,12 @@ async function pollComputed(page, selector, prop, durationMs) {
 // --- desktop scenario -----------------------------------------------------------
 
 async function scenarioDesktop(browser) {
-  section('Desktop 1440x900: anchored FAB, persistent pill, 2px strokes, rotor')
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+  /* Wide viewport: BOTH pills fit horizontally from their 20vw anchors beside
+     the (debug-widened) toolbar capsule — the horizontal-expansion assertions
+     below assume that regime. Mid widths (where useVibeControlLayout flips a
+     side to vertical expansion) are covered by scenarioMidWidth. */
+  section('Desktop 2560x1080: anchored FAB, persistent pill, 2px strokes, rotor')
+  const context = await browser.newContext({ viewport: { width: 2560, height: 1080 } })
   await seedConsent(context)
   const page = await context.newPage()
   await page.goto(DEBUG_URL, { waitUntil: 'domcontentloaded' })
@@ -658,6 +668,190 @@ async function scenarioMobile(browser) {
   await context.close()
 }
 
+// --- mid-width scenario ---------------------------------------------------------
+
+async function scenarioMidWidth(browser) {
+  section('Mid width 1440x800 → 800px: pill-reserving glide, vertical last resort')
+  const context = await browser.newContext({ viewport: { width: 1440, height: 800 } })
+  await seedConsent(context)
+  const page = await context.newPage()
+  await page.goto(DEBUG_URL, { waitUntil: 'domcontentloaded' })
+  await hideDevChrome(page)
+  await openVibeToolbar(page)
+
+  // useVibeControlLayout publishes the measured geometry the CSS consumes:
+  // the capsule half-width, each pill's natural horizontal footprint, and the
+  // per-side layout decision on <html>.
+  const layout = await page.evaluate(() => ({
+    capsuleHalf: document.documentElement.style.getPropertyValue('--vibe-capsule-half'),
+    soundPillW: document.documentElement.style.getPropertyValue('--vibe-sound-pill-w'),
+    pondPillW: document.documentElement.style.getPropertyValue('--vibe-pond-pill-w'),
+    sound: document.documentElement.dataset.vibeSoundLayout,
+    pond: document.documentElement.dataset.vibePondLayout,
+  }))
+  const pxVal = (v) => /^\d+px$/.test(v) && parseInt(v, 10) > 0
+  check(
+    'mid: capsule half-width and both pill footprints are published',
+    pxVal(layout.capsuleHalf) && pxVal(layout.soundPillW) && pxVal(layout.pondPillW),
+    JSON.stringify(layout),
+  )
+  check(
+    'mid: both pills stay horizontal when the real estate exists (1440px)',
+    layout.sound === 'horizontal' && layout.pond === 'horizontal',
+    JSON.stringify(layout),
+  )
+
+  const soundFabBefore = await rectOf(page, '.vibe-sound-toggle')
+  const pondFabBefore = await rectOf(page, '.vibe-pond-toggle')
+  check(
+    'mid: closed FABs rest at their 20vw anchors',
+    Math.abs(soundFabBefore.x - 0.2 * 1440) < 2 &&
+      Math.abs(pondFabBefore.x + pondFabBefore.w - 0.8 * 1440) < 2,
+    JSON.stringify({ soundFabBefore, pondFabBefore }),
+  )
+  await page.click('button.vibe-sound-toggle')
+  await page.click('button.vibe-pond-toggle')
+  await waitFor(
+    async () =>
+      (await stateOf(page, 'sound')) === 'open' && (await stateOf(page, 'pond')) === 'open',
+    { label: 'both open (mid width)' },
+  )
+  await sleep(600) // push-out + shell (340ms) + inner fade settle
+
+  // Horizontal expansion after the push-out: sound grows rightward from its
+  // FAB, pond leftward, each pill keeping a ~48px gap to the capsule.
+  const geometry = await page.evaluate(() => {
+    const pair = (pillSel, fabSel) => {
+      const p = document.querySelector(pillSel).getBoundingClientRect()
+      const f = document.querySelector(fabSel).getBoundingClientRect()
+      return { pillLeft: p.left, pillRight: p.right, fabLeft: f.left, fabRight: f.right }
+    }
+    const capsule = document.querySelector('.vibe-toolbar-capsule').getBoundingClientRect()
+    return {
+      vw: window.innerWidth,
+      capsuleLeft: capsule.left,
+      capsuleRight: capsule.right,
+      sound: pair('.vibe-sound-pill', '.vibe-sound-toggle'),
+      pond: pair('.vibe-pond-pill', '.vibe-pond-toggle'),
+    }
+  })
+  check(
+    'mid: both pills expand horizontally inward from behind their FABs (1440px)',
+    Math.abs(geometry.sound.pillLeft - geometry.sound.fabLeft) < 1 &&
+      geometry.sound.pillRight > geometry.sound.fabRight &&
+      Math.abs(geometry.pond.pillRight - geometry.pond.fabRight) < 1 &&
+      geometry.pond.pillLeft < geometry.pond.fabLeft,
+    JSON.stringify(geometry),
+  )
+  check(
+    'mid: on open the controls push themselves outward, keeping a ~48px pill-to-capsule gap',
+    geometry.sound.fabLeft <= soundFabBefore.x + 0.5 &&
+      geometry.pond.fabRight >= pondFabBefore.x + pondFabBefore.w - 0.5 &&
+      geometry.capsuleLeft - geometry.sound.pillRight >= 44 &&
+      geometry.pond.pillLeft - geometry.capsuleRight >= 44,
+    JSON.stringify(geometry),
+  )
+
+  // Nothing overlaps the centered toolbar chrome (the original bug: the open
+  // pond pill slid under the capsule and clipped behind it).
+  const overlap = await page.evaluate(() => {
+    const intersects = (a, b) =>
+      a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+    const chrome = ['.vibe-toolbar-capsule', '.vibe-toolbar-utility-tray']
+      .map((sel) => document.querySelector(sel)?.getBoundingClientRect())
+      .filter(Boolean)
+    const pieces = [
+      '.vibe-sound-pill',
+      '.vibe-pond-pill',
+      '.vibe-sound-toggle',
+      '.vibe-pond-toggle',
+    ].map((sel) => document.querySelector(sel).getBoundingClientRect())
+    return pieces.some((piece) => chrome.some((c) => intersects(piece, c)))
+  })
+  check('mid: expanded controls do not overlap the center toolbar chrome', !overlap)
+
+  // Narrower still (800px), pills still open from above.
+  await page.setViewportSize({ width: 800, height: 800 })
+  await sleep(300)
+  /* The capsule WRAPS narrower at this width, so the narrow sound pill may
+     still fit horizontally while the wide pond pill cannot — don't hardcode
+     the widths. Assert instead that each side's published decision matches
+     the fit formula (vertical only as the last resort), that each pill
+     expands in its declared direction, and that nothing touches the
+     capsule. */
+  const narrow = await page.evaluate(() => {
+    const rect = (sel) => document.querySelector(sel).getBoundingClientRect()
+    const pair = (pillSel, fabSel) => {
+      const p = rect(pillSel)
+      const f = rect(fabSel)
+      return {
+        pillLeft: p.left,
+        pillRight: p.right,
+        pillTop: p.top,
+        pillBottom: p.bottom,
+        fabLeft: f.left,
+        fabRight: f.right,
+        fabTop: f.top,
+        fabBottom: f.bottom,
+      }
+    }
+    const capsule = rect('.vibe-toolbar-capsule')
+    const rootStyle = document.documentElement.style
+    return {
+      vw: window.innerWidth,
+      capsuleHalf: parseFloat(rootStyle.getPropertyValue('--vibe-capsule-half')),
+      soundPillW: parseFloat(rootStyle.getPropertyValue('--vibe-sound-pill-w')),
+      pondPillW: parseFloat(rootStyle.getPropertyValue('--vibe-pond-pill-w')),
+      soundLayout: document.documentElement.dataset.vibeSoundLayout,
+      pondLayout: document.documentElement.dataset.vibePondLayout,
+      sound: pair('.vibe-sound-pill', '.vibe-sound-toggle'),
+      pond: pair('.vibe-pond-pill', '.vibe-pond-toggle'),
+      soundFabLeft: rect('.vibe-sound-toggle').left,
+      pondFabRight: rect('.vibe-pond-toggle').right,
+      capsuleLeft: capsule.left,
+      capsuleRight: capsule.right,
+    }
+  })
+  /* Mirrors useVibeControlLayout: pill width + 12px corner floor + the 48px
+     pill-to-capsule gap must fit in the half-viewport beside the capsule. */
+  const expectedLayout = (pillW) =>
+    pillW + 60 <= narrow.vw / 2 - narrow.capsuleHalf ? 'horizontal' : 'vertical'
+  check(
+    'mid: layout decisions match the measured fit (vertical only as last resort, 800px)',
+    expectedLayout(narrow.soundPillW) === narrow.soundLayout &&
+      expectedLayout(narrow.pondPillW) === narrow.pondLayout,
+    JSON.stringify(narrow),
+  )
+  const expandsUpward = (g) =>
+    Math.abs(g.pillBottom - g.fabBottom) < 1 && g.pillTop < g.fabTop
+  const expandsInwardFromLeft = (g) =>
+    Math.abs(g.pillLeft - g.fabLeft) < 1 &&
+    g.pillRight > g.fabRight &&
+    Math.abs(g.pillTop - g.fabTop) < 1
+  const expandsInwardFromRight = (g) =>
+    Math.abs(g.pillRight - g.fabRight) < 1 &&
+    g.pillLeft < g.fabLeft &&
+    Math.abs(g.pillTop - g.fabTop) < 1
+  check(
+    'mid: each pill expands in its declared direction (800px)',
+    (narrow.soundLayout === 'vertical'
+      ? expandsUpward(narrow.sound)
+      : expandsInwardFromLeft(narrow.sound)) &&
+      (narrow.pondLayout === 'vertical'
+        ? expandsUpward(narrow.pond)
+        : expandsInwardFromRight(narrow.pond)),
+    JSON.stringify({ sound: narrow.sound, pond: narrow.pond }),
+  )
+  check(
+    'mid: FABs clear the wrapped capsule (800px)',
+    narrow.soundFabLeft + 66 <= narrow.capsuleLeft + 0.5 &&
+      narrow.pondFabRight - 66 >= narrow.capsuleRight - 0.5,
+    JSON.stringify(narrow),
+  )
+
+  await context.close()
+}
+
 // --- reduced-motion scenario ------------------------------------------------------
 
 async function scenarioReducedMotion(browser) {
@@ -738,6 +932,7 @@ async function main() {
     browser = await chromium.launch({ executablePath, headless: true })
 
     await scenarioDesktop(browser)
+    await scenarioMidWidth(browser)
     await scenarioMobile(browser)
     await scenarioReducedMotion(browser)
   } finally {
