@@ -5,7 +5,9 @@
     "dev": "next dev",
     "dev:clean": "rm -rf .next node_modules/.cache && next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "verify:vibe-memento": "node scripts/verify-vibe-memento.js",
+    "verify:creations-api": "node scripts/verify-creations-api.js"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.8",

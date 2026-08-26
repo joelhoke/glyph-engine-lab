@@ -140,6 +140,155 @@
   color: var(--color-text-faint);
 }
 
+/* --- Playground creations (vibe mementos; client-fetched stack) ------------ */
+
+/* The thumb area of a creation card is the lightbox trigger — reset UA button
+   chrome and position the clip play badge. */
+.creationThumbButton {
+  display: block;
+  position: relative;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.creationThumbButton:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+.creationPlayBadge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-panel);
+  border: 1px solid var(--color-input-border);
+  color: var(--color-text);
+  font-size: 0.95rem;
+}
+
+.creationOpenLink {
+  align-self: flex-start;
+  font-size: 0.8rem;
+  color: var(--color-accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--color-accent-border);
+  padding-bottom: 2px;
+}
+
+.creationOpenLink:hover,
+.creationOpenLink:focus-visible {
+  color: var(--color-accent-strong);
+  border-color: var(--color-accent-strong);
+}
+
+/* Moderation: discreet toggle, login form, pending queue, card actions. */
+.moderateToggle {
+  align-self: flex-start;
+  font: inherit;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--color-text-faint);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding: 0 0 2px;
+  cursor: pointer;
+}
+
+.moderateToggle:hover,
+.moderateToggle:focus-visible {
+  color: var(--color-accent);
+  border-color: var(--color-accent-border);
+}
+
+.moderateForm {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.moderateInput {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--color-text);
+  background: var(--color-surface-panel);
+  border: 1px solid var(--color-input-border);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  min-width: 14rem;
+}
+
+.moderateInput:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.moderateError {
+  font-size: 0.8rem;
+  color: var(--color-accent-strong);
+}
+
+.pendingSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.25rem;
+  border: 1px dashed var(--color-input-border);
+  border-radius: 10px;
+}
+
+.pendingTitle {
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.creationActions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.25rem;
+}
+
+.creationActionButton {
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--color-accent);
+  background: none;
+  border: 1px solid var(--color-accent-border);
+  border-radius: 7px;
+  padding: 0.35rem 0.8rem;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.creationActionButton:hover:not(:disabled),
+.creationActionButton:focus-visible:not(:disabled) {
+  background: var(--color-action-bg);
+}
+
+.creationActionButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.creationActionDanger {
+  color: var(--color-accent-strong);
+  border-color: var(--color-accent-strong);
+}
+
 /* --- Viewer (sandboxed iframe shell) ------------------------------------------ */
 
 .viewerMain {

@@ -146,7 +146,7 @@ export default function WorkMediaLightbox({
         <div className="work-lightbox-stage">
           <LightboxItem key={item.id} item={item} videoRef={videoRef} />
         </div>
-        {item.caption && <p className="work-lightbox-caption">{item.caption}</p>}
+        <CaptionLine item={item} />
         {media.length > 1 && (
           <div className="work-lightbox-controls">
             <button
@@ -170,6 +170,23 @@ export default function WorkMediaLightbox({
       </div>
     </div>,
     document.body,
+  )
+}
+
+function CaptionLine({ item }: { item: WorkMedia }) {
+  // Only image/video media carry the optional caption action link.
+  const action = 'captionAction' in item ? item.captionAction : undefined
+  if (!item.caption && !action) return null
+  return (
+    <p className="work-lightbox-caption">
+      {item.caption}
+      {action ? (
+        <>
+          {' '}
+          <a href={action.href}>{action.label}</a>
+        </>
+      ) : null}
+    </p>
   )
 }
 

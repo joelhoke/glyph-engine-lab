@@ -80,6 +80,8 @@ export type ExperienceKey = 'intro' | 'work' | 'vibe' | 'collaborate'
 export type AmbientMode = 'off' | 'weather' | 'matrix'
 export type MediaKind = 'image' | 'video' | 'embed'
 export type SourceChange = 'builtin' | 'preset' | 'upload'
+export type CreationSaveKind = 'auto' | 'image' | 'clip'
+export type CreationSaveQualifier = 'steps' | 'tools' | 'elements'
 
 export type AnalyticsEvent =
   | { name: 'experience_view'; params: { experience: ExperienceKey } }
@@ -91,6 +93,9 @@ export type AnalyticsEvent =
   | { name: 'effect_change'; params: { mode: AmbientMode } }
   | { name: 'source_change'; params: { source: SourceChange } }
   | { name: 'tier_transition'; params: { from_tier: number; to_tier: number } }
+  /** Gallery-archive save: the export/auto kind and the first engagement
+   *  qualifier only — never composition contents. */
+  | { name: 'creation_save'; params: { kind: CreationSaveKind; qualifier: CreationSaveQualifier } }
   | { name: 'collaborate_guide_answered'; params: { topic: string; model_class: string } }
   | {
       name: 'collaborate_guide_navigation'
@@ -110,6 +115,7 @@ const ALLOWED_PARAMS: Record<AnalyticsEvent['name'], readonly string[]> = {
   effect_change: ['mode'],
   source_change: ['source'],
   tier_transition: ['from_tier', 'to_tier'],
+  creation_save: ['kind', 'qualifier'],
   collaborate_guide_answered: ['topic', 'model_class'],
   collaborate_guide_navigation: ['story_id', 'presentation'],
 }

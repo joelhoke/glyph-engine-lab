@@ -54,6 +54,9 @@ export type WorkMediaImage = {
   height: number
   alt: string
   caption?: string
+  /** Optional action link rendered on the lightbox caption line (e.g. open a
+   *  captured composition back in the playground). */
+  captionAction?: { href: string; label: string }
   /** Optional smaller preview src; defaults to src. */
   thumbnail?: string
 }
@@ -68,6 +71,8 @@ export type WorkMediaVideo = {
   /** Short accessible description of the video content. */
   alt: string
   caption?: string
+  /** Optional action link rendered on the lightbox caption line. */
+  captionAction?: { href: string; label: string }
   /** Poster frame (required for hosted video). */
   poster: string
   /** WebVTT captions track URL. */

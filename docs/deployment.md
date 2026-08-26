@@ -189,6 +189,81 @@ submissions are reviewed via the D1 dashboard or wrangler tooling.
 - **Rollback**: the function deploys with the Pages deployment; D1 data is
   unaffected by Pages rollbacks.
 
+## Creations gallery
+
+Visitors can save vibe-playground compositions: `POST /api/creations`
+(multipart: `state`, `configHash`, `kind`, optional `thumb` / `media` /
+`source` files) stores the memento state and metadata in a **separate D1
+database `jh-creations`** (binding `CREATIONS_DB`) and the binary media in a
+dedicated R2 bucket (binding `CREATIONS_BUCKET`) under `thumb/`, `media/`, and
+`source/` key prefixes. `GET /api/creations` returns the public gallery index
+(listed rows only), `GET /api/creations/:id` returns one listed creation's
+state, and `GET /api/creations/media/:key` streams media with HTTP Range
+support (seekable `<video>`) and immutable year-long caching.
+
+Rows are inserted **`listed = 0` (held for review)** and promoted manually —
+there is no auto-publish. A duplicate `config_hash` short-circuits with
+`200 { ok: true, duplicate: true }`. A global **FIFO cap of 100 rows** is
+enforced on writes: the oldest rows are deleted and their R2 objects removed.
+There is no TTL. Upload caps: state 512KB, thumb 1MB, clip media 25MB
+(mp4/webm, `kind = 'clip'` only), source image 5MB. Both endpoints fail closed
+with 503 if either binding is missing.
+
+### One-time setup
+
+Bindings are declared in `wrangler.toml` (this project's dashboard bindings
+are locked to the toml) — they take effect on the next deploy.
+
+1. **D1 database**: `wrangler d1 create jh-creations`, paste the printed
+   `database_id` into the `[[d1_databases]]` block in `wrangler.toml`
+   (replacing `REPLACE_WITH_CREATIONS_DATABASE_ID`), then apply the schema:
+   `wrangler d1 execute jh-creations --remote --file=migrations/0003_create_creations.sql`.
+2. **R2 bucket**: `wrangler r2 bucket create jh-creations-media` (matches the
+   `[[r2_buckets]]` block in `wrangler.toml`). Never enable public access —
+   media is served only through `GET /api/creations/media/:key`.
+3. **Rate-limit rule**: Cloudflare dashboard → Security → WAF → Rate limiting
+   rules → create a rule alongside the existing feedback rule:
+   - Expression: `http.request.uri.path eq "/api/creations"` and method `POST`.
+   - Limit: **10 requests per 10 minutes**, counted **per IP**.
+   - Action: **Block** (clients see 429).
+   The function itself does not rate-limit; this rule is the enforcement.
+
+### Local preview
+
+`wrangler pages dev` emulates both bindings from the `wrangler.toml`
+declarations. Apply the schema to the local emulator first:
+`wrangler d1 execute jh-creations --local --file=migrations/0003_create_creations.sql`.
+`scripts/dev/seed-creations.js` seeds five sample creations against a running
+dev server (and the moderation `UPDATE … SET listed = 1` with `--local`
+promotes them).
+
+### Moderation
+
+Rows are reviewed on the site itself: `/gallery/creations` has a discreet
+**Moderate** toggle (below the intro). Signing in with the admin password sets
+an HMAC-signed `jh_creations_admin` cookie (HttpOnly, 14 days) via
+`POST /api/creations/moderate` and reveals a **Pending review** queue with
+Approve / Delete per piece (Delete also removes the R2 objects) plus Unlist on
+listed pieces. Auth env (fail-closed when unset):
+
+- `CREATIONS_ADMIN_PASSWORD` — PBKDF2 record (`pbkdf2$…`), generate with
+  `node scripts/prototype-password.mjs` and set as a Pages project environment
+  variable (dashboard) or in `.dev.vars` locally.
+- `PROTOTYPES_AUTH_SECRET` — the existing shared signing secret, reused for
+  the admin cookie.
+
+The wrangler CLI remains as a fallback:
+
+- **List pending**:
+  `wrangler d1 execute jh-creations --remote --command "SELECT id, kind, created_at FROM creations WHERE listed = 0 ORDER BY created_at DESC"`
+- **Approve**:
+  `wrangler d1 execute jh-creations --remote --command "UPDATE creations SET listed = 1 WHERE id = '<id>'"`
+- **Reject/delete**:
+  `wrangler d1 execute jh-creations --remote --command "DELETE FROM creations WHERE id = '<id>'"`
+  — then also delete the row's R2 objects (`thumb/<id>.*`, `media/<id>.*`,
+  `source/<id>.*`) from the `jh-creations-media` bucket, e.g.
+  `wrangler r2 object delete jh-creations-media/thumb/<id>.webp`.
+
 ## Collaborate AI guide
 
 The Collaborate page can answer visitor questions with an AI guide built

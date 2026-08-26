@@ -30,6 +30,9 @@ export type PondControlProps = {
   character: PondCharacter
   onToggle: () => void
   onSelect: (character: PondCharacter) => void
+  /** Fired ONCE per mount on the first meaningful interaction (enable
+   *  toggle, character pick) — feeds the vibe-creations engagement tracker. */
+  onInteract?: () => void
 }
 
 const POND_CHOICES: { value: PondCharacter; label: string }[] = [
@@ -70,11 +73,20 @@ export default function PondControl({
   character,
   onToggle,
   onSelect,
+  onInteract,
 }: PondControlProps) {
   /* The pill stays mounted across the whole enable/disable lifecycle so its
      exit transition can run; pillVisible only gates visibility. */
   const [pillVisible, setPillVisible] = useState(enabled)
   const pillRef = useRef<HTMLDivElement | null>(null)
+  /* First meaningful interaction only (per mount): the tracker credits the
+     pond corner element once. */
+  const interactedRef = useRef(false)
+  const fireInteract = () => {
+    if (interactedRef.current) return
+    interactedRef.current = true
+    onInteract?.()
+  }
 
   const state = enabled ? 'open' : pillVisible ? 'closing' : 'closed'
 
@@ -143,7 +155,10 @@ export default function PondControl({
                     ? 'vibe-pond-choice vibe-pond-choice-selected'
                     : 'vibe-pond-choice'
                 }
-                onClick={() => onSelect(choice.value)}
+                onClick={() => {
+                  fireInteract()
+                  onSelect(choice.value)
+                }}
               >
                 {choice.label}
               </button>
@@ -159,7 +174,10 @@ export default function PondControl({
         aria-label={state === 'closed' ? 'Pond' : 'Turn pond off'}
         aria-pressed={enabled}
         aria-expanded={enabled}
-        onClick={onToggle}
+        onClick={() => {
+          fireInteract()
+          onToggle()
+        }}
       >
         <span className="vibe-pond-toggle-icon" aria-hidden="true">
           <PondGlyph />

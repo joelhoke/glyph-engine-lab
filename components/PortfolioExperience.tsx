@@ -11,6 +11,7 @@ import VibeToolbar from './vibe/VibeToolbar'
 import AmbientCarousel from './vibe/AmbientCarousel'
 import PondControl from './vibe/PondControl'
 import SoundControl from './vibe/SoundControl'
+import CreationToast from './vibe/CreationToast'
 import SonificationOverlay from './vibe/SonificationOverlay'
 import { PAINT_DEFAULT_BACKGROUND_COLOR, PAINT_DEFAULT_GLYPH_COLOR } from './vibe/PaintPanel'
 import { useSonification } from './vibe/useSonification'
@@ -143,6 +144,17 @@ import {
   redoTransaction,
   undoTransaction,
 } from '../engine/vibeHistory'
+import {
+  buildVibeMemento,
+  createVibeMementoTracker,
+  mementoConfigHash,
+  mementoToVibeSnapshot,
+} from '../engine/vibeMemento'
+import {
+  CreationKind,
+  fetchCreationState,
+  saveCreation,
+} from '../engine/creationClient'
 import {
   APPROVED_SCENE_DEFAULTS,
   APPROVED_SOURCE_LAYOUT_DEFAULTS,
@@ -793,6 +805,14 @@ export default function PortfolioExperience() {
   const vibeHistoryRef = useRef<VibeHistory>(createVibeHistory())
   const [vibeCanUndo, setVibeCanUndo] = useState(false)
   const [vibeCanRedo, setVibeCanRedo] = useState(false)
+  // Vibe creations (feature/vibe-creations): the tracker watches raw recorded
+  // transactions plus corner-element touches; the first qualification edge
+  // auto-saves the composition to the gallery archive. lastCreationHashRef
+  // dedupes repeat saves of an unchanged composition within the session.
+  const mementoTrackerRef = useRef(createVibeMementoTracker())
+  const mementoQualifiedRef = useRef(false)
+  const lastCreationHashRef = useRef<string | null>(null)
+  const [creationToastOpen, setCreationToastOpen] = useState(false)
   // Latest paint-overlay state: the "before" for the next stroke transaction
   // (the canvas only reports stroke ENDS, so this is tracked continuously).
   const lastPaintSnapshotRef = useRef<PaintSnapshot>(createEmptyPaintSnapshot())
@@ -934,8 +954,117 @@ export default function PortfolioExperience() {
     before: VibeStateSnapshot,
     after: VibeStateSnapshot,
   ) => {
-    pushTransaction(vibeHistoryRef.current, { kind, key, before, after }, releaseOrphanedUrl)
+    const transaction = { kind, key, before, after }
+    pushTransaction(vibeHistoryRef.current, transaction, releaseOrphanedUrl)
     syncVibeHistoryFlags()
+    // Creations tracker rides the SAME raw recording calls (pre-coalescing),
+    // so repeated slider nudges still accrue engagement steps.
+    mementoTrackerRef.current.recordTransaction(transaction)
+    checkMementoQualification()
+  }
+
+  /** Downscaled JPEG of the live field for the archive card: long edge
+   *  capped at 640px (same staging-canvas read-back idiom as the clip
+   *  recorder), far under the server's 1 MB thumb limit. Null on failure —
+   *  a save proceeds without a thumb. */
+  const captureCreationThumb = (): Promise<Blob | null> => {
+    const canvas = sceneCanvasRef.current?.getCanvas()
+    if (!canvas || canvas.width === 0 || canvas.height === 0) return Promise.resolve(null)
+    const scale = Math.min(1, 640 / Math.max(canvas.width, canvas.height))
+    const staging = document.createElement('canvas')
+    staging.width = Math.max(1, Math.round(canvas.width * scale))
+    staging.height = Math.max(1, Math.round(canvas.height * scale))
+    const stagingCtx = staging.getContext('2d')
+    if (!stagingCtx) return Promise.resolve(null)
+    try {
+      stagingCtx.drawImage(canvas, 0, 0, staging.width, staging.height)
+    } catch {
+      return Promise.resolve(null)
+    }
+    return new Promise((resolve) => {
+      try {
+        staging.toBlob((blob) => resolve(blob), 'image/jpeg', 0.82)
+      } catch {
+        resolve(null)
+      }
+    })
+  }
+
+  /** Save the current composition to the gallery archive. Fire-and-forget:
+   *  never throws, silent on failure, deduped on the memento's config hash
+   *  within the session (the server also dedupes globally). */
+  const saveCurrentCreation = async (kind: CreationKind, media?: Blob): Promise<void> => {
+    try {
+      const snapshot = captureVibeSnapshot()
+      // The pond is session-only for live play but part of a SAVED piece:
+      // a creation archived with the pond on reopens with the pond on.
+      const memento = buildVibeMemento(snapshot, {
+        pond: pondEnabledRef.current
+          ? { enabled: true, character: pondCharacterRef.current }
+          : undefined,
+      })
+      const hash = await mementoConfigHash(memento)
+      if (hash === lastCreationHashRef.current) return
+      const thumb = (await captureCreationThumb()) ?? undefined
+      // An oversize clip degrades to a plain image save (thumb only).
+      let saveKind: CreationKind = kind
+      let mediaBlob: Blob | undefined
+      if (kind === 'clip' && media && media.size <= 25 * 1024 * 1024) {
+        mediaBlob = media
+      } else if (kind === 'clip') {
+        saveKind = 'image'
+      }
+      // A visitor upload still live as a blob: URL goes along so the server
+      // can restore the source later (5 MB cap, images only).
+      let source: Blob | undefined
+      const uploadUrl = snapshot.upload?.url
+      if (uploadUrl && uploadUrl.startsWith('blob:')) {
+        try {
+          const blob = await (await fetch(uploadUrl)).blob()
+          if (blob.size <= 5 * 1024 * 1024) source = blob
+        } catch {
+          /* the save proceeds without a restorable source */
+        }
+      }
+      const result = await saveCreation({
+        kind: saveKind,
+        memento,
+        configHash: hash,
+        thumb,
+        media: mediaBlob,
+        source,
+      })
+      if (!result.ok) return
+      lastCreationHashRef.current = hash
+      // A duplicate is already archived: dedupe state updates, no toast.
+      if (result.duplicate) return
+      setCreationToastOpen(true)
+      trackEvent({
+        name: 'creation_save',
+        params: {
+          kind: saveKind,
+          qualifier: mementoTrackerRef.current.qualifiers()[0] ?? 'steps',
+        },
+      })
+    } catch {
+      /* silent — archiving never disturbs the playground */
+    }
+  }
+
+  /** Edge trigger: the FIRST transition into a qualified session auto-saves;
+   *  later transactions only feed the tracker. */
+  const checkMementoQualification = () => {
+    if (mementoQualifiedRef.current) return
+    if (!mementoTrackerRef.current.isQualified()) return
+    mementoQualifiedRef.current = true
+    void saveCurrentCreation('auto')
+  }
+
+  /** Toolbar export hook: a successful share/download archives too — but
+   *  only for a qualified session (a default playground exports nothing). */
+  const handleExportCapture = ({ kind, blob }: { kind: 'image' | 'clip'; blob: Blob }) => {
+    if (!mementoTrackerRef.current.isQualified()) return
+    void saveCurrentCreation(kind, kind === 'clip' ? blob : undefined)
   }
 
   /** Default coalesce key from the patch contents: single scalar fields use
@@ -1015,6 +1144,17 @@ export default function PortfolioExperience() {
   const [pondConfig, setPondConfig] = useState<PondConfig>(() => ({ ...POND_DEFAULTS }))
   const [pondEnabled, setPondEnabled] = useState(false)
   const [pondCharacter, setPondCharacter] = useState<PondCharacter>('source')
+  // Ref mirrors for the async creations save path (same convention as
+  // playgroundConfigRef/paintToolRef): a saved piece records whether the pond
+  // was on so it can reopen that way (engine/vibeMemento.ts `pond` field).
+  const pondEnabledRef = useRef(pondEnabled)
+  const pondCharacterRef = useRef(pondCharacter)
+  useEffect(() => {
+    pondEnabledRef.current = pondEnabled
+  }, [pondEnabled])
+  useEffect(() => {
+    pondCharacterRef.current = pondCharacter
+  }, [pondCharacter])
   const handlePondChange = (next: PondConfig) => {
     setPondConfig(clampPondConfig(next))
   }
@@ -1882,6 +2022,8 @@ export default function PortfolioExperience() {
   // onAmbientWipeEnd via microtask, so the nav lock always releases.
   const handleAmbientNavigate = (direction: 'next' | 'prev') => {
     if (ambientWipeActive) return
+    mementoTrackerRef.current.touchElement('carousel')
+    checkMementoQualification()
     const current = resolveAmbientSceneId(playgroundConfigRef.current.ambient)
     const next = nextAmbientSceneId(current, direction)
     if (sceneCanvasRef.current?.beginAmbientWipe(direction)) {
@@ -2108,6 +2250,60 @@ export default function PortfolioExperience() {
     return () => window.removeEventListener('keydown', handleHistoryKeys)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayed])
+
+  // Open-in-playground (feature/vibe-creations): a `?memento=<id>` link loads
+  // the archived composition over the default playground — one 'preset'
+  // history transaction (undo returns to the default), paint strokes restored
+  // through the canvas handle via applyVibeSnapshot, then vibe mode with the
+  // control dock open. Runs once per page load; any failure falls through to
+  // the normal page silently.
+  const mementoRestoreAttemptedRef = useRef(false)
+  useEffect(() => {
+    if (mementoRestoreAttemptedRef.current) return
+    mementoRestoreAttemptedRef.current = true
+    const id = new URLSearchParams(window.location.search).get('memento')
+    if (!id) return
+    let canceled = false
+    const restore = async () => {
+      try {
+        const memento = await fetchCreationState(id)
+        if (!memento || canceled) return
+        const snapshot = mementoToVibeSnapshot(memento)
+        // An archived upload source is served as bytes: reify it into an
+        // object URL so the field samples it like a fresh upload.
+        if (memento.source.kind === 'upload' && snapshot.upload) {
+          const response = await fetch(snapshot.upload.url)
+          if (!response.ok) return
+          const blob = await response.blob()
+          if (canceled) return
+          snapshot.upload = { ...snapshot.upload, url: URL.createObjectURL(blob) }
+        }
+        if (canceled) return
+        const before = captureVibeSnapshot()
+        recordVibeTransaction('preset', null, before, snapshot)
+        applyVibeSnapshot(snapshot)
+        // A piece saved with the pond on reopens with the pond on.
+        if (memento.pond?.enabled) {
+          setPondEnabled(true)
+          if (memento.pond.character) setPondCharacter(memento.pond.character)
+        }
+        setSelected('vibe')
+        setExperience('vibe')
+        setVibeControlsOpen(true)
+        const vibeHash = formatExperienceHash('vibe')
+        if (window.location.hash !== vibeHash) {
+          window.history.pushState(null, '', vibeHash)
+        }
+      } catch {
+        /* silent — the normal page is the fallback */
+      }
+    }
+    void restore()
+    return () => {
+      canceled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Presets apply a complete authored composition, resolved against the
   // ACTIVE theme at selection time (feature/light-dark) — the resolution
@@ -2774,6 +2970,7 @@ export default function PortfolioExperience() {
           onSoundPlay={sonification.play}
           onSoundPause={sonification.pause}
           clip={clipRecorder}
+          onExportCapture={handleExportCapture}
         />
       )}
       {displayed === 'vibe' && vibeControlsOpen && (
@@ -2789,6 +2986,10 @@ export default function PortfolioExperience() {
             character={pondCharacter}
             onToggle={() => setPondEnabled((prev) => !prev)}
             onSelect={setPondCharacter}
+            onInteract={() => {
+              mementoTrackerRef.current.touchElement('pond')
+              checkMementoQualification()
+            }}
           />
           <SoundControl
             expanded={soundExpanded}
@@ -2800,6 +3001,10 @@ export default function PortfolioExperience() {
             onPlay={handleSoundPlay}
             onPause={handleSoundPause}
             onCycleDirection={handleSoundCycleDirection}
+            onInteract={() => {
+              mementoTrackerRef.current.touchElement('music')
+              checkMementoQualification()
+            }}
           />
         </>
       )}
@@ -2810,6 +3015,7 @@ export default function PortfolioExperience() {
           getActiveDirection={sonification.getActiveDirection}
         />
       )}
+      <CreationToast open={creationToastOpen} onDismiss={() => setCreationToastOpen(false)} />
       {tuningMode && (
         <TuningPanel
           speed={diagnostics.speed}

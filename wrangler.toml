@@ -49,3 +49,20 @@ MOONSHOT_MODEL = "kimi-k2.6"
 [[r2_buckets]]
 binding = "PROTOTYPES_BUCKET"
 bucket_name = "jh-prototypes"
+
+# D1 + R2 bindings for the creations gallery (docs/deployment.md, "Creations
+# gallery"). Declared HERE for the same reason as PROTOTYPES_BUCKET — dashboard
+# bindings are locked to wrangler.toml. One-time setup:
+#   wrangler d1 create jh-creations        → paste the real database_id below
+#   wrangler d1 execute jh-creations --remote --file=migrations/0003_create_creations.sql
+#   wrangler r2 bucket create jh-creations-media
+# `wrangler pages dev` emulates both bindings locally from these declarations.
+
+[[d1_databases]]
+binding = "CREATIONS_DB"
+database_name = "jh-creations"
+database_id = "REPLACE_WITH_CREATIONS_DATABASE_ID"
+
+[[r2_buckets]]
+binding = "CREATIONS_BUCKET"
+bucket_name = "jh-creations-media"

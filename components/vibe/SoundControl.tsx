@@ -51,6 +51,9 @@ export type SoundControlProps = {
   /** Cycles right → down → left → up (left-to-right → top-to-bottom →
    *  right-to-left → bottom-to-top). */
   onCycleDirection: () => void
+  /** Fired ONCE per mount on the first meaningful interaction (play/pause,
+   *  sweep cycle) — feeds the vibe-creations engagement tracker. */
+  onInteract?: () => void
 }
 
 /** Arrow artwork points up; rotate it to the sweep direction. */
@@ -84,12 +87,21 @@ export default function SoundControl({
   onPlay,
   onPause,
   onCycleDirection,
+  onInteract,
 }: SoundControlProps) {
   const playing = playback === 'playing'
   /* The pill stays mounted across the whole open/close lifecycle so its exit
      transition can run; pillVisible only gates visibility/interactivity. */
   const [pillVisible, setPillVisible] = useState(expanded)
   const pillRef = useRef<HTMLDivElement | null>(null)
+  /* First meaningful interaction only (per mount): the tracker credits the
+     music corner element once, no matter how often the transport is used. */
+  const interactedRef = useRef(false)
+  const fireInteract = () => {
+    if (interactedRef.current) return
+    interactedRef.current = true
+    onInteract?.()
+  }
 
   const state = expanded ? 'open' : pillVisible ? 'closing' : 'closed'
 
@@ -156,7 +168,14 @@ export default function SoundControl({
             className="vibe-sound-transport"
             aria-label={playing ? 'Pause sound' : 'Play sound'}
             aria-pressed={playing}
-            onClick={playing ? onPause : onPlay}
+            onClick={() => {
+              fireInteract()
+              if (playing) {
+                onPause()
+              } else {
+                onPlay()
+              }
+            }}
           >
             {playing ? (
               <svg
@@ -185,7 +204,10 @@ export default function SoundControl({
             type="button"
             className="vibe-sound-direction"
             aria-label={`Sweep direction: ${DIRECTION_LABELS[direction]}`}
-            onClick={onCycleDirection}
+            onClick={() => {
+              fireInteract()
+              onCycleDirection()
+            }}
           >
             <img
               className="vibe-sound-direction-arrow"
