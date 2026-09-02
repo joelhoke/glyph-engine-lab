@@ -8,6 +8,9 @@ import WorkMediaLightbox from './WorkMediaLightbox'
 type WorkStoryProps = {
   story: WorkStory
   headingRef?: RefObject<HTMLHeadingElement | null>
+  /** Provided by WorkExperience for public slides that overflow the compact
+   *  fold — the button eases the card straight to full expansion. */
+  onReadCaseStudy?: () => void
   /** Consented public analytics events; no-op before opt-in. */
   onTrackEvent?: (event: AnalyticsEvent) => void
 }
@@ -16,15 +19,20 @@ const PREVIEW_THUMB_COUNT = 3
 
 /**
  * Presentational view of a single case study. The structured narrative is
- * always rendered (no disclosure) — the card's expanded reading panel is what
- * reveals it. Media referenced from narrative sections via mediaIds renders
+ * always rendered (no disclosure) — the card's expanded reading panel is
+ * what reveals it, via scroll scrub or the "Read the case study" button. Media referenced from narrative sections via mediaIds renders
  * inline (images open the lightbox); the gallery is reserved for media NOT
  * placed in the narrative, so nothing appears twice. Related links always
  * come last. Pure semantic HTML — the story is fully readable with the
  * canvas disabled. Protected stories render only their approved teaser plus
  * the confidential-viewer route.
  */
-export default function WorkStoryView({ story, headingRef, onTrackEvent }: WorkStoryProps) {
+export default function WorkStoryView({
+  story,
+  headingRef,
+  onReadCaseStudy,
+  onTrackEvent,
+}: WorkStoryProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const lightboxTriggerRef = useRef<HTMLElement | null>(null)
 
@@ -75,6 +83,16 @@ export default function WorkStoryView({ story, headingRef, onTrackEvent }: WorkS
           <dd>{story.context}</dd>
         </div>
       </dl>
+
+      {/* Discoverability affordance for the scroll-scrubbed expansion: the
+          compact fold hides the narrative below this point, so the button
+          opens the card straight to the full reading panel. */}
+      {story.access === 'public' && onReadCaseStudy && (
+        <button type="button" className="work-story-read" onClick={onReadCaseStudy}>
+          Read the case study
+          <span aria-hidden="true"> ↓</span>
+        </button>
+      )}
 
       {story.access === 'protected' ? (
         /* Access action, not a related resource — it keeps its position

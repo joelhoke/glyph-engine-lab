@@ -1929,6 +1929,27 @@ a.experience-nav-button {
   border-color: var(--color-accent-strong);
 }
 
+/* "Read the case study" — the compact-fold affordance that opens the card to
+   the full reading panel. Styled like .work-story-link, plus button reset. */
+.work-story-read {
+  align-self: flex-start;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--color-accent);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-accent-border);
+  padding: 0 0 2px;
+  cursor: pointer;
+  transition: color 180ms ease, border-color 180ms ease;
+}
+
+.work-story-read:hover,
+.work-story-read:focus-visible {
+  color: var(--color-accent-strong);
+  border-color: var(--color-accent-strong);
+}
+
 .work-controls {
   display: flex;
   align-items: center;

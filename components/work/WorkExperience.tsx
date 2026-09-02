@@ -1,6 +1,6 @@
 'use client'
 
-import { KeyboardEvent, RefObject, useEffect, useRef } from 'react'
+import { KeyboardEvent, RefObject, useEffect, useRef, useState } from 'react'
 import {
   getWorkSlide,
   getWorkSlideMark,
@@ -126,7 +126,9 @@ function expandedRect(): Rect {
  * A slide is expandable only when its content overflows the compact viewport
  * (measured from compact geometry and cached, so mid-transition geometry
  * changes never disable it). Non-overflowing slides (e.g. the intro) pin
- * progress to 0 and ignore expansion input.
+ * progress to 0 and ignore expansion input. Overflowing public slides also
+ * show a "Read the case study" button in the compact fold — a discoverable
+ * affordance that eases progress to 1 through the same commit pipeline.
  *
  * Native non-passive listeners are used for wheel/touchmove because the
  * transition consumes input (preventDefault) — React's delegated listeners
@@ -179,6 +181,14 @@ export default function WorkExperience({
     mode: 'pending' | 'scrub' | 'native'
   } | null>(null)
   const hasMountedRef = useRef(false)
+  // True while the active slide overflows its compact fold (mirrors
+  // eligibleRef for render) — gates the "Read the case study" button.
+  const [expandable, setExpandable] = useState(false)
+  // rAF handle for the button-triggered expand animation (null when idle).
+  const expandAnimRef = useRef<number | null>(null)
+  // Set by the button path so focus lands on the story heading once the
+  // expanded state has actually committed (the button unmounts there).
+  const focusOnExpandRef = useRef(false)
   // Latest callbacks, so native listeners never go stale.
   const progressChangeRef = useRef(onExpansionProgressChange)
   progressChangeRef.current = onExpansionProgressChange
@@ -234,6 +244,8 @@ export default function WorkExperience({
     if (!eligibleRef.current) return
     const viewport = panelRef.current
     if (!viewport || delta === 0) return
+    // Direct wheel input wins over an in-flight button animation.
+    cancelExpandAnim()
     if (delta > 0) {
       if (progressRef.current < 1) {
         preventDefault()
@@ -264,6 +276,42 @@ export default function WorkExperience({
         contractBy(remainder)
       } // otherwise: native upward content scroll
     }
+  }
+
+  const cancelExpandAnim = () => {
+    if (expandAnimRef.current !== null) {
+      cancelAnimationFrame(expandAnimRef.current)
+      expandAnimRef.current = null
+    }
+  }
+
+  /** "Read the case study" button: ease progress to full expansion through
+   *  the same commit pipeline as the scrub (reduced motion snaps). Focus
+   *  moves to the story heading once the expanded state commits — the
+   *  button unmounts there, so it cannot keep focus itself. */
+  const expandToFull = () => {
+    if (!eligibleRef.current) return
+    cancelExpandAnim()
+    if (isReducedMotion()) {
+      focusOnExpandRef.current = true
+      commitProgress(1)
+      return
+    }
+    const start = progressRef.current
+    const startTime = performance.now()
+    const DURATION_MS = 420
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - startTime) / DURATION_MS)
+      const eased = 1 - Math.pow(1 - t, 3)
+      commitProgress(start + (1 - start) * eased)
+      if (t < 1) {
+        expandAnimRef.current = requestAnimationFrame(tick)
+      } else {
+        expandAnimRef.current = null
+        focusOnExpandRef.current = true
+      }
+    }
+    expandAnimRef.current = requestAnimationFrame(tick)
   }
 
   // Native (non-passive) input listeners on the viewport.
@@ -319,6 +367,8 @@ export default function WorkExperience({
       }
       if (touch.mode === 'scrub') {
         event.preventDefault()
+        // Direct touch input wins over an in-flight button animation.
+        cancelExpandAnim()
         const range = expansionRangePx()
         if (dy >= 0) {
           const expandRoom = (1 - touch.startProgress) * range
@@ -415,6 +465,7 @@ export default function WorkExperience({
     if (eligible !== eligibleRef.current || rangeRef.current !== reportedRangeRef.current) {
       eligibleRef.current = eligible
       reportedRangeRef.current = rangeRef.current
+      setExpandable(eligible)
       metricsChangeRef.current?.({ eligible, rangePx: rangeRef.current })
     }
     if (!eligible) {
@@ -484,6 +535,8 @@ export default function WorkExperience({
       return
     }
     if (panelRef.current) panelRef.current.scrollTop = 0
+    cancelExpandAnim()
+    focusOnExpandRef.current = false
     const card = panelRef.current?.parentElement as HTMLElement | null
     if (card) card.style.cssText = ''
     progressRef.current = 0
@@ -534,13 +587,23 @@ export default function WorkExperience({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeIndex])
 
-  // Cancel a pending rAF commit on unmount.
+  // Cancel a pending rAF commit / expand animation on unmount.
   useEffect(
     () => () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+      if (expandAnimRef.current !== null) cancelAnimationFrame(expandAnimRef.current)
     },
     [],
   )
+
+  // Button path: once full expansion has committed, move focus to the story
+  // heading (the button unmounts at progress 1 and cannot hold focus).
+  useEffect(() => {
+    if (expansionProgress >= 1 && focusOnExpandRef.current) {
+      focusOnExpandRef.current = false
+      slideHeadingRef.current?.focus({ preventScroll: true })
+    }
+  }, [expansionProgress])
 
   const goToPrevious = () => onIndexChange(previousWorkStoryIndex(activeIndex, slides.length))
   const goToNext = () => onIndexChange(nextWorkStoryIndex(activeIndex, slides.length))
@@ -642,6 +705,7 @@ export default function WorkExperience({
             key={slide.story.id}
             story={slide.story}
             headingRef={slideHeadingRef}
+            onReadCaseStudy={expandable && expansionProgress < 1 ? expandToFull : undefined}
             onTrackEvent={onTrackEvent}
           />
         )}
