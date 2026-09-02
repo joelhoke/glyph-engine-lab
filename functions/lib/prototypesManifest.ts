@@ -92,6 +92,20 @@ export const STACKS: PrototypeStack[] = [
         summary: 'A tiny canvas gravity sketch — move the pointer, click to scatter.',
         thumb: 'thumb.jpg',
       },
+      {
+        slug: 'glass-playground',
+        title: 'Glass playground',
+        summary:
+          'A refractive glass sphere with orbiting companions — grab and throw the pieces, spin the sphere.',
+        thumb: 'thumb.jpg',
+      },
+      {
+        slug: 'logo-studio',
+        title: 'Logo studio',
+        summary:
+          'The JH monogram extruded and lit like a studio product shot — drag to orbit, scroll to zoom.',
+        thumb: 'thumb.jpg',
+      },
     ],
   },
   {
