@@ -21,7 +21,7 @@ wrangler d1 migrations apply jh-collaborate --remote
    `[[d1_databases]]` block).
 
 4. Bind the same database to the Pages project: Pages dashboard →
-   `jh-portfolio` → Settings → Functions → D1 database bindings → bind
+   `glyph-engine-lab` → Settings → Functions → D1 database bindings → bind
    `jh-collaborate` as `COLLABORATE_DB` (production **and** preview).
 
 Then deploy the Worker from **this directory**:

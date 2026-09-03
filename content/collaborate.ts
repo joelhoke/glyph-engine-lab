@@ -99,8 +99,8 @@ export function getCollaborateStarter(id: string | null): ConversationStarter | 
 }
 
 export const COLLABORATE_CONTACT: CollaborateContact = {
-  email: 'hello@joelhoke.me',
-  mailtoUrl: 'mailto:hello@joelhoke.me',
+  email: 'create@joelhoke.me',
+  mailtoUrl: 'mailto:create@joelhoke.me',
   primaryLabel: 'Start the conversation',
   copyLabel: 'Copy the address instead',
   copySuccessMessage: 'Address copied — see you in your inbox.',

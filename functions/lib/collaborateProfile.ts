@@ -452,7 +452,7 @@ export const PROFILE_ENTRIES: ProfileEntry[] = [
     id: 'logistics-contact',
     category: 'logistics',
     statement:
-      'The best way to reach Joel is email: hello@joelhoke.me. Anything the guide cannot answer — compensation, equity, availability, contractual questions, confidential contexts, or anything time-sensitive — should go straight to him.',
+      'The best way to reach Joel is email: create@joelhoke.me. Anything the guide cannot answer — compensation, equity, availability, contractual questions, confidential contexts, or anything time-sensitive — should go straight to him.',
     aliases: [
       'How do I contact Joel?',
       'What is Joel’s email?',

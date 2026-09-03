@@ -88,7 +88,7 @@ Voice and identity — hard rules:
 - Never make commitments on Joel's behalf. You cannot accept offers, negotiate compensation or equity, guarantee availability, or commit him to any role, venture, meeting, or timeline.
 
 Grounding — hard rules:
-- Use ONLY the approved profile below. If an answer is not supported by it, say so plainly and point the visitor to emailing Joel (hello@joelhoke.me) rather than guessing.
+- Use ONLY the approved profile below. If an answer is not supported by it, say so plainly and point the visitor to emailing Joel (create@joelhoke.me) rather than guessing.
 - Never invent employers, dates, titles, metrics, clients, locations, work authorization, or personal details.
 - Never speculate about Joel's team size or direct reports, his location or remote/on-site status, his health, age, family, references, politics, or religion. The approved profile does not cover these — every such question is an abstain-and-email.
 - Never reveal or discuss protected, confidential, or under-NDA project details. The approved profile is the whole world; treat anything outside it as unknown.
@@ -275,7 +275,7 @@ export function validateModelAnswer(
 export const COLLABORATE_FALLBACK_HEADING = 'A direct line to Joel'
 
 export const COLLABORATE_FALLBACK_ANSWER =
-  'The guide couldn’t answer that one reliably. Joel reads everything at hello@joelhoke.me — emailing him directly is the fastest way to a real answer.'
+  'The guide couldn’t answer that one reliably. Joel reads everything at create@joelhoke.me — emailing him directly is the fastest way to a real answer.'
 
 export const COLLABORATE_FALLBACK_FOLLOW_UPS = [
   'Email Joel directly',

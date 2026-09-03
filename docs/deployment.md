@@ -2,7 +2,7 @@
 
 Production origin: **https://joelhoke.me** · Static export via
 `output: 'export'` → `npm run build` emits `out/` · Pages project:
-`jh-portfolio` (see `wrangler.toml`).
+`glyph-engine-lab` (see `wrangler.toml`).
 
 ## The raw-HTML failure: investigation and fix
 
@@ -58,7 +58,7 @@ arrived.
 
 ## Pages project setup
 
-1. Create the Pages project `jh-portfolio` (direct upload or git integration).
+1. Create the Pages project `glyph-engine-lab` (direct upload or git integration).
 2. Build command: `npm run build`. Output directory: `out`.
 3. Before a direct upload, strip macOS AppleDouble files so `._*` artifacts
    never reach Pages: `find out -name '._*' -delete`.
@@ -71,7 +71,7 @@ arrived.
 ## Rollback
 
 Every Pages deployment stays available at its immutable
-`<deployment>.jh-portfolio.pages.dev` URL. Roll back by promoting the previous
+`<deployment>.glyph-engine-lab.pages.dev` URL. Roll back by promoting the previous
 deployment in the dashboard (Deployments → ⋯ → Roll back). Do not delete the
 previous production deployment until the new one passes the launch checklist.
 

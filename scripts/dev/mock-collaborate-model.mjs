@@ -32,7 +32,7 @@ function answerFor(text) {
     return {
       heading: 'Joel and early-stage ventures',
       answer:
-        'Joel welcomes serious exploratory conversations about early-stage products, startups, advisory work, and new ventures — especially where the problem is still undefined and design can shape what the thing becomes. What the guide cannot do is speak to his availability, compensation, equity, or any commitment; those go straight to Joel at hello@joelhoke.me.',
+        'Joel welcomes serious exploratory conversations about early-stage products, startups, advisory work, and new ventures — especially where the problem is still undefined and design can shape what the thing becomes. What the guide cannot do is speak to his availability, compensation, equity, or any commitment; those go straight to Joel at create@joelhoke.me.',
       sourceIds: ['entrepreneurial-interest', 'entrepreneurial-boundaries'],
       followUps: [
         'What early-stage problems interest Joel?',
@@ -58,7 +58,7 @@ function answerFor(text) {
     return {
       heading: 'Reaching Joel directly',
       answer:
-        'The best way to reach Joel is email: hello@joelhoke.me. Anything the guide cannot answer — compensation, equity, availability, contractual questions, or anything time-sensitive — should go straight to him.',
+        'The best way to reach Joel is email: create@joelhoke.me. Anything the guide cannot answer — compensation, equity, availability, contractual questions, or anything time-sensitive — should go straight to him.',
       sourceIds: ['logistics-contact'],
       followUps: ['Email Joel directly', 'What can the guide answer?'],
       topic: 'logistics',

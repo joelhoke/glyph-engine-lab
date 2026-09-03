@@ -1,6 +1,6 @@
 # Daily cleanup Worker for the Collaborate AI guide's shared transcripts.
 #
-# Standalone scheduled Worker (separate from the jh-portfolio Pages project):
+# Standalone scheduled Worker (separate from the glyph-engine-lab Pages project):
 # deletes expired rows from the COLLABORATE_DB D1 database once a day.
 # Shares also get deleted opportunistically on writes (see
 # functions/lib/collaborateShare.ts) — this Worker is the authoritative sweep.

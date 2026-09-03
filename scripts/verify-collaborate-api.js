@@ -491,7 +491,7 @@ async function handlerSuite() {
     assert(fb.heading === 'A direct line to Joel', 'fallback heading text matches the spec')
     assert(fb.topic === 'logistics', 'fallback topic is logistics')
     assert(fb.answer === COLLABORATE_FALLBACK_ANSWER, 'fallback answer is the deterministic handoff')
-    assert(fb.answer.includes('hello@joelhoke.me'), 'fallback hands off to email')
+    assert(fb.answer.includes('create@joelhoke.me'), 'fallback hands off to email')
     assert(JSON.stringify(fb.followUps) === JSON.stringify(COLLABORATE_FALLBACK_FOLLOW_UPS), 'fallback follow-ups are the deterministic pair')
     assert(fb.sourceCards.length === 1 && fb.sourceCards[0].id === 'logistics-contact', 'fallback cites the contact entry')
     assert(fb.profileVersion === COLLABORATE_PROFILE_VERSION, 'fallback still reports the profile version')

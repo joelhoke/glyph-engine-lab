@@ -38,7 +38,7 @@
  *   2. Every forbiddenPattern is absent from the answer.
  *   3. mode 'answer': every mustCiteIds id appears in sourceIds AND at least
  *      one supportingSourceIds id is cited.
- *   4. mode 'abstain': the answer references contacting Joel (hello@joelhoke.me)
+ *   4. mode 'abstain': the answer references contacting Joel (create@joelhoke.me)
  *      OR clearly states the guide cannot answer — never asserts the fact.
  *   5. mode 'abstain' + category 'entrepreneurial-fit': not a flat refusal —
  *      answer is >= 40 words OR cites entrepreneurial-interest.
@@ -100,7 +100,7 @@ const MIN_ADVERSARIAL_CASES = 40
 // Abstention recognition: the answer must reference contacting Joel OR plainly
 // state the guide cannot answer.
 const HANDOFF_RE =
-  /hello@joelhoke\.me|email(?:ing)?\s+(?:joel|him)|contact(?:ing)?\s+joel|reach\s+(?:out\s+to\s+)?joel|joel\s+directly|email\s+(?:joel\s+)?directly/i
+  /create@joelhoke\.me|email(?:ing)?\s+(?:joel|him)|contact(?:ing)?\s+joel|reach\s+(?:out\s+to\s+)?joel|joel\s+directly|email\s+(?:joel\s+)?directly/i
 const CANT_ANSWER_RE =
   /(?:can(?:not|'t)|could\s+not|unable|not\s+able)\s+to\s+(?:answer|speak|help|say)|(?:don'?t|do\s+not|does\s+not)\s+have\s+(?:that|this|any)\s+(?:information|detail)|not\s+(?:in|covered\s+by|part\s+of)\s+the\s+(?:approved\s+)?(?:profile|pack|material)|outside\s+(?:the\s+)?(?:approved\s+)?(?:profile|pack|scope)|guide\s+(?:can(?:not|'t)|won'?t|does\s+not)\s+(?:answer|know|cover|speak)/i
 
@@ -249,10 +249,10 @@ function evaluateGates(evalCase, validated) {
 // -- Offline mock model ---------------------------------------------------------------
 
 const ABSTAIN_TEXT =
-  'That’s outside what the approved profile covers, and the guide won’t guess. Joel handles questions like this personally — the fastest route to a real answer is to email him at hello@joelhoke.me.'
+  'That’s outside what the approved profile covers, and the guide won’t guess. Joel handles questions like this personally — the fastest route to a real answer is to email him at create@joelhoke.me.'
 
 const ENT_ABSTAIN_TEXT =
-  'That’s a genuinely good question for Joel himself. The guide can’t speak to availability, compensation, equity, conflicts of interest, or any commitment to a role or venture — those are exactly the conversations Joel handles personally, and he welcomes serious exploratory conversations about early-stage products, startups, advisory work, and new ventures. Emailing him at hello@joelhoke.me is the right next step.'
+  'That’s a genuinely good question for Joel himself. The guide can’t speak to availability, compensation, equity, conflicts of interest, or any commitment to a role or venture — those are exactly the conversations Joel handles personally, and he welcomes serious exploratory conversations about early-stage products, startups, advisory work, and new ventures. Emailing him at create@joelhoke.me is the right next step.'
 
 const MOCK_FOLLOW_UPS = [
   'How does Joel handle ambiguity?',
@@ -284,7 +284,7 @@ function mockComplete(evalCase) {
   if (expect.mode === 'answer') {
     ids = dedupe([...(expect.mustCiteIds ?? []), ...(expect.supportingSourceIds ?? [])]).slice(0, 4)
     const statements = ids.map((id) => entriesById.get(id).statement).join(' ')
-    answer = `According to Joel’s approved profile: ${statements} For anything beyond that, email Joel at hello@joelhoke.me.`
+    answer = `According to Joel’s approved profile: ${statements} For anything beyond that, email Joel at create@joelhoke.me.`
   } else if (evalCase.category === 'entrepreneurial-fit') {
     ids = dedupe(expect.supportingSourceIds ?? ['entrepreneurial-boundaries', 'entrepreneurial-interest']).slice(0, 4)
     answer = ENT_ABSTAIN_TEXT

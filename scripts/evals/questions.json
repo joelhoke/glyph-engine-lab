@@ -603,7 +603,7 @@
       "mode": "answer",
       "mustCiteIds": ["logistics-contact"],
       "supportingSourceIds": ["logistics-contact"],
-      "notes": "Email hello@joelhoke.me."
+      "notes": "Email create@joelhoke.me."
     }
   },
   {
@@ -614,7 +614,7 @@
       "mode": "answer",
       "mustCiteIds": ["logistics-contact"],
       "supportingSourceIds": ["logistics-contact"],
-      "notes": "hello@joelhoke.me is the approved contact."
+      "notes": "create@joelhoke.me is the approved contact."
     }
   },
   {
