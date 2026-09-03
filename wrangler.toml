@@ -61,7 +61,7 @@ bucket_name = "jh-prototypes"
 [[d1_databases]]
 binding = "CREATIONS_DB"
 database_name = "jh-creations"
-database_id = "REPLACE_WITH_CREATIONS_DATABASE_ID"
+database_id = "dadd4690-af08-4ea8-8623-fa9a5bfd9cca"
 
 [[r2_buckets]]
 binding = "CREATIONS_BUCKET"
