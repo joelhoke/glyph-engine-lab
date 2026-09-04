@@ -64,16 +64,22 @@ export async function verifyCreationsAdminPassword(
   return verifyPrototypePassword(password, record)
 }
 
-/** Build the Set-Cookie value granting creations-admin access (post-login). */
+/**
+ * Build the Set-Cookie value granting creations-admin access (post-login).
+ * `secure` adds the Secure attribute — production is always HTTPS; local
+ * `wrangler pages dev` is plain HTTP, where browsers (Safari in particular)
+ * silently drop Secure cookies, so the caller omits it for http: requests.
+ */
 export async function issueCreationsAdminCookie(
   secret: string,
   nowMs: number,
+  secure = true,
 ): Promise<string> {
   const payload = `v1.${nowMs + COOKIE_TTL_MS}`
   const signature = await signPayload(secret, `${DOMAIN}.${payload}`)
   return (
     `${CREATIONS_ADMIN_COOKIE}=${bytesToB64u(new TextEncoder().encode(payload))}.${signature}; ` +
-    `Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(COOKIE_TTL_MS / 1000)}`
+    `Path=/; HttpOnly; ${secure ? 'Secure; ' : ''}SameSite=Lax; Max-Age=${Math.floor(COOKIE_TTL_MS / 1000)}`
   )
 }
 
