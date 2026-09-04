@@ -76,8 +76,19 @@
   gap: 1rem;
 }
 
+/* Every card in the grid shares the same sizing constraints: the <li> is a
+   flex column so the card fills the (stretched) grid row, and the body keeps
+   a floor tall enough for the fullest current card — a two-line title plus a
+   five-line summary plus the meta row. Copy for new cards should be moderated
+   to fit that budget rather than growing the card. */
+.cardGrid > li {
+  display: flex;
+  flex-direction: column;
+}
+
 .card {
   display: flex;
+  flex: 1;
   flex-direction: column;
   border: 1px solid var(--color-input-border);
   border-radius: 10px;
@@ -110,9 +121,14 @@
 
 .cardBody {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 0.45rem;
   padding: 1rem 1.1rem 1.15rem;
+  /* Floor sized to the fullest current card (2-line title + 5-line summary +
+     meta); keeps every card's body — and so every card — the same height even
+     when its own copy is shorter. */
+  min-height: 12rem;
 }
 
 .cardTier {
@@ -138,6 +154,10 @@
   font-size: 0.75rem;
   letter-spacing: 0.04em;
   color: var(--color-text-faint);
+  /* Pin to the bottom of the shared body space so the meta rows align across
+     cards regardless of title/summary length. */
+  margin-top: auto;
+  padding-top: 0.45rem;
 }
 
 /* --- Playground creations (vibe mementos; client-fetched stack) ------------ */
