@@ -14,3 +14,6 @@ tmp-evals/
 .dev.vars
 tmp-feedback/
 tmp-thumb-capture/
+tmp-seed-creations/
+tmp-proto-build/
+.wrangler/
