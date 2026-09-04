@@ -91,11 +91,14 @@ export const onRequestPost: PagesFunction<ModerateEnv> = async (context) => {
   const body = await readJson(context.request)
   if (!body) return json(400, { ok: false, error: 'Expected a JSON body.' })
 
-  // Login: password → signed cookie.
+  // Login: password → signed cookie. The Secure attribute only goes on when
+  // the request itself is HTTPS — browsers drop Secure cookies over the local
+  // HTTP preview, which would log the admin out immediately.
   if (typeof body.password === 'string') {
     const ok = await verifyCreationsAdminPassword(body.password, passwordRecord)
     if (!ok) return json(401, UNAUTHORIZED)
-    const cookie = await issueCreationsAdminCookie(secret, Date.now())
+    const secure = new URL(context.request.url).protocol === 'https:'
+    const cookie = await issueCreationsAdminCookie(secret, Date.now(), secure)
     return json(200, { ok: true }, { 'set-cookie': cookie })
   }
 
