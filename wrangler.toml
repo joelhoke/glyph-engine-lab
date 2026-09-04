@@ -11,6 +11,13 @@
 name = "glyph-engine-lab"
 pages_build_output_dir = "out"
 
+# Pin the Functions runtime to the compatibility date local development has
+# always used (wrangler pages dev defaults to 2026-08-20 when none is set).
+# Without this the project inherits its original dashboard date, under which
+# the multipart formData parser returns file parts as STRINGS — every
+# POST /api/creations upload then fails validation with 400.
+compatibility_date = "2026-08-20"
+
 # Non-secret configuration for the collaborate AI guide (see docs/deployment.md,
 # "Collaborate AI guide"). The dashboard manages ONLY secrets for this project
 # (AIG_TOKEN, OPENAI_API_KEY, DEEPSEEK_API_KEY) — never put those here.
