@@ -233,7 +233,9 @@ public layer.
 - [ ] `PROTOTYPE_TOKEN_SECRET` in Pages env vars; never in repo, manifest, or bundles
 - [ ] Unguessable stack slugs *in addition to* tokens (defense in depth)
 - [ ] WAF rate-limit rule on `/s/*` password endpoint; log failures
-- [ ] `noindex` + `robots.txt` disallow + `X-Robots-Tag` on `/p/*`, `/s/*`
+- [x] Shipped: `public/robots.txt` disallows `/p/`, `/s/`, `/protected-work`,
+  `/api/`; the viewer route is per-route `noindex` and the Functions set
+  `X-Robots-Tag: noindex, nofollow` on `/p/*` and `/s/*`
 - [ ] Token expiry + revocation via per-stack `tokenVersion` bump
 - [ ] Sandboxed iframes: prototypes can't touch top-window state or cookies
 - [ ] Assume links get forwarded — gates stop casual browsers, not determined

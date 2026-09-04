@@ -18,6 +18,9 @@ export default function CanvasFallback() {
         alt=""
         width={90}
         height={90}
+        /* Only visible when the canvas never paints (JS disabled/failed) —
+           keep it out of the high-priority preload path. */
+        fetchPriority="low"
       />
       <p className="canvas-fallback-title">joel hoke design</p>
       <p className="canvas-fallback-copy">

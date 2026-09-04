@@ -9,6 +9,14 @@ export const metadata: Metadata = {
   title: 'Gallery',
   description:
     'Public explorations and experiments — self-contained interactive prototypes by Joel Hoke.',
+  // The root layout canonicalizes to '/' — every crawlable child route must
+  // declare its own, or search engines treat the page as a duplicate of home.
+  alternates: {
+    canonical: '/gallery',
+  },
+  openGraph: {
+    url: '/gallery',
+  },
 }
 
 /**

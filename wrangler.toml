@@ -20,7 +20,8 @@ compatibility_date = "2026-08-20"
 
 # Non-secret configuration for the collaborate AI guide (see docs/deployment.md,
 # "Collaborate AI guide"). The dashboard manages ONLY secrets for this project
-# (AIG_TOKEN, OPENAI_API_KEY, DEEPSEEK_API_KEY) — never put those here.
+# (AIG_TOKEN, OPENAI_API_KEY, DEEPSEEK_API_KEY, MOONSHOT_API_KEY,
+# PROTOTYPES_AUTH_SECRET, CREATIONS_ADMIN_PASSWORD) — never put those here.
 [vars]
 CF_ACCOUNT_ID = "42cf2d6bb1238015365cb8aa5cbeb251"
 AIG_GATEWAY_ID = "jh-guide"

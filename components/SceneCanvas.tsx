@@ -273,6 +273,17 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 const easeInOutQuad = (t: number) =>
   t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
 
+/** Weather mood-backdrop palettes per preset (colorA, colorB, base), in
+ *  preset-key order so each canvas can be rasterized lazily on first use. */
+const MESH_BG_PALETTES: Record<keyof MeshBgs, [string, string, string]> = {
+  clear: ['#DAD29C', '#B4EEFF', '#DAD29C'],
+  rain: ['#012840', '#364F59', '#1A3A4A'],
+  storm: ['#070926', '#281259', '#170E40'],
+  wind: ['#6D808C', '#BDAC89', '#94968C'],
+  fog: ['#6E6E6E', '#222222', '#454545'],
+  snow: ['#0D0D0D', '#1C2B3E', '#141C2A'],
+}
+
 function buildMeshBg(colorA: string, colorB: string, base: string, W: number, H: number) {
   const cv = document.createElement('canvas')
   cv.width = W
@@ -427,7 +438,16 @@ function SceneCanvasInternal(
     setLandingLogoScale,
     beginAmbientWipe,
   }))
-  const meshBgsRef = useRef<MeshBgs | null>(null)
+  // Lazily filled per preset — only the active weather backdrop exists.
+  const meshBgsRef = useRef<Partial<MeshBgs> | null>(null)
+  // Per-frame background gradient cache, keyed by viewport size + colors.
+  const bgGradientRef = useRef<{
+    width: number
+    height: number
+    color1: string
+    color2: string
+    gradient: CanvasGradient
+  } | null>(null)
   const particlesRef = useRef<Particle[]>([])
   const paragraphTargetsRef = useRef<ParagraphTarget[]>([])
   const sourceCharsRef = useRef<string[]>([])
@@ -1242,16 +1262,18 @@ function SceneCanvasInternal(
     })
   }
 
-  const buildAllMeshBgs = () => {
+  // Weather mood backdrops are built lazily: only the active preset's canvas
+  // is ever drawn, so each full-viewport rasterization happens on first use
+  // (never for the non-weather modes) and a resize rebuilds nothing until the
+  // active preset's next draw.
+  const getMeshBg = (preset: keyof MeshBgs): HTMLCanvasElement => {
+    const cached = meshBgsRef.current?.[preset]
+    if (cached) return cached
     const { width: W, height: H } = getViewportSize()
-    meshBgsRef.current = {
-      clear: buildMeshBg('#DAD29C', '#B4EEFF', '#DAD29C', W, H),
-      rain: buildMeshBg('#012840', '#364F59', '#1A3A4A', W, H),
-      storm: buildMeshBg('#070926', '#281259', '#170E40', W, H),
-      wind: buildMeshBg('#6D808C', '#BDAC89', '#94968C', W, H),
-      fog: buildMeshBg('#6E6E6E', '#222222', '#454545', W, H),
-      snow: buildMeshBg('#0D0D0D', '#1C2B3E', '#141C2A', W, H),
-    }
+    const [colorA, colorB, base] = MESH_BG_PALETTES[preset]
+    const mesh = buildMeshBg(colorA, colorB, base, W, H)
+    meshBgsRef.current = { ...meshBgsRef.current, [preset]: mesh }
+    return mesh
   }
 
   // Rasterizes the bundled logo paths into a point field. Doubles as the
@@ -2659,7 +2681,9 @@ function SceneCanvasInternal(
     canvas.style.width = `${W}px`
     canvas.style.height = `${contentH}px`
     ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
-    buildAllMeshBgs()
+    // Drop the lazy weather mood backdrops: the active preset's canvas is
+    // re-rasterized at the new size on its next draw (getMeshBg).
+    meshBgsRef.current = null
     buildParagraphTargets()
     buildSvgTargets()
     ensureParticleCount(Math.max(paragraphTargetsRef.current.length, activeCountRef.current, 120))
@@ -2760,9 +2784,11 @@ function SceneCanvasInternal(
     return { x: state.fadeStartX, y: state.fadeStartY, active: true, influence }
   }
 
-  const simulateParticle = (p: Particle) => {
+  const simulateParticle = (p: Particle, pointer: ReturnType<typeof getPointerForFrame>) => {
     // Apply mouse repel force if pointer is nearby (suppressed while painting).
-    const pointer = getPointerForFrame()
+    // The pointer snapshot is hoisted to one sample per frame by the caller —
+    // resolving it per particle cost a fresh object + performance.now() call
+    // for every glyph on the field.
     if (!activeStrokeRef.current && pointer.active && pointer.influence > 0) {
       const dx = p.x - pointer.x
       const dy = p.y - pointer.y
@@ -3042,17 +3068,37 @@ function SceneCanvasInternal(
 
     const config = playgroundConfigRef.current ?? APPROVED_PLAYGROUND_DEFAULTS
 
-    const bgGradient = ctx.createRadialGradient(
-      W * 0.5,
-      H * 0.5,
-      0,
-      W * 0.5,
-      H * 0.5,
-      Math.max(W, H) * 0.8,
-    )
-    bgGradient.addColorStop(0, config.backgroundColor1)
-    bgGradient.addColorStop(1, config.backgroundColor2)
-    ctx.fillStyle = bgGradient
+    // Background gradient: inputs (viewport size + the two configured colors)
+    // change only on resize/config edits, so the CanvasGradient is cached
+    // instead of recreated every frame (same idiom as meshBgsRef).
+    let bgCache = bgGradientRef.current
+    if (
+      !bgCache ||
+      bgCache.width !== W ||
+      bgCache.height !== H ||
+      bgCache.color1 !== config.backgroundColor1 ||
+      bgCache.color2 !== config.backgroundColor2
+    ) {
+      const gradient = ctx.createRadialGradient(
+        W * 0.5,
+        H * 0.5,
+        0,
+        W * 0.5,
+        H * 0.5,
+        Math.max(W, H) * 0.8,
+      )
+      gradient.addColorStop(0, config.backgroundColor1)
+      gradient.addColorStop(1, config.backgroundColor2)
+      bgCache = {
+        width: W,
+        height: H,
+        color1: config.backgroundColor1,
+        color2: config.backgroundColor2,
+        gradient,
+      }
+      bgGradientRef.current = bgCache
+    }
+    ctx.fillStyle = bgCache.gradient
     ctx.fillRect(0, 0, W, H)
 
     // Weather mood backdrop (legacy mesh gradients at the ambient
@@ -3116,6 +3162,10 @@ function SceneCanvasInternal(
     const pondBoundaries = getPondConfig()
     const pondFormation = pondBoundaries ? ensurePondFormation(particles.length) : null
     const formationSuppressed = reducedMotion || activeStrokeRef.current !== null
+    // One pointer snapshot per frame for the whole particle loop (was per
+    // particle inside simulateParticle — a fresh object + performance.now()
+    // for every glyph).
+    const pointer = getPointerForFrame()
     let visibleCount = 0
     let hiddenCount = 0
 
@@ -3155,7 +3205,7 @@ function SceneCanvasInternal(
         p.vx = 0
         p.vy = 0
       } else {
-        simulateParticle(p)
+        simulateParticle(p, pointer)
       }
       // Hard pond boundaries: clamp the glyph center into the canvas and
       // rebound outward-moving velocity off the edges. Reduced-motion's zero
@@ -3215,6 +3265,7 @@ function SceneCanvasInternal(
     ctx.fillStyle = 'rgba(10, 10, 10, 1)'
     ctx.fillRect(0, 0, cW, cH)
     const visible = Math.min(revealedChars, paragraphTargetsRef.current.length, particlesRef.current.length)
+    const pointer = getPointerForFrame()
     for (let i = 0; i < visible; i += 1) {
       const t = paragraphTargetsRef.current[i]
       const p = particlesRef.current[i]
@@ -3224,7 +3275,7 @@ function SceneCanvasInternal(
       p.row = t.row
       p.hue = t.hue
       p.head = false
-      simulateParticle(p)
+      simulateParticle(p, pointer)
       const homeDist = Math.sqrt((p.x - p.tx) ** 2 + (p.y - p.ty) ** 2)
       const alpha = Math.max(0.35, 1 - homeDist / 280)
       const hue = (p.hue + now * 0.015) % 360
@@ -3635,10 +3686,7 @@ function SceneCanvasInternal(
     const opacity = config.backdropOpacity ?? BACKDROP_OPACITY_DEFAULT
     if (opacity <= 0) return
     const preset = config.weather.preset
-    const meshes = meshBgsRef.current
-    if (!meshes) return
-    const mesh = preset === 'blizzard' ? meshes.snow : meshes[preset]
-    if (!mesh) return
+    const mesh = getMeshBg(preset === 'blizzard' ? 'snow' : preset)
     ctx.save()
     ctx.globalAlpha = opacity
     ctx.drawImage(mesh, 0, 0, W, H)

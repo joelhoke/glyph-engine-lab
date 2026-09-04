@@ -126,7 +126,8 @@ case studies supply their own mark or omit it. Hero sources with white
 wordmarks ship `#101826` light twins via `lightSourceUrl` (e.g.
 `story-03-light.svg`, `building-multiple-light.svg`).
 
-**Weather mesh backdrops** (`SceneCanvas.buildAllMeshBgs`): clear
+**Weather mesh backdrops** (`SceneCanvas.MESH_BG_PALETTES`, rasterized
+lazily per preset by `getMeshBg`): clear
 `#DDEBEE/#F2E6D8`, rain `#012840/#364F59`, storm `#070926/#281259`, wind
 `#6D808C/#BDAC89`, fog `#6E6E6E/#222222`, snow `#0D0D0D/#1C2B3E`. Painted
 at the ambient config's `backdropOpacity` (default 0.55; the landing's

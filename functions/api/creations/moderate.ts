@@ -12,7 +12,9 @@
  * Auth env: CREATIONS_ADMIN_PASSWORD + PROTOTYPES_AUTH_SECRET (cookie signing,
  * shared with the prototypes gate). Missing either fails closed with 503.
  * Everything unauthorized gets the same flat 401 — no oracle on which part
- * failed. Rate-limited at the WAF alongside POST /api/creations.
+ * failed. Rate-limited at the WAF by the /api/creations prefix rule (the
+ * expression must use starts_with, not eq, to cover this route — see
+ * docs/deployment.md, "Creations gallery").
  */
 
 import {

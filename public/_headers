@@ -15,6 +15,11 @@
 /*.png
   Cache-Control: public, max-age=86400
 
+# Self-hosted fonts are content-stable (only replaced deliberately, with a
+# rebuild) — cache immutably so return visits skip the revalidation request.
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+
 # HTML: always revalidate so deploys go live immediately.
 /*.html
   Cache-Control: public, max-age=0, must-revalidate

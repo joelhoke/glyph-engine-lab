@@ -1,11 +1,14 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import SceneCanvas, { SceneCanvasHandle, SceneTargetRegion } from './SceneCanvas'
 import CanvasFallback from './CanvasFallback'
 import SiteHeader from './SiteHeader'
 import ExperienceTransition, { useExperienceTransition } from './ExperienceTransition'
-import WorkExperience, { MIN_EXPANSION_RANGE_PX } from './work/WorkExperience'
-import CollaborateExperience from './collaborate/CollaborateExperience'
+// Work and Collaborate subtrees load on demand (next/dynamic): the landing's
+// first paint is the vibe canvas, and the crawlable digests below carry their
+// content in the static HTML, so deferring these chunks changes neither.
+import { MIN_EXPANSION_RANGE_PX } from './work/expansionRange'
 import VibeExperience, { VibeSurfaceStatus } from './vibe/VibeExperience'
 import VibeToolbar from './vibe/VibeToolbar'
 import AmbientCarousel from './vibe/AmbientCarousel'
@@ -225,6 +228,15 @@ type SequenceController = {
 }
 
 const BASE_DOCUMENT_TITLE = 'joel hoke design'
+
+// On-demand tab experiences. ssr:false is safe here: the static export always
+// prerenders the landing (hash routing resolves client-side), and the
+// visually-hidden digests below keep the work/collaborate content in the
+// SSR HTML for crawlers. SceneCanvas itself is NEVER deferred.
+const WorkExperience = dynamic(() => import('./work/WorkExperience'), { ssr: false })
+const CollaborateExperience = dynamic(() => import('./collaborate/CollaborateExperience'), {
+  ssr: false,
+})
 
 /** The visitor-supplied source for the vibe field: an uploaded SVG or raster
  *  image (registry-owned blob: URL), or a preset's built-in SVG. */
@@ -1217,6 +1229,11 @@ export default function PortfolioExperience() {
     speed: 1,
     wasPlayingBeforeHidden: false,
   })
+  // Re-arm hook for the intro rAF loop: the loop parks itself once the
+  // sequence completes, and any controller mutation (play/replay/jump/speed)
+  // or a return to the landing restarts it through this ref.
+  const introLoopRestartRef = useRef<(() => void) | null>(null)
+  const restartIntroLoop = () => introLoopRestartRef.current?.()
 
   useEffect(() => {
     const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -1237,7 +1254,7 @@ export default function PortfolioExperience() {
 
     reducedMotionQuery.addEventListener('change', handleReducedMotionChange)
 
-    let raf: number
+    let raf: number | null = null
     let lastDiagnosticTick = 0
 
     const updateActionsVisuals = (sequence: IntroSequenceSnapshot) => {
@@ -1302,8 +1319,9 @@ export default function PortfolioExperience() {
       sceneCanvasRef.current?.setLandingLogoScale(next.logoScale)
       const actionMeta = updateActionsVisuals(next)
 
-      // Throttle diagnostic React state updates to ~10fps.
-      if (now - lastDiagnosticTick > 100) {
+      // Throttle diagnostic React state updates to ~10fps. The completing
+      // frame always pushes so the settled state lands before the loop parks.
+      if (next.phase === 'complete' || now - lastDiagnosticTick > 100) {
         const optionsProgress = next.optionsVisible ? next.optionsProgress : 0
         const { itemProgresses, timingFallbackActive } = actionMeta ?? {
           itemProgresses: Array(PRIMARY_ACTION_COUNT).fill(0),
@@ -1339,12 +1357,27 @@ export default function PortfolioExperience() {
         lastDiagnosticTick = now
       }
 
+      // Once complete the sequence output is static — park the loop instead
+      // of rewriting identical DOM state and diagnostics every frame. Any
+      // controller mutation (play/replay/jumpToPhase/speed) or a return to
+      // the landing re-arms it via introLoopRestartRef.
+      if (next.phase === 'complete') {
+        raf = null
+        return
+      }
       raf = requestAnimationFrame(tick)
     }
 
+    // Restart a parked loop (no-op while it is already running).
+    const ensureLoopRunning = () => {
+      if (raf === null) raf = requestAnimationFrame(tick)
+    }
+    introLoopRestartRef.current = ensureLoopRunning
+
     raf = requestAnimationFrame(tick)
     return () => {
-      cancelAnimationFrame(raf)
+      if (raf !== null) cancelAnimationFrame(raf)
+      introLoopRestartRef.current = null
       reducedMotionQuery.removeEventListener('change', handleReducedMotionChange)
     }
   }, [])
@@ -1375,6 +1408,15 @@ export default function PortfolioExperience() {
     document.addEventListener('visibilitychange', handleVisibility)
     return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [])
+
+  // Returning to the landing remounts the PrimaryActions node; re-arm the
+  // (possibly parked) intro loop so its next frame reapplies the settled
+  // options classes to the fresh node, exactly as the always-running loop
+  // did before. Mode switches away refresh the diagnostics' optionsMounted.
+  useEffect(() => {
+    restartIntroLoop()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayed])
 
   const navigateTo = (key: ExperienceSceneKey | null) => {
     const doNavigate = () => {
@@ -1527,13 +1569,29 @@ export default function PortfolioExperience() {
   // Focus management: move focus to the mode heading whenever the settled
   // mode (or collaborate subview) changes. The collaborate chat view focuses
   // its own heading instead; returning to the landing refocuses the mode
-  // heading. Focus is never moved to individual guide answers.
+  // heading. Focus is never moved to individual guide answers. The work and
+  // collaborate subtrees load on demand (next/dynamic), so on a first visit
+  // the heading mounts after the swap — retry briefly instead of dropping
+  // the focus move.
   useEffect(() => {
     if (displayed === 'intro') return
-    if (displayed === 'collaborate' && collaborateView === 'chat') {
-      chatHeadingRef.current?.focus({ preventScroll: true })
-    } else {
-      modeHeadingRef.current?.focus({ preventScroll: true })
+    const headingNode = () =>
+      displayed === 'collaborate' && collaborateView === 'chat'
+        ? chatHeadingRef.current
+        : modeHeadingRef.current
+    let raf: number | null = null
+    const deadline = performance.now() + 2000
+    const tryFocus = () => {
+      const node = headingNode()
+      if (node) {
+        node.focus({ preventScroll: true })
+        return
+      }
+      if (performance.now() < deadline) raf = requestAnimationFrame(tryFocus)
+    }
+    tryFocus()
+    return () => {
+      if (raf !== null) cancelAnimationFrame(raf)
     }
   }, [displayed, collaborateView])
 
@@ -1840,6 +1898,7 @@ export default function PortfolioExperience() {
       ctrl.paused = false
       ctrl.startTime = performance.now()
     }
+    restartIntroLoop()
   }
 
   const pause = () => {
@@ -1886,6 +1945,7 @@ export default function PortfolioExperience() {
       optionItemProgress: Array(PRIMARY_ACTION_COUNT).fill(0),
       actionsInert: true,
     }))
+    restartIntroLoop()
   }
 
   const jumpToPhase = (phase: IntroPhase) => {
@@ -1937,6 +1997,7 @@ export default function PortfolioExperience() {
       ),
       actionsInert: !next.optionsReady,
     }))
+    restartIntroLoop()
   }
 
   const handleSpeedChange = (value: number) => {
@@ -1948,6 +2009,7 @@ export default function PortfolioExperience() {
     }
     ctrl.speed = value
     setDiagnostics((prev) => ({ ...prev, speed: value }))
+    restartIntroLoop()
   }
 
   const handleSceneConfigChange = (key: keyof SceneConfig, value: number) => {
@@ -2857,7 +2919,10 @@ export default function PortfolioExperience() {
           client-side hash/navigation state resolves, so the static export
           carries the full story content here instead. Visually hidden but
           semantic; unmounted while the work surface itself is on screen to
-          avoid duplicated content for assistive tech. */}
+          avoid duplicated content for assistive tech. Links are tabIndex={-1}:
+          they exist for crawlers and AT browse mode, and must NOT sit in the
+          keyboard tab order — a tab stop on an invisible, unfocusable-looking
+          target is a WCAG 2.4.7 (Focus Visible) failure. */}
       {displayed !== 'work' && (
         <section className="visually-hidden" aria-label="Work case studies">
           <h2>Work</h2>
@@ -2876,14 +2941,16 @@ export default function PortfolioExperience() {
                 </p>
                 <p>{slide.story.outcome}</p>
                 {slide.story.access === 'protected' ? (
-                  <a href={`/protected-work?story=${slide.story.protectedId}`}>
+                  <a href={`/protected-work?story=${slide.story.protectedId}`} tabIndex={-1}>
                     View this confidential case study
                   </a>
                 ) : (
                   <>
-                    <a href={`#work/${slide.story.id}`}>View this case study</a>
+                    <a href={`#work/${slide.story.id}`} tabIndex={-1}>
+                      View this case study
+                    </a>
                     {slide.story.links.map((link) => (
-                      <a key={link.url} href={link.url}>
+                      <a key={link.url} href={link.url} tabIndex={-1}>
                         {link.label}
                       </a>
                     ))}
@@ -2913,7 +2980,9 @@ export default function PortfolioExperience() {
               ))}
             </ul>
           )}
-          <a href={COLLABORATE_CONTACT.mailtoUrl}>{COLLABORATE_CONTACT.primaryLabel}</a>
+          <a href={COLLABORATE_CONTACT.mailtoUrl} tabIndex={-1}>
+            {COLLABORATE_CONTACT.primaryLabel}
+          </a>
         </section>
       )}
       {/* Crawlable vibe digest: same rationale as the work digest above — the

@@ -12,6 +12,7 @@ import {
 import { AnalyticsEvent } from '../../engine/analytics'
 import BoundedScrollPanel from '../BoundedScrollPanel'
 import WorkStoryView from './WorkStory'
+import { MIN_EXPANSION_RANGE_PX } from './expansionRange'
 
 type WorkExperienceProps = {
   slides: WorkSlide[]
@@ -54,8 +55,9 @@ const MOBILE_MEDIA_QUERY = '(max-width: 760px)'
 /** Compact card border radius (globals.css) — interpolated to 0 on mobile. */
 const CARD_RADIUS_PX = 12
 /** Safe positive minimum for the expansion range (a degenerate measurement
- *  must never divide the scrub by ~0). */
-export const MIN_EXPANSION_RANGE_PX = 96
+ *  must never divide the scrub by ~0). Defined in ./expansionRange so the
+ *  landing chunk shares the constant without importing this subtree. */
+export { MIN_EXPANSION_RANGE_PX }
 /** The compact fold hides the first story section this far below the visible
  *  edge, absorbing sub-pixel/late layout settling (font metrics, marks). */
 const FOLD_HIDE_MARGIN_PX = 8

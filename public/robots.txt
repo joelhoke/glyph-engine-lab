@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /p/
+Disallow: /s/
+Disallow: /protected-work
+Disallow: /api/
+
+Sitemap: https://joelhoke.me/sitemap.xml

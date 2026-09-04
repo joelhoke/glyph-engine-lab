@@ -453,9 +453,9 @@ assert(
 
 assert(
   !workStorySource.includes('work-story-disclosure') &&
-    !workStorySource.includes('Read the case study') &&
-    !workStorySource.includes('aria-expanded'),
-  'the Read/Close disclosure is gone — details render immediately',
+    !workStorySource.includes('aria-expanded') &&
+    workStorySource.includes('work-story-read'),
+  'no Read/Close disclosure (details render immediately); the "Read the case study" button is the scroll-scrub affordance, not a disclosure',
 )
 assert(
   workStorySource.includes('inlineIds') && workStorySource.includes('galleryMedia'),
