@@ -4,10 +4,12 @@
  * preview (`wrangler pages dev`, default http://127.0.0.1:8788). Local dev
  * tooling only — never part of the deployed site.
  *
- * Pieces: three preset-based compositions (Blueprint, Ember, Signature —
- * each ≥7 authored edits from its base), a Matrix-ambient piece, and a
- * DVD-screensaver piece whose glyph source is a DVD logo SVG shrunk to half
- * scale (default path ~/Downloads/DVD_logo.svg, override with DVD_SVG_PATH).
+ * Pieces (7, each diverging from its base by ≥14 authored edits — double the
+ * original ≥7 launch bar): four preset-based compositions (Blueprint, Ember,
+ * Signature, Mono — four of the seven carry custom paint strokes), a
+ * Matrix-ambient piece, a parametric-creature piece, and a DVD-screensaver
+ * piece whose glyph source is a DVD logo SVG shrunk to half scale (default
+ * path ~/Downloads/DVD_logo.svg, override with DVD_SVG_PATH).
  *
  * Two-phase run: pieces are posted and promoted, then real canvas thumbnails
  * are captured from the live playground via headless Chrome (puppeteer-core
@@ -16,6 +18,8 @@
  * Chrome/puppeteer the procedural placeholder thumbs stay. Rows end listed=1.
  *
  * Usage: node scripts/dev/seed-creations.js [origin]
+ *   SEED_REMOTE=1 runs the promote/wipe SQL against the REMOTE jh-creations
+ *   database (wrangler --remote); the default is --local against the emulator.
  */
 
 const { execSync } = require('child_process')
@@ -180,10 +184,19 @@ function presetSnapshot(presetId, { patch = {}, strokes = [] } = {}) {
   }
 }
 
-function stroke(points, radiusNorm = 0.045) {
+/** Pack a #rrggbb stroke color exactly as SceneCanvas records it
+ *  (packSourceRgba(r, g, b, 255): (a << 24) | (b << 16) | (g << 8) | r). The
+ *  memento schema rejects string colors, so strokes must carry this packed
+ *  unsigned int or null. */
+function packHex(hex) {
+  const [r, g, b] = hexToRgb(hex)
+  return (((255 << 24) | (b << 16) | (g << 8) | r) >>> 0)
+}
+
+function stroke(points, radiusNorm = 0.045, glyphColor = null) {
   return {
     tool: 'paint',
-    glyphColor: null,
+    glyphColor: glyphColor === null ? null : packHex(glyphColor),
     backgroundColor: null,
     radiusNorm,
     points: Float32Array.from(points),
@@ -199,14 +212,25 @@ function sweep(x0, y0, x1, y1, n = 24) {
   return pts
 }
 
-// Each preset-based piece diverges from its base by at least 7 authored edits
-// (noted per piece) — the seeds should read as real visitor compositions that
-// showcase the playground's range, not as preset demos.
+function arc(cx, cy, r, a0, a1, n = 28) {
+  const pts = []
+  for (let i = 0; i < n; i += 1) {
+    const a = a0 + (a1 - a0) * (i / (n - 1))
+    pts.push(cx + r * Math.cos(a), cy + r * Math.sin(a))
+  }
+  return pts
+}
+
+// Every piece diverges from its base by at least 14 authored edits (double
+// the original ≥7 bar, enumerated per piece) — the seeds should read as real
+// visitor compositions that showcase the playground's range, not as preset
+// demos. Four of the seven carry custom paint strokes.
 const pieces = [
   {
-    // Blueprint base. Edits: 1 text, 2 size 12→16, 3 colorMode rows→word-cycle,
-    // 4 palette, 5 background, 6 motion organic-flow (amount/speed), 7 ambient
-    // weather/wind, 8 paint stroke.
+    // Blueprint base (story-01.svg source). 17 edits: 1 text, 2 size 12→16,
+    // 3 colorMode rows→word-cycle, 4-6 palette ×3, 7-8 background ×2, 9 motion
+    // mode organic-flow, 10 amount, 11 speed, 12 ambient mode weather, 13 wind
+    // preset, 14 intensity, 15-17 three paint strokes in the piece's accents.
     name: 'blueprint',
     kind: 'auto',
     snapshot: presetSnapshot('blueprint', {
@@ -220,14 +244,20 @@ const pieces = [
         motion: { mode: 'organic-flow', amount: 55, speed: 0.6 },
         ambient: { mode: 'weather', weather: { preset: 'wind', intensity: 60 } },
       },
-      strokes: [stroke(sweep(0.15, 0.75, 0.85, 0.25))],
+      strokes: [
+        stroke(sweep(0.15, 0.75, 0.85, 0.25), 0.045, '#7fd4ff'),
+        stroke(sweep(0.2, 0.2, 0.8, 0.8, 32), 0.02, '#e8f4ff'),
+        stroke(arc(0.5, 0.55, 0.28, Math.PI * 1.1, Math.PI * 1.9), 0.06, '#3d7ea6'),
+      ],
     }),
     motif: 'stripes',
   },
   {
-    // Ember base. Edits: 1 text, 2 font Georgia→Times, 3 size 16→24, 4
-    // colorMode word-cycle→glyph-cycle, 5 palette, 6 background, 7 motion
-    // amount/speed, 8 ambient weather/fog, 9 two paint strokes.
+    // Ember base (story-02.svg source). 17 edits: 1 text, 2 font
+    // Georgia→Times, 3 size 16→24, 4 colorMode word-cycle→glyph-cycle, 5-7
+    // palette ×3, 8-9 background ×2, 10-11 motion mode organic-flow +
+    // amount/speed, 12 ambient mode weather, 13 fog preset, 14 intensity,
+    // 15-17 three paint strokes.
     name: 'ember',
     kind: 'auto',
     snapshot: presetSnapshot('ember', {
@@ -242,13 +272,20 @@ const pieces = [
         motion: { mode: 'organic-flow', amount: 20, speed: 0.5 },
         ambient: { mode: 'weather', weather: { preset: 'fog', intensity: 45 } },
       },
-      strokes: [stroke(sweep(0.25, 0.3, 0.7, 0.65)), stroke(sweep(0.7, 0.25, 0.3, 0.7))],
+      strokes: [
+        stroke(sweep(0.25, 0.3, 0.7, 0.65), 0.045, '#ff9a3d'),
+        stroke(sweep(0.7, 0.25, 0.3, 0.7), 0.045, '#e5484d'),
+        stroke(arc(0.5, 0.45, 0.22, Math.PI * 0.15, Math.PI * 0.85), 0.03, '#ffd7a8'),
+      ],
     }),
     motif: 'stripes',
   },
   {
-    // No preset base — builtin monogram source, and the only piece using the
-    // matrix ambient mode: dense green glyphs over falling streams.
+    // No preset base — builtin monogram source, the only Matrix-ambient piece.
+    // 15 edits: 1 text, 2 font, 3 size, 4 colorMode, 5-7 palette ×3, 8-9
+    // background ×2, 10 matrix speed, 11 trail strength, 12 motion mode
+    // organic-flow, 13 amount, 14 speed, 15 waveScale. No paint — the falling
+    // streams carry the composition.
     name: 'matrix-rain',
     kind: 'auto',
     snapshot: {
@@ -260,7 +297,13 @@ const pieces = [
         glyphFont: "'Courier New', monospace",
         glyphColorMode: 'glyph-cycle',
         glyphSizePt: 12,
-        motion: { ...resolvePlaygroundConfig(VIBE_PRESETS[0].config, 'dark').motion },
+        motion: {
+          ...resolvePlaygroundConfig(VIBE_PRESETS[0].config, 'dark').motion,
+          mode: 'organic-flow',
+          amount: 30,
+          speed: 0.4,
+          waveScale: 1.4,
+        },
         ambient: {
           ...resolvePlaygroundConfig(VIBE_PRESETS[0].config, 'dark').ambient,
           mode: 'matrix',
@@ -278,9 +321,10 @@ const pieces = [
     motif: 'stripes',
   },
   {
-    // Signature base (the curated default; builtin source). Edits: 1 text, 2
-    // font, 3 size, 4 colorMode, 5 palette, 6 background, 7 motion
-    // organic-flow, 8 ambient weather/rain, 9 paint stroke.
+    // Signature base (the curated default; builtin source). 17 edits: 1 text,
+    // 2 font, 3 size, 4 colorMode, 5-7 palette ×3, 8-9 background ×2, 10
+    // motion mode organic-flow, 11 speed, 12 amount, 13 ambient mode weather,
+    // 14 rain preset + intensity, 15-17 three paint strokes.
     name: 'signature-variation',
     kind: 'auto',
     snapshot: presetSnapshot('signature', {
@@ -292,11 +336,83 @@ const pieces = [
         glyphPalette: ['#4fd1c5', '#f687b3', '#faf089'],
         backgroundColor1: '#04110d',
         backgroundColor2: '#0d2420',
-        motion: { mode: 'organic-flow', speed: 0.8 },
+        motion: { mode: 'organic-flow', speed: 0.8, amount: 45 },
         ambient: { mode: 'weather', weather: { preset: 'rain', intensity: 35 } },
       },
-      strokes: [stroke(sweep(0.3, 0.7, 0.7, 0.35))],
+      strokes: [
+        stroke(sweep(0.3, 0.7, 0.7, 0.35), 0.045, '#4fd1c5'),
+        stroke(sweep(0.15, 0.3, 0.5, 0.8, 32), 0.025, '#f687b3'),
+        stroke(arc(0.6, 0.5, 0.24, Math.PI * 1.2, Math.PI * 2.0), 0.05, '#faf089'),
+      ],
     }),
+    motif: 'stripes',
+  },
+  {
+    // Mono base (story-03.svg source) — the only snow piece, and the first
+    // parametric-creature composition. 18 edits: 1 text, 2 size 24→18,
+    // 3 colorMode glyph-cycle→rows, 4-6 palette ×3, 7-8 background ×2,
+    // 9 motion mode parametric-creature, 10 variant jelly, 11 amount,
+    // 12 speed, 13 density, 14 ambient mode weather, 15 snow preset,
+    // 16 intensity, 17-18 two paint strokes (white + mid-gray).
+    name: 'mono-snow',
+    kind: 'auto',
+    snapshot: presetSnapshot('mono', {
+      patch: {
+        glyphText: 'quiet systems · loud details · ',
+        glyphSizePt: 18,
+        glyphColorMode: 'rows',
+        glyphPalette: ['#ffffff', '#8a8a8a', '#d4d4d4'],
+        backgroundColor1: '#050508',
+        backgroundColor2: '#101018',
+        motion: { mode: 'parametric-creature', variant: 'jelly', amount: 40, speed: 0.6, density: 2000 },
+        ambient: { mode: 'weather', weather: { preset: 'snow', intensity: 55 } },
+      },
+      strokes: [
+        stroke(sweep(0.2, 0.6, 0.8, 0.4, 32), 0.04, '#ffffff'),
+        stroke(arc(0.45, 0.5, 0.3, Math.PI * 0.9, Math.PI * 1.6), 0.055, '#8a8a8a'),
+      ],
+    }),
+    motif: 'stripes',
+  },
+  {
+    // No preset base — builtin source, the only storm piece and the deepest
+    // parametric-creature dive (ray variant). 20 edits: 1 text, 2-4 palette
+    // ×3, 5-6 background ×2, 7 font, 8 colorMode, 9 size, 10 motion mode,
+    // 11 variant ray, 12 amount, 13 speed, 14 waveScale, 15 complexity,
+    // 16 density, 17 updateRate, 18 ambient mode weather, 19 storm preset,
+    // 20 intensity. No paint — the creature is the subject.
+    name: 'creature-tide',
+    kind: 'auto',
+    snapshot: {
+      config: {
+        glyphText: 'the tide computes itself · ',
+        glyphPalette: ['#67e8f9', '#0e7490', '#a5f3fc'],
+        backgroundColor1: '#020617',
+        backgroundColor2: '#082f3f',
+        glyphFont: "'Georgia', serif",
+        glyphColorMode: 'word-cycle',
+        glyphSizePt: 20,
+        motion: {
+          ...resolvePlaygroundConfig(VIBE_PRESETS[0].config, 'dark').motion,
+          mode: 'parametric-creature',
+          variant: 'ray',
+          amount: 45,
+          speed: 0.7,
+          waveScale: 1.2,
+          complexity: 3,
+          density: 2200,
+          updateRate: 45,
+        },
+        ambient: {
+          ...resolvePlaygroundConfig(VIBE_PRESETS[0].config, 'dark').ambient,
+          mode: 'weather',
+          weather: { preset: 'storm', intensity: 50 },
+        },
+      },
+      paintTool: { ...BASE_PAINT_TOOL, enabled: false },
+      paint: { strokes: [], redoStrokes: [] },
+      upload: null,
+    },
     motif: 'stripes',
   },
 ]
@@ -351,6 +467,8 @@ function dvdPiece() {
 
 // --- POST through the real API -----------------------------------------------------
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
 async function postPiece(piece, thumb, thumbType) {
   const memento = buildVibeMemento(piece.snapshot, { pond: piece.pond })
   const configHash = await mementoConfigHash(memento)
@@ -362,17 +480,33 @@ async function postPiece(piece, thumb, thumbType) {
   if (piece.source) {
     form.append('source', new Blob([piece.source.bytes], { type: piece.source.type }), piece.source.filename)
   }
-  const response = await fetch(`${origin}/api/creations`, { method: 'POST', body: form })
+  // Polite pacing + one retry: POST /api/creations sits behind a WAF
+  // rate-limit rule in production.
+  await sleep(1500)
+  let response = await fetch(`${origin}/api/creations`, { method: 'POST', body: form })
+  if (response.status === 429 || response.status === 503) {
+    console.log(`rate-limited on ${piece.name} — waiting 8s before one retry`)
+    await sleep(8000)
+    response = await fetch(`${origin}/api/creations`, { method: 'POST', body: form })
+  }
   const body = await response.json().catch(() => ({}))
   if (!response.ok || !body.ok) {
     throw new Error(`POST ${piece.name} failed: ${response.status} ${JSON.stringify(body)}`)
   }
-  console.log(`OK   ${piece.name} → ${body.id}${body.duplicate ? ' (duplicate)' : ''}`)
+  if (body.duplicate || typeof body.id !== 'string') {
+    // The dedupe short-circuit returns no id, so no thumb could be captured —
+    // the seed wipes the table up front precisely to avoid this path.
+    throw new Error(`POST ${piece.name} hit the global hash dedupe — wipe the table before seeding`)
+  }
+  console.log(`OK   ${piece.name} → ${body.id}`)
   return body.id
 }
 
-function d1Local(sql) {
-  execSync(`npx wrangler d1 execute jh-creations --local --command "${sql}"`, {
+// SEED_REMOTE=1 promotes/wipes the REMOTE jh-creations database; default is
+// the local emulator. `yes |` answers wrangler's remote-execution prompt.
+const D1_FLAG = process.env.SEED_REMOTE === '1' ? '--remote' : '--local'
+function d1(sql) {
+  execSync(`yes | npx wrangler d1 execute jh-creations ${D1_FLAG} --command "${sql}"`, {
     cwd: projectRoot,
     stdio: 'pipe',
   })
@@ -434,11 +568,14 @@ async function captureCanvasThumbs(puppeteer, ids) {
  *  puppeteer-core/Chrome the procedural thumbs stay (pieces still seed). */
 async function main() {
   const all = [...pieces, dvdPiece()]
+  // Start clean: the API's global hash dedupe returns no id for a duplicate
+  // config, which would leave the re-run without rows to capture thumbs from.
+  d1('DELETE FROM creations')
   const firstIds = []
   for (const piece of all) {
     firstIds.push(await postPiece(piece, renderThumb(piece.snapshot.config, piece.motif), 'image/png'))
   }
-  d1Local('UPDATE creations SET listed = 1')
+  d1('UPDATE creations SET listed = 1')
 
   const puppeteer = loadPuppeteer()
   if (!puppeteer || !fs.existsSync(CHROME_PATH)) {
@@ -448,14 +585,12 @@ async function main() {
   }
   const thumbs = await captureCanvasThumbs(puppeteer, firstIds)
 
-  d1Local('DELETE FROM creations')
+  d1('DELETE FROM creations')
   const finalIds = []
   for (let i = 0; i < all.length; i += 1) {
     finalIds.push(await postPiece(all[i], thumbs.get(firstIds[i]), 'image/jpeg'))
-    // Distinct created_at seconds keep the gallery ordering deterministic.
-    await new Promise((resolve) => setTimeout(resolve, 1100))
   }
-  d1Local('UPDATE creations SET listed = 1')
+  d1('UPDATE creations SET listed = 1')
   console.log(`\nSeeded ${finalIds.length} pieces with real canvas thumbs (listed = 1).`)
 }
 

@@ -61,12 +61,15 @@ export const onRequestPost: PagesFunction<CreationsEnv> = async (context) => {
   const configHash = form.get('configHash')
   const kind = form.get('kind')
   const media = form.get('media')
-  const mediaFile = media instanceof File ? media : null
+  // Accept Blob, not just File: older runtime compatibility dates parse
+  // multipart file parts as Blob, so a strict File check rejects valid
+  // uploads (everything below only uses Blob members: size/type/stream).
+  const mediaFile = media instanceof Blob ? media : null
 
   const validated = validateCreationPayload({ state, configHash, kind, hasMedia: mediaFile !== null })
   if (validated.ok === false) return json(400, { ok: false, error: validated.error })
 
-  const uploads: { field: UploadField; file: File; ext: string }[] = []
+  const uploads: { field: UploadField; file: Blob; ext: string }[] = []
   const specs: [UploadField, FormDataEntryValue | null, Record<string, string>, number][] = [
     ['thumb', form.get('thumb'), THUMB_MIME_TO_EXT, MAX_THUMB_BYTES],
     ['media', media, MEDIA_MIME_TO_EXT, MAX_MEDIA_BYTES],
@@ -74,7 +77,7 @@ export const onRequestPost: PagesFunction<CreationsEnv> = async (context) => {
   ]
   for (const [field, value, allowlist, maxBytes] of specs) {
     if (value === null) continue
-    if (!(value instanceof File)) return json(400, { ok: false, error: `Invalid ${field} upload.` })
+    if (!(value instanceof Blob)) return json(400, { ok: false, error: `Invalid ${field} upload.` })
     const check = validateUploadMeta({ size: value.size, type: value.type }, allowlist, maxBytes, field)
     if (check.ok === false) return json(400, { ok: false, error: check.error })
     uploads.push({ field, file: value, ext: check.ext })
