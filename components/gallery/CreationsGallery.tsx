@@ -7,12 +7,13 @@
  * the card link both carry the "Open in playground" jump (/?memento=<id>#vibe)
  * that restores the piece in the live playground for remixing.
  *
- * Moderation: a discreet "Moderate" affordance opens a password prompt
- * (/api/creations/moderate — PBKDF2 record in CREATIONS_ADMIN_PASSWORD, HMAC
- * cookie session). Once authed, a "Pending review" section lists unlisted
- * saves with Approve / Delete, and listed cards gain Unlist. The header
- * renders statically; everything else waits on the fetches, and failures
- * degrade to the same quiet note as an empty archive.
+ * Moderation: a faint "Moderate" link at the foot of the page opens a
+ * password prompt (/api/creations/moderate — PBKDF2 record in
+ * CREATIONS_ADMIN_PASSWORD, HMAC cookie session). Once authed, a "Pending
+ * review" section at the foot lists unlisted saves with Approve / Delete, and
+ * listed cards gain Unlist. The header renders statically; everything else waits on
+ * the fetches, and failures degrade to the same quiet note as an empty
+ * archive.
  */
 
 import Link from 'next/link'
@@ -181,34 +182,54 @@ export default function CreationsGallery() {
       </Link>
       <h1 className={styles.title}>Playground creations</h1>
       <p className={styles.intro}>
-        Pieces visitors made in the vibe playground — saved when a composition shows real
-        authorship, or when its maker exports a screenshot or clip. Open any piece full
-        screen, or jump straight into the playground and take it somewhere new.
+        A growing collection of pieces from the vibe playground — some made by me, some
+        by visitors passing through. If one catches your eye, open it in the playground
+        and take it somewhere new, or start from a blank canvas and make something
+        entirely your own.
       </p>
-      {moderate === 'off' ? (
-        <button type="button" className={styles.moderateToggle} onClick={enterModerate}>
-          Moderate
-        </button>
-      ) : null}
-      {moderate === 'login' ? (
-        <form className={styles.moderateForm} onSubmit={submitLogin}>
-          <input
-            type="password"
-            className={styles.moderateInput}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="Admin password"
-            aria-label="Admin password"
-            autoComplete="current-password"
-            // eslint-disable-next-line jsx-a11y/no-autofocus
-            autoFocus
-          />
-          <button type="submit" className={styles.creationActionButton}>
-            Sign in
-          </button>
-          {loginFailed ? <span className={styles.moderateError}>Incorrect password.</span> : null}
-        </form>
-      ) : null}
+      {creations === null ? null : creations.length === 0 ? (
+        <p className={styles.intro}>
+          Nothing archived yet — the first pieces are waiting to be made in the playground.
+        </p>
+      ) : (
+        <ul className={styles.cardGrid}>
+          {creations.map((creation, index) => (
+            <li key={creation.id}>
+              <article className={styles.card}>
+                <CreationThumb
+                  creation={creation}
+                  triggerRef={triggerRef}
+                  onPreview={() => setOpenIndex(index)}
+                />
+                <div className={`${styles.cardBody} ${styles.creationCardBody}`}>
+                  <span className={styles.cardTier}>{KIND_LABELS[creation.kind]}</span>
+                  <span className={styles.cardTitle}>
+                    {formatCapturedAt(creation.capturedAt)}
+                  </span>
+                  <a
+                    className={styles.creationOpenLink}
+                    href={`/?memento=${encodeURIComponent(creation.id)}#vibe`}
+                  >
+                    Open in playground
+                  </a>
+                  {moderate === 'on' ? (
+                    <span className={styles.creationActions}>
+                      <button
+                        type="button"
+                        className={styles.creationActionButton}
+                        disabled={busyId === creation.id}
+                        onClick={() => runAction(creation.id, 'unlist')}
+                      >
+                        Unlist
+                      </button>
+                    </span>
+                  ) : null}
+                </div>
+              </article>
+            </li>
+          ))}
+        </ul>
+      )}
       {moderate === 'on' && pending !== null ? (
         <section className={styles.pendingSection} aria-labelledby="pending-heading">
           <h2 id="pending-heading" className={styles.pendingTitle}>
@@ -229,7 +250,7 @@ export default function CreationsGallery() {
                         loading="lazy"
                       />
                     ) : null}
-                    <div className={styles.cardBody}>
+                    <div className={`${styles.cardBody} ${styles.creationCardBody}`}>
                       <span className={styles.cardTier}>{KIND_LABELS[creation.kind]}</span>
                       <span className={styles.cardTitle}>
                         {formatCapturedAt(creation.capturedAt)}
@@ -260,49 +281,35 @@ export default function CreationsGallery() {
           )}
         </section>
       ) : null}
-      {creations === null ? null : creations.length === 0 ? (
-        <p className={styles.intro}>
-          Nothing archived yet — the first pieces are waiting to be made in the playground.
-        </p>
-      ) : (
-        <ul className={styles.cardGrid}>
-          {creations.map((creation, index) => (
-            <li key={creation.id}>
-              <article className={styles.card}>
-                <CreationThumb
-                  creation={creation}
-                  triggerRef={triggerRef}
-                  onPreview={() => setOpenIndex(index)}
-                />
-                <div className={styles.cardBody}>
-                  <span className={styles.cardTier}>{KIND_LABELS[creation.kind]}</span>
-                  <span className={styles.cardTitle}>
-                    {formatCapturedAt(creation.capturedAt)}
-                  </span>
-                  <a
-                    className={styles.creationOpenLink}
-                    href={`/?memento=${encodeURIComponent(creation.id)}#vibe`}
-                  >
-                    Open in playground
-                  </a>
-                  {moderate === 'on' ? (
-                    <span className={styles.creationActions}>
-                      <button
-                        type="button"
-                        className={styles.creationActionButton}
-                        disabled={busyId === creation.id}
-                        onClick={() => runAction(creation.id, 'unlist')}
-                      >
-                        Unlist
-                      </button>
-                    </span>
-                  ) : null}
-                </div>
-              </article>
-            </li>
-          ))}
-        </ul>
-      )}
+      {moderate !== 'on' ? (
+        <div className={styles.moderateFooter}>
+          {moderate === 'off' ? (
+            <button type="button" className={styles.moderateToggle} onClick={enterModerate}>
+              Moderate
+            </button>
+          ) : (
+            <form className={styles.moderateForm} onSubmit={submitLogin}>
+              <input
+                type="password"
+                className={styles.moderateInput}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Admin password"
+                aria-label="Admin password"
+                autoComplete="current-password"
+                // eslint-disable-next-line jsx-a11y/no-autofocus
+                autoFocus
+              />
+              <button type="submit" className={styles.creationActionButton}>
+                Sign in
+              </button>
+              {loginFailed ? (
+                <span className={styles.moderateError}>Incorrect password.</span>
+              ) : null}
+            </form>
+          )}
+        </div>
+      ) : null}
       {openIndex !== null && media.length > 0 ? (
         <WorkMediaLightbox
           media={media}

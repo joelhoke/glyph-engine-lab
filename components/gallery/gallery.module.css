@@ -131,6 +131,14 @@
   min-height: 12rem;
 }
 
+/* Creation cards carry only tier + date + link — never a summary — so they
+   drop the shared body floor and crop to their own (uniform) content. The
+   flex column still stretches each card to its grid row, keeping heights
+   consistent within a row. */
+.creationCardBody {
+  min-height: 0;
+}
+
 .cardTier {
   font-size: 0.72rem;
   letter-spacing: 0.1em;
@@ -211,9 +219,16 @@
   border-color: var(--color-accent-strong);
 }
 
-/* Moderation: discreet toggle, login form, pending queue, card actions. */
+/* Moderation: everything lives at the foot of the page — a faint,
+   right-aligned "Moderate" link visitors can ignore, its login form in the
+   same spot, and the pending-review queue just above once authed. */
+.moderateFooter {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2.5rem;
+}
+
 .moderateToggle {
-  align-self: flex-start;
   font: inherit;
   font-size: 0.75rem;
   letter-spacing: 0.04em;
