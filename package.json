@@ -8,6 +8,7 @@
     "start": "next start",
     "verify:vibe-memento": "node scripts/verify-vibe-memento.js",
     "verify:vibe-session-store": "node scripts/verify-vibe-session-store.js",
+    "verify:intro-reveal": "node scripts/verify-intro-reveal.js",
     "verify:creations-api": "node scripts/verify-creations-api.js"
   },
   "dependencies": {

@@ -164,6 +164,11 @@ import {
   saveCreation,
 } from '../engine/creationClient'
 import {
+  FIELD_REVEAL_DEFAULTS,
+  FieldRevealConfig,
+  FieldRevealMode,
+} from '../engine/introReveal'
+import {
   APPROVED_SCENE_DEFAULTS,
   APPROVED_SOURCE_LAYOUT_DEFAULTS,
   SceneConfig,
@@ -713,6 +718,18 @@ export default function PortfolioExperience() {
 
   const [sourceLayout, setSourceLayout] = useState<SourceLayoutConfig>(() => ({
     ...APPROVED_SOURCE_LAYOUT_DEFAULTS,
+  }))
+
+  // Field reveal shape per mode (rise offset, stagger order/spread, duration):
+  // editable working copies of the shipped defaults for the tuning panel; the
+  // landing entry seeds from the intro preset's reveal sibling.
+  const [fieldRevealConfig, setFieldRevealConfig] = useState<
+    Record<FieldRevealMode, FieldRevealConfig>
+  >(() => ({
+    landing: { ...portfolioIntroPreset.reveal },
+    work: { ...FIELD_REVEAL_DEFAULTS.work },
+    vibe: { ...FIELD_REVEAL_DEFAULTS.vibe },
+    collaborate: { ...FIELD_REVEAL_DEFAULTS.collaborate },
   }))
 
   // Vibe's editable composition. Seeded from the generic playground defaults
@@ -1351,6 +1368,9 @@ export default function PortfolioExperience() {
   // or a return to the landing restarts it through this ref.
   const introLoopRestartRef = useRef<(() => void) | null>(null)
   const restartIntroLoop = () => introLoopRestartRef.current?.()
+  // Last phase the tick saw — lets the tick skip re-pushing the static
+  // settled output when a re-armed parked loop fires (see the tick's push).
+  const introPrevPhaseRef = useRef<IntroPhase>('logo-scale')
 
   useEffect(() => {
     const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -1432,8 +1452,15 @@ export default function PortfolioExperience() {
 
       // Full-rate visual update path: apply directly to the DOM/canvas
       // without React re-render. The logo scale goes to the canvas
-      // imperatively; the option reveals are CSS custom properties.
-      sceneCanvasRef.current?.setLandingLogoScale(next.logoScale)
+      // imperatively; the option reveals are CSS custom properties. Once the
+      // sequence IS complete and WAS complete last tick its output is static
+      // — skip the push so a re-armed parked loop (return Home) never stomps
+      // a freshly triggered field reveal with the settled scale. The
+      // completing frame itself still pushes the final 1.
+      if (!(next.phase === 'complete' && introPrevPhaseRef.current === 'complete')) {
+        sceneCanvasRef.current?.setLandingLogoScale(next.logoScale)
+      }
+      introPrevPhaseRef.current = next.phase
       const actionMeta = updateActionsVisuals(next)
 
       // Throttle diagnostic React state updates to ~10fps. The completing
@@ -1653,6 +1680,10 @@ export default function PortfolioExperience() {
           : EXPERIENCE_SCENES[displayed]
     setSceneConfig({ ...scene.behavior })
     setSourceLayout({ ...scene.sourceLayout })
+    // Mode entry RE-RENDERS the field (rise + per-mode staggered fade from
+    // the rise pose) — the outgoing scene vanishes at progress 0 and the new
+    // scene renders in place instead of spring-morphing across the viewport.
+    sceneCanvasRef.current?.beginFieldReveal()
     // Vibe entry: adopt the curated default composition so the mode is
     // visually complete before the dock is opened — unless the visitor has
     // already made their own edits, which survive mode switches. Resolved
@@ -1661,6 +1692,21 @@ export default function PortfolioExperience() {
       setPlaygroundConfig(resolveVibeDefault(themeRef.current))
     }
   }, [displayed, workDescriptor, collaborateDescriptor])
+
+  // Returning Home is a page change too: re-render the field (center-out).
+  // The cold-load landing intro drives its own progress stream, so only
+  // transitions BACK to the landing trigger this.
+  const prevDisplayedRef = useRef<ExperienceMode | null>(null)
+  useEffect(() => {
+    if (
+      prevDisplayedRef.current !== null &&
+      prevDisplayedRef.current !== 'intro' &&
+      displayed === 'intro'
+    ) {
+      sceneCanvasRef.current?.beginFieldReveal()
+    }
+    prevDisplayedRef.current = displayed
+  }, [displayed])
 
   // Paint stash: the visitor's paint and undo history survive mode switches
   // for the whole session. Leaving vibe stashes the overlay and clears the
@@ -1803,14 +1849,8 @@ export default function PortfolioExperience() {
         params: { story_id: target.storyId, presentation: nextPresentation },
       })
     }
-    // Leaving vibe with paint on the field asks before discarding it.
-    if (displayed === 'vibe') {
-      withPaintConfirmation(() => {
-        sceneCanvasRef.current?.clearPaint()
-        doNavigate()
-      })
-      return
-    }
+    // Leaving vibe keeps the visitor's paint (session persistence); the
+    // mode-change effect stashes the overlay and restores it on return.
     doNavigate()
   }
 
@@ -2148,11 +2188,40 @@ export default function PortfolioExperience() {
     setSourceLayout({ ...APPROVED_SOURCE_LAYOUT_DEFAULTS })
   }
 
+  /** Tuning panel edits the ACTIVE mode's reveal config; every change replays
+   *  the reveal (landing via the intro replay, other modes via a fresh
+   *  mode-entry reveal) so dialing is immediately visible. */
+  const handleFieldRevealChange = (
+    mode: FieldRevealMode,
+    patch: Partial<FieldRevealConfig>,
+  ) => {
+    setFieldRevealConfig((prev) => ({ ...prev, [mode]: { ...prev[mode], ...patch } }))
+    if (displayed === 'intro') replay()
+    else sceneCanvasRef.current?.beginFieldReveal()
+  }
+
+  const resetFieldRevealConfig = () => {
+    setFieldRevealConfig({
+      landing: { ...portfolioIntroPreset.reveal },
+      work: { ...FIELD_REVEAL_DEFAULTS.work },
+      vibe: { ...FIELD_REVEAL_DEFAULTS.vibe },
+      collaborate: { ...FIELD_REVEAL_DEFAULTS.collaborate },
+    })
+    if (displayed === 'intro') replay()
+    else sceneCanvasRef.current?.beginFieldReveal()
+  }
+
   const handleCopyConfiguration = () => {
     const payload = {
       timing: { ...portfolioIntroPreset.timing },
       scene: { ...sceneConfig },
       sourceLayout: { ...sourceLayout },
+      fieldReveal: {
+        landing: { ...fieldRevealConfig.landing },
+        work: { ...fieldRevealConfig.work },
+        vibe: { ...fieldRevealConfig.vibe },
+        collaborate: { ...fieldRevealConfig.collaborate },
+      },
     }
     const json = JSON.stringify(payload, null, 2)
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -2884,6 +2953,7 @@ export default function PortfolioExperience() {
         tuningMode={tuningMode}
         sequenceDiagnostics={diagnostics}
         experience={displayed}
+        fieldReveal={fieldRevealConfig}
         sceneId={
           displayed === 'work'
             ? `work/${getWorkSlideId(getWorkSlide(workSlideIndex))}`
@@ -3278,6 +3348,10 @@ export default function PortfolioExperience() {
           sourceLayout={sourceLayout}
           onSourceLayoutChange={handleSourceLayoutChange}
           onResetSourceLayout={resetSourceLayout}
+          fieldReveal={fieldRevealConfig}
+          activeRevealMode={displayed === 'intro' ? 'landing' : displayed}
+          onFieldRevealChange={handleFieldRevealChange}
+          onResetFieldReveal={resetFieldRevealConfig}
           targetCount={diagnostics.targetCount}
           sceneDiagnostics={sceneDiagnostics}
           qualityTierOverride={qualityTierOverride}

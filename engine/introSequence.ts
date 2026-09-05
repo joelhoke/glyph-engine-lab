@@ -1,3 +1,5 @@
+import { FIELD_REVEAL_DEFAULTS, FieldRevealConfig } from './introReveal'
+
 export type IntroPhase =
   | 'logo-scale'
   | 'logo-hold'
@@ -13,6 +15,10 @@ export type IntroTiming = {
 
 export type IntroSequenceConfig = {
   timing: IntroTiming
+  /** Field reveal shape for the landing (engine/introReveal.ts) — a sibling
+   *  of `timing`, not part of it: the reveal rides the logo-scale phase
+   *  progress and never alters the phase machine. */
+  reveal: FieldRevealConfig
 }
 
 export type IntroSequenceSnapshot = {
@@ -202,6 +208,7 @@ export const portfolioIntroPreset: IntroSequenceConfig = {
     optionsTransitionDuration: 900,
     optionStagger: 120,
   },
+  reveal: FIELD_REVEAL_DEFAULTS.landing,
 }
 
 const phaseOrder: IntroPhase[] = [

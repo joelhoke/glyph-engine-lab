@@ -204,7 +204,11 @@ labels.
   never remove it.
 - **Motion**: 160–320ms ease transitions; opacity + ≤18px translate for
   entrances (`work-story-in`); ambient canvas motion must respect
-  `prefers-reduced-motion` (static representative frame).
+  `prefers-reduced-motion` (static representative frame). The canvas glyph
+  field's render-in is a designed exception: a ~900ms rise +
+  shuffle-staggered per-glyph fade (`engine/introReveal.ts`) on every
+  mode entry — landing, work, vibe, collaborate — tunable per mode in
+  the tuning panel.
 
 ## 5. Brand voice
 
