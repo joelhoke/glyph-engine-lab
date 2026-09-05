@@ -307,7 +307,6 @@ function InlineMedia({
     return (
       <figure className="work-inline-media">
         <video
-          src={item.src}
           poster={item.poster}
           width={item.width}
           height={item.height}
@@ -315,6 +314,11 @@ function InlineMedia({
           preload="none"
           aria-label={item.alt}
         >
+          {/* Source children, not a src attribute: with a fallback the browser
+              picks the first playable encoding (HEVC primary, H.264 fallback)
+              without downloading both. */}
+          <source src={item.src} type={item.fallbackSrc ? 'video/mp4; codecs="hvc1"' : undefined} />
+          {item.fallbackSrc && <source src={item.fallbackSrc} type="video/mp4" />}
           {item.captionsSrc && (
             <track kind="captions" src={item.captionsSrc} label="English captions" default />
           )}

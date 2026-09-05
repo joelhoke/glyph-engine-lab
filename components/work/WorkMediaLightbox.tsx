@@ -218,7 +218,6 @@ function LightboxItem({
       <video
         ref={videoRef as RefObject<HTMLVideoElement>}
         className="work-lightbox-media"
-        src={item.src}
         poster={item.poster}
         width={item.width}
         height={item.height}
@@ -226,6 +225,10 @@ function LightboxItem({
         preload="none"
         aria-label={item.alt}
       >
+        {/* Same dual-source pattern as WorkStory: HEVC primary, H.264
+            fallback — the browser picks the first playable encoding. */}
+        <source src={item.src} type={item.fallbackSrc ? 'video/mp4; codecs="hvc1"' : undefined} />
+        {item.fallbackSrc && <source src={item.fallbackSrc} type="video/mp4" />}
         {item.captionsSrc && (
           <track kind="captions" src={item.captionsSrc} label="English captions" default />
         )}

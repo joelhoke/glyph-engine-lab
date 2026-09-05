@@ -158,7 +158,7 @@ assert(
   !!employeeProject &&
     Array.isArray(employeeProject.story.media) &&
     employeeProject.story.media.length === 3 &&
-    employeeProject.story.media[0].src === '/assets/work/EmployeeExperience-MyHub+Viva.png',
+    employeeProject.story.media[0].src === '/assets/work/EmployeeExperience-MyHub+Viva.webp',
   'employee-experience story keeps the MyHub+Viva composite and adds two self-hosted images',
 )
 assert(

@@ -66,6 +66,11 @@ export type WorkMediaVideo = {
   kind: 'video'
   id: string
   src: string
+  /** Optional second encoding for browsers that can't play `src` — used when
+   *  `src` is HEVC (Safari + Chromium with hardware decode) and the fallback
+   *  is H.264. Rendered as a second <source>; browsers pick the first
+   *  playable one. */
+  fallbackSrc?: string
   width: number
   height: number
   /** Short accessible description of the video content. */
@@ -215,6 +220,8 @@ export const WORK_STORIES: WorkStory[] = [
         kind: 'video',
         id: 'realcomm-keynote',
         src: '/assets/work/RealComm-Keynote.mp4',
+        // HEVC primary; H.264 fallback for browsers without HEVC decode.
+        fallbackSrc: '/assets/work/RealComm-Keynote-h264.mp4',
         width: 1920,
         height: 1080,
         alt: 'Excerpt from the Realcomm conference keynote “Microsoft’s AI Frontier Transformation” — a speaker on stage with the keynote title slide behind him.',
@@ -262,7 +269,7 @@ export const WORK_STORIES: WorkStory[] = [
       {
         kind: 'image',
         id: 'myhub-viva',
-        src: '/assets/work/EmployeeExperience-MyHub+Viva.png',
+        src: '/assets/work/EmployeeExperience-MyHub+Viva.webp',
         width: 899,
         height: 963,
         alt: 'Two iPhone screens: the MyHub dashboard with tiles for booking a space, booking a connector, dining, maintenance, parking, and directions, alongside the Microsoft Viva Connections dashboard with paystub, holiday, and on-site cards.',
@@ -271,7 +278,7 @@ export const WORK_STORIES: WorkStory[] = [
       {
         kind: 'image',
         id: 'viva-connections-dashboard',
-        src: '/assets/work/EmployeeExperience-VivaConnections-Dashboard.png',
+        src: '/assets/work/EmployeeExperience-VivaConnections-Dashboard.webp',
         width: 1500,
         height: 884,
         alt: 'Microsoft Viva Connections dashboard for a Microsoft employee, with cards for Viva Learning, Paystub, Stock awards, Perks+, Perspectives, Holiday, Cafe, Facility request, Digital TechLink, Feedback, and Viva Topics, alongside a company news feed.',
@@ -359,7 +366,7 @@ export const WORK_STORIES: WorkStory[] = [
       {
         kind: 'image',
         id: 'total-rewards',
-        src: '/assets/work/GlobalCompensation-TotalRewards.png',
+        src: '/assets/work/GlobalCompensation-TotalRewards.webp',
         width: 1002,
         height: 566,
         alt: 'The Microsoft Total Rewards portal overview page, showing the employee’s total rewards figure with breakdown cards for cash, stock, and benefits.',
@@ -368,7 +375,7 @@ export const WORK_STORIES: WorkStory[] = [
       {
         kind: 'image',
         id: 'total-rewards-employee',
-        src: '/assets/work/GlobalCompensation-TotalRewards-Employee.png',
+        src: '/assets/work/GlobalCompensation-TotalRewards-Employee.webp',
         width: 1160,
         height: 877,
         alt: 'Total Rewards portal employee overview showing a total rewards figure of 225,000 USD broken into Cash, Stock, and Benefits cards, with a compensation history bar chart.',
@@ -377,7 +384,7 @@ export const WORK_STORIES: WorkStory[] = [
       {
         kind: 'image',
         id: 'total-rewards-manager',
-        src: '/assets/work/GlobalCompensation-TotalRewards-Manager.png',
+        src: '/assets/work/GlobalCompensation-TotalRewards-Manager.webp',
         width: 1379,
         height: 759,
         alt: 'Total Rewards portal manager Team dashboard showing direct-report snapshot cards and a searchable organization list with employee names and roles.',
