@@ -32,6 +32,11 @@ When changes are ready:
 4. **After approval**: commit with the repo's message style, push, and
    confirm the resulting Cloudflare Pages deploy check goes green before
    declaring it live.
+5. **Shut the preview down once the push is out.** Once work is pushed,
+   the user is done testing — stop the preview server (e.g. the
+   `wrangler pages dev` background task on port 8788) instead of leaving
+   it running. Only keep it up if the user says they still want to poke
+   at it.
 
 Notes:
 
