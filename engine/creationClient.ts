@@ -10,7 +10,7 @@ import { parseVibeMemento, VibeMementoV1 } from './vibeMemento'
 
 export type CreationKind = 'auto' | 'image' | 'clip'
 
-export type SaveCreationResult = { ok: boolean; duplicate?: boolean; id?: string }
+export type SaveCreationResult = { ok: boolean; duplicate?: boolean; updated?: boolean; id?: string }
 
 /** Derive a reasonable upload filename from the blob's MIME type. */
 function uploadFilename(base: string, blob: Blob): string {
@@ -22,7 +22,9 @@ function uploadFilename(base: string, blob: Blob): string {
 /**
  * POST the memento to /api/creations as multipart/form-data: `state` (the
  * memento JSON string), `configHash`, `kind`, plus `thumb` / `media` /
- * `source` file parts when present. Never throws.
+ * `source` file parts when present. A `sessionId` (autosaves) makes the server
+ * create-or-update the session's one row; without it (exports) the save is an
+ * insert-only, hash-deduped artifact. Never throws.
  */
 export async function saveCreation(args: {
   kind: CreationKind
@@ -31,12 +33,14 @@ export async function saveCreation(args: {
   thumb?: Blob
   media?: Blob
   source?: Blob
+  sessionId?: string
 }): Promise<SaveCreationResult> {
   try {
     const form = new FormData()
     form.append('state', JSON.stringify(args.memento))
     form.append('configHash', args.configHash)
     form.append('kind', args.kind)
+    if (args.sessionId) form.append('sessionId', args.sessionId)
     if (args.thumb) form.append('thumb', args.thumb, uploadFilename('thumb', args.thumb))
     if (args.media) form.append('media', args.media, uploadFilename('media', args.media))
     if (args.source) form.append('source', args.source, uploadFilename('source', args.source))
@@ -56,6 +60,7 @@ export async function saveCreation(args: {
     return {
       ok: record?.ok !== false,
       duplicate: record?.duplicate === true || undefined,
+      updated: record?.updated === true || undefined,
       id: typeof record?.id === 'string' ? record.id : undefined,
     }
   } catch {

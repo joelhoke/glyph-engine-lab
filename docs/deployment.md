@@ -192,22 +192,26 @@ submissions are reviewed via the D1 dashboard or wrangler tooling.
 ## Creations gallery
 
 Visitors can save vibe-playground compositions: `POST /api/creations`
-(multipart: `state`, `configHash`, `kind`, optional `thumb` / `media` /
-`source` files) stores the memento state and metadata in a **separate D1
-database `jh-creations`** (binding `CREATIONS_DB`) and the binary media in a
-dedicated R2 bucket (binding `CREATIONS_BUCKET`) under `thumb/`, `media/`, and
-`source/` key prefixes. `GET /api/creations` returns the public gallery index
-(listed rows only), `GET /api/creations/:id` returns one listed creation's
-state, and `GET /api/creations/media/:key` streams media with HTTP Range
-support (seekable `<video>`) and immutable year-long caching.
+(multipart: `state`, `configHash`, `kind`, optional `sessionId`, optional
+`thumb` / `media` / `source` files) stores the memento state and metadata in a
+**separate D1 database `jh-creations`** (binding `CREATIONS_DB`) and the binary
+media in a dedicated R2 bucket (binding `CREATIONS_BUCKET`) under `thumb/`,
+`media/`, and `source/` key prefixes. `GET /api/creations` returns the public
+gallery index (listed rows only), `GET /api/creations/:id` returns one listed
+creation's state, and `GET /api/creations/media/:key` streams media with HTTP
+Range support (seekable `<video>`) and immutable year-long caching.
 
 Rows are inserted **`listed = 0` (held for review)** and promoted manually —
-there is no auto-publish. A duplicate `config_hash` short-circuits with
-`200 { ok: true, duplicate: true }`. A global **FIFO cap of 100 rows** is
-enforced on writes: the oldest rows are deleted and their R2 objects removed.
-There is no TTL. Upload caps: state 512KB, thumb 1MB, clip media 25MB
-(mp4/webm, `kind = 'clip'` only), source image 5MB. Both endpoints fail closed
-with 503 if either binding is missing.
+there is no auto-publish. **Autosaves carry a `sessionId`** (client-generated
+UUID per page load): the first save inserts the session's one row and later
+saves UPDATE it in place (`created_at` bumps to the last action, `listed` is
+untouched), so the archived snapshot always reflects the visitor's latest work.
+Exports (`image`/`clip`, no `sessionId`) stay insert-only, and a duplicate
+`config_hash` short-circuits with `200 { ok: true, duplicate: true }`. A global
+**FIFO cap of 100 rows** is enforced on writes: the oldest rows are deleted and
+their R2 objects removed. There is no TTL. Upload caps: state 512KB, thumb 1MB,
+clip media 25MB (mp4/webm, `kind = 'clip'` only), source image 5MB. Both
+endpoints fail closed with 503 if either binding is missing.
 
 ### One-time setup
 
@@ -217,7 +221,11 @@ are locked to the toml) — they take effect on the next deploy.
 1. **D1 database**: `jh-creations` already exists and its `database_id`
    (`dadd4690-af08-4ea8-8623-fa9a5bfd9cca`) is committed in `wrangler.toml` —
    nothing to create or paste. For a fresh environment, apply the schema:
-   `wrangler d1 execute jh-creations --remote --file=migrations/0003_create_creations.sql`.
+   `wrangler d1 execute jh-creations --remote --file=migrations/0003_create_creations.sql`
+   and
+   `wrangler d1 execute jh-creations --remote --file=migrations/0004_creations_session_id.sql`.
+   For an EXISTING database, only `0004` is needed (adds the autosave
+   `session_id` column + unique index).
 2. **R2 bucket**: `wrangler r2 bucket create jh-creations-media` (matches the
    `[[r2_buckets]]` block in `wrangler.toml`). Never enable public access —
    media is served only through `GET /api/creations/media/:key`.
@@ -242,7 +250,9 @@ are locked to the toml) — they take effect on the next deploy.
 
 `wrangler pages dev` emulates both bindings from the `wrangler.toml`
 declarations. Apply the schema to the local emulator first:
-`wrangler d1 execute jh-creations --local --file=migrations/0003_create_creations.sql`.
+`wrangler d1 execute jh-creations --local --file=migrations/0003_create_creations.sql`
+and
+`wrangler d1 execute jh-creations --local --file=migrations/0004_creations_session_id.sql`.
 `scripts/dev/seed-creations.js` seeds five sample creations against a running
 dev server (and the moderation `UPDATE … SET listed = 1` with `--local`
 promotes them).

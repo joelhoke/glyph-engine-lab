@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "verify:vibe-memento": "node scripts/verify-vibe-memento.js",
+    "verify:vibe-session-store": "node scripts/verify-vibe-session-store.js",
     "verify:creations-api": "node scripts/verify-creations-api.js"
   },
   "dependencies": {

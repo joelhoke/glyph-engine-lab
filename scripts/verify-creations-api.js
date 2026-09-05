@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 /**
  * Deterministic verification for the vibe-creations gallery backend:
- * functions/lib/creations.ts (payload/upload validation, ID and media-key
- * validation, the D1 dedup/insert/FIFO-eviction flow against a mocked D1) and
- * the structural contract of migrations/0003_create_creations.sql.
+ * functions/lib/creations.ts (payload/upload validation, ID/session and
+ * media-key validation, the D1 dedup/insert/FIFO-eviction flow and the
+ * session-keyed upsert autosave flow against a mocked D1) and the structural
+ * contract of migrations/0003_create_creations.sql and
+ * migrations/0004_creations_session_id.sql.
  */
 
 const { execSync } = require('child_process')
@@ -37,14 +39,19 @@ const {
   SOURCE_MIME_TO_EXT,
   CREATION_SELECT_BY_HASH_SQL,
   CREATION_INSERT_SQL,
+  CREATION_SESSION_INSERT_SQL,
+  CREATION_SELECT_BY_SESSION_SQL,
+  CREATION_UPDATE_SQL,
   CREATION_EVICT_SELECT_SQL,
   CREATION_EVICT_DELETE_SQL,
   isValidCreationId,
+  isValidSessionId,
   isValidMediaKey,
   isValidModerationAction,
   validateCreationPayload,
   validateUploadMeta,
   insertCreation,
+  upsertSessionCreation,
   buildCreationHeaders,
 } = require(path.join(tmpDir, 'creations.js'))
 
@@ -91,6 +98,12 @@ assert(!isValidCreationId('not-an-id'), 'random string rejected')
 assert(!isValidCreationId('3f6b8a2e-1234-4abc-9def-0123456789a'.repeat(3)), 'overlong id rejected')
 assert(!isValidCreationId('3F6B8A2E-1234-4ABC-9DEF-0123456789AB'), 'uppercase id rejected')
 assert(!isValidCreationId(42), 'non-string id rejected')
+
+// --- isValidSessionId ---
+
+assert(isValidSessionId('3f6b8a2e-1234-4abc-9def-0123456789ab'), 'UUID-shaped session id accepted')
+assert(!isValidSessionId('not-a-session'), 'random session string rejected')
+assert(!isValidSessionId(null) && !isValidSessionId(42), 'non-string session id rejected')
 
 // --- isValidMediaKey ---
 
@@ -212,6 +225,7 @@ const NOW = 1700000000
 function makeDb(options = {}) {
   const rows = []
   const calls = []
+  let sessionSelectCalls = 0
   return {
     rows,
     calls,
@@ -225,6 +239,14 @@ function makeDb(options = {}) {
               if (sql === CREATION_SELECT_BY_HASH_SQL) {
                 const hit = rows.find((r) => r.config_hash === values[0])
                 return hit ? { id: hit.id } : null
+              }
+              if (sql === CREATION_SELECT_BY_SESSION_SQL) {
+                // Race-test hook: hide the session row on the first lookup so
+                // the insert runs (and loses the unique race) instead.
+                sessionSelectCalls += 1
+                if (options.hideSessionOnSelects && sessionSelectCalls <= options.hideSessionOnSelects) return null
+                const hit = rows.find((r) => r.session_id === values[0])
+                return hit ? { id: hit.id, thumb_key: hit.thumb_key, source_key: hit.source_key } : null
               }
               return null
             },
@@ -248,6 +270,25 @@ function makeDb(options = {}) {
               if (sql === CREATION_INSERT_SQL) {
                 const [id, kind, state, config_hash, thumb_key, media_key, source_key, created_at] = values
                 rows.push({ id, kind, state, config_hash, thumb_key, media_key, source_key, listed: 0, created_at })
+              } else if (sql === CREATION_SESSION_INSERT_SQL) {
+                const [id, kind, state, config_hash, thumb_key, media_key, source_key, created_at, session_id] = values
+                // Partial unique index on session_id: a second insert for the
+                // same session loses the race.
+                if (session_id != null && rows.some((r) => r.session_id === session_id)) {
+                  throw new Error('UNIQUE constraint failed: creations.session_id')
+                }
+                rows.push({ id, kind, state, config_hash, thumb_key, media_key, source_key, listed: 0, created_at, session_id })
+              } else if (sql === CREATION_UPDATE_SQL) {
+                const [state, config_hash, thumb_key, source_key, created_at, id] = values
+                const row = rows.find((r) => r.id === id)
+                if (row) {
+                  row.state = state
+                  row.config_hash = config_hash
+                  // COALESCE(?, existing): a missing upload keeps the old key.
+                  if (thumb_key != null) row.thumb_key = thumb_key
+                  if (source_key != null) row.source_key = source_key
+                  row.created_at = created_at
+                }
               } else if (sql === CREATION_EVICT_DELETE_SQL) {
                 const sorted = [...rows].sort((a, b) => b.created_at - a.created_at)
                 const kept = new Set(sorted.slice(0, CREATIONS_CAP).map((r) => r.id))
@@ -358,6 +399,86 @@ async function insertSuite() {
   assert(failRes.ok === false, 'D1 insert failure surfaces as an error')
 }
 
+async function upsertSuite() {
+  const SESSION = '11111111-2222-4333-8444-555555555555'
+  const OTHER_SESSION = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+
+  // First session save inserts, keyed to the session.
+  const db = makeDbFull()
+  const first = makeCreation({ kind: 'auto', thumbKey: `thumb/${ID}.webp` })
+  const res1 = await upsertSessionCreation(db, first, SESSION, NOW)
+  assert(res1.ok === true && res1.updated === false && res1.id === first.id, 'first session save inserts')
+  assert(db.rows.length === 1 && db.rows[0].session_id === SESSION, 'row carries the session id')
+  assert(db.rows[0].listed === 0, 'session row inserted unlisted (held for review)')
+
+  // Later saves UPDATE the same row: latest state, bumped created_at, and a
+  // missing thumb keeps the old key (COALESCE).
+  const later = makeCreation({
+    id: crypto.randomUUID(),
+    state: JSON.stringify({ version: 1, nodes: ['latest'] }),
+    thumbKey: null,
+  })
+  const res2 = await upsertSessionCreation(db, later, SESSION, NOW + 60)
+  assert(res2.ok === true && res2.updated === true && res2.id === first.id, 'later save updates the same row')
+  assert(db.rows.length === 1, 'session updates never add rows')
+  assert(db.rows[0].state === later.state, 'row state is the LATEST work')
+  assert(db.rows[0].created_at === NOW + 60, 'created_at bumps to the last action')
+  assert(db.rows[0].thumb_key === `thumb/${ID}.webp`, 'missing thumb keeps the previous key')
+  assert(res2.replacedKeys.length === 0, 'no replaced keys when the thumb is kept')
+
+  // A new thumb with a different extension reports the old key for R2 cleanup.
+  const res3 = await upsertSessionCreation(
+    db,
+    makeCreation({ thumbKey: `thumb/${ID}.jpg` }),
+    SESSION,
+    NOW + 120,
+  )
+  assert(
+    res3.ok === true && res3.replacedKeys.includes(`thumb/${ID}.webp`),
+    'superseded thumb key returned for R2 cleanup',
+  )
+  assert(db.rows[0].thumb_key === `thumb/${ID}.jpg`, 'new thumb key stored')
+
+  // Moderation state survives updates.
+  db.rows[0].listed = 1
+  await upsertSessionCreation(db, makeCreation(), SESSION, NOW + 180)
+  assert(db.rows[0].listed === 1, 'update never touches the listed flag')
+
+  // No cross-visitor hash dedupe for session saves: the same config hash from
+  // a DIFFERENT session still gets its own row.
+  const other = makeCreation({ configHash: db.rows[0].config_hash })
+  const resOther = await upsertSessionCreation(db, other, OTHER_SESSION, NOW + 240)
+  assert(resOther.ok === true && resOther.updated === false, 'other session with the same hash inserts its own row')
+  assert(db.rows.length === 2, 'no cross-visitor hash dedupe for session saves')
+
+  // Racing first saves: the session select misses, the insert loses the unique
+  // race, and the save falls back to updating the winner's row.
+  const raceDb = makeDbFull({ hideSessionOnSelects: 1 })
+  raceDb.rows.push({
+    id: '99999999-0000-4000-8000-000000000000',
+    kind: 'auto',
+    state: VALID_STATE,
+    config_hash: HASH,
+    thumb_key: null,
+    media_key: null,
+    source_key: null,
+    listed: 0,
+    created_at: NOW,
+    session_id: SESSION,
+  })
+  const loser = makeCreation({ id: crypto.randomUUID() })
+  const resRace = await upsertSessionCreation(raceDb, loser, SESSION, NOW + 1)
+  assert(
+    resRace.ok === true && resRace.updated === true && resRace.id === '99999999-0000-4000-8000-000000000000',
+    'racing save falls back to updating the winning row',
+  )
+  assert(raceDb.rows.filter((r) => r.session_id === SESSION).length === 1, 'race leaves exactly one session row')
+
+  // D1 failure → clean error.
+  const failRes = await upsertSessionCreation(makeDbFull({ failOn: 'SELECT id, thumb_key' }), makeCreation(), SESSION, NOW)
+  assert(failRes.ok === false, 'D1 failure in session lookup surfaces as an error')
+}
+
 // --- Migration structure ---
 
 const migration = fs.readFileSync(path.join(projectRoot, 'migrations', '0003_create_creations.sql'), 'utf8')
@@ -371,6 +492,18 @@ assert(/CREATE INDEX IF NOT EXISTS idx_creations_hash ON creations\(config_hash\
 assert(
   /CREATE INDEX IF NOT EXISTS idx_creations_listed_created ON creations\(listed, created_at\)/.test(migration),
   'migration indexes (listed, created_at) for the gallery listing',
+)
+
+const sessionMigration = fs.readFileSync(
+  path.join(projectRoot, 'migrations', '0004_creations_session_id.sql'),
+  'utf8',
+)
+assert(/ALTER TABLE creations ADD COLUMN session_id TEXT/.test(sessionMigration), '0004 adds the session_id column')
+assert(
+  /CREATE UNIQUE INDEX IF NOT EXISTS idx_creations_session\s+ON creations\(session_id\) WHERE session_id IS NOT NULL/.test(
+    sessionMigration,
+  ),
+  '0004 adds the partial unique session index (race guard)',
 )
 
 // --- moderation: action validation + admin auth round-trip ---------------------
@@ -420,6 +553,7 @@ async function moderationSuite() {
 }
 
 insertSuite()
+  .then(() => upsertSuite())
   .then(() => moderationSuite())
   .then(() => {
     if (failures > 0) {

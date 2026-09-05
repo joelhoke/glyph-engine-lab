@@ -2,9 +2,11 @@
  * `POST /api/creations` — store a visitor's playground composition, held for
  * review (`listed = 0`). Metadata + memento state land in CREATIONS_DB
  * (jh-creations), binary media in CREATIONS_BUCKET under thumb/, media/, and
- * source/ prefixes. A duplicate config hash short-circuits with 200; a global
- * FIFO cap of 100 rows is enforced on writes and the evicted rows' R2 objects
- * are deleted. Fails closed with 503 when either binding is missing.
+ * source/ prefixes. With a `sessionId` field (autosaves) the session's one row
+ * is created on first save and updated in place on later saves; without one
+ * (exports) a duplicate config hash short-circuits with 200. A global FIFO cap
+ * of 100 rows is enforced on writes and the evicted rows' R2 objects are
+ * deleted. Fails closed with 503 when either binding is missing.
  *
  * `GET /api/creations` — the public gallery index: listed rows only, with
  * media URLs pointing at /api/creations/media/<key>.
@@ -13,6 +15,8 @@
 import {
   buildCreationHeaders,
   insertCreation,
+  upsertSessionCreation,
+  isValidSessionId,
   CREATIONS_LIST_SQL,
   MAX_MEDIA_BYTES,
   MAX_SOURCE_BYTES,
@@ -60,6 +64,13 @@ export const onRequestPost: PagesFunction<CreationsEnv> = async (context) => {
   const state = form.get('state')
   const configHash = form.get('configHash')
   const kind = form.get('kind')
+  const sessionIdRaw = form.get('sessionId')
+  // Session-keyed autosaves update the session's one row in place; a malformed
+  // id is rejected rather than silently downgrading to an insert-only save.
+  const sessionId = sessionIdRaw === null ? null : sessionIdRaw
+  if (sessionId !== null && !isValidSessionId(sessionId)) {
+    return json(400, { ok: false, error: 'Invalid session id.' })
+  }
   const media = form.get('media')
   // Accept Blob, not just File: older runtime compatibility dates parse
   // multipart file parts as Blob, so a strict File check rejects valid
@@ -116,19 +127,31 @@ export const onRequestPost: PagesFunction<CreationsEnv> = async (context) => {
     }
   }
 
-  const result = await insertCreation(
-    db,
-    {
-      id,
-      kind: kind as CreationKind,
-      state: storedState,
-      configHash: configHash as string,
-      thumbKey: keys.thumb,
-      mediaKey: keys.media,
-      sourceKey: keys.source,
-    },
-    Math.floor(Date.now() / 1000),
-  )
+  const nowSeconds = Math.floor(Date.now() / 1000)
+  const creationRow = {
+    id,
+    kind: kind as CreationKind,
+    state: storedState,
+    configHash: configHash as string,
+    thumbKey: keys.thumb,
+    mediaKey: keys.media,
+    sourceKey: keys.source,
+  }
+
+  // Session-keyed autosave: one row per session, updated in place so the
+  // archived snapshot tracks the visitor's latest work.
+  if (sessionId) {
+    const result = await upsertSessionCreation(db, creationRow, sessionId, nowSeconds)
+    if (result.ok === false) {
+      if (uploadedKeys.length > 0) await bucket.delete(uploadedKeys).catch(() => {})
+      return json(503, UNAVAILABLE)
+    }
+    const staleKeys = [...result.replacedKeys, ...result.evictedKeys]
+    if (staleKeys.length > 0) await bucket.delete(staleKeys).catch(() => {})
+    return json(result.updated ? 200 : 201, { ok: true, id: result.id, updated: result.updated })
+  }
+
+  const result = await insertCreation(db, creationRow, nowSeconds)
 
   if (result.ok === false) {
     if (uploadedKeys.length > 0) await bucket.delete(uploadedKeys).catch(() => {})

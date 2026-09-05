@@ -5,9 +5,11 @@
 // a config hash land in the CREATIONS_DB D1 database (jh-creations), binary
 // media (thumbnail, clip video, user-uploaded source image) lands in the
 // CREATIONS_BUCKET R2 bucket under thumb/, media/, and source/ prefixes. Rows
-// are inserted listed = 0 (held for review) and promoted manually. A global
-// FIFO cap of CREATIONS_CAP rows is enforced on writes — the route deletes the
-// evicted rows' R2 objects from the key list returned here.
+// are inserted listed = 0 (held for review) and promoted manually. Session-keyed
+// autosaves update the session's one row in place as editing continues; exports
+// stay insert-only. A global FIFO cap of CREATIONS_CAP rows is enforced on
+// writes — the route deletes the evicted rows' R2 objects from the key list
+// returned here.
 //
 // Everything below is side-effect-free and injectable (clock), so the module
 // runs identically in the Workers runtime and under Node for
@@ -59,6 +61,11 @@ export const MEDIA_KEY_EXT_TO_MIME: Record<string, string> = {
 export const CREATION_ID_PATTERN = /^[a-f0-9-]{36}$/
 
 export function isValidCreationId(id: unknown): id is string {
+  return typeof id === 'string' && CREATION_ID_PATTERN.test(id)
+}
+
+/** Autosave session IDs are client-generated UUIDs (same shape as row ids). */
+export function isValidSessionId(id: unknown): id is string {
   return typeof id === 'string' && CREATION_ID_PATTERN.test(id)
 }
 
@@ -142,6 +149,19 @@ export const CREATION_SELECT_BY_HASH_SQL = 'SELECT id FROM creations WHERE confi
 
 export const CREATION_INSERT_SQL =
   'INSERT INTO creations (id, kind, state, config_hash, thumb_key, media_key, source_key, listed, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)'
+
+// Session-keyed autosave: one row per browser session, updated in place as the
+// visitor keeps editing, so the archived snapshot always reflects the latest
+// work. created_at is bumped on every update — it records the LAST action and
+// keeps the row fresh against the FIFO cap; `listed` is never touched here.
+export const CREATION_SESSION_INSERT_SQL =
+  'INSERT INTO creations (id, kind, state, config_hash, thumb_key, media_key, source_key, listed, created_at, session_id) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)'
+
+export const CREATION_SELECT_BY_SESSION_SQL =
+  'SELECT id, thumb_key, source_key FROM creations WHERE session_id = ? LIMIT 1'
+
+export const CREATION_UPDATE_SQL =
+  'UPDATE creations SET state = ?, config_hash = ?, thumb_key = COALESCE(?, thumb_key), source_key = COALESCE(?, source_key), created_at = ? WHERE id = ?'
 
 export const CREATION_EVICT_SELECT_SQL = `SELECT thumb_key, media_key, source_key FROM creations WHERE id NOT IN (SELECT id FROM creations ORDER BY created_at DESC LIMIT ${CREATIONS_CAP})`
 
@@ -232,6 +252,105 @@ export async function insertCreation(
       await db.prepare(CREATION_EVICT_DELETE_SQL).run()
     }
     return { ok: true, duplicate: false, evictedKeys }
+  } catch {
+    return { ok: false, error: 'Creations storage is unavailable.' }
+  }
+}
+
+export type CreationUpsertResult =
+  | {
+      ok: true
+      /** True when an existing session row was updated; false on first insert. */
+      updated: boolean
+      id: string
+      /** Old R2 keys superseded by this write (thumb/source with a new ext). */
+      replacedKeys: string[]
+      evictedKeys: string[]
+    }
+  | { ok: false; error: string }
+
+type SessionRow = { id: string; thumb_key: string | null; source_key: string | null }
+
+/**
+ * Session-keyed autosave: update the session's row when it exists, insert it
+ * otherwise. Unlike insertCreation there is NO global hash dedupe — the client
+ * already skips unchanged compositions per session, and cross-visitor dedupe
+ * would swallow one visitor's save under another's identical threshold state.
+ * Returns superseded R2 keys (and, on insert, evicted rows' keys) so the route
+ * can delete the orphaned objects.
+ */
+export async function upsertSessionCreation(
+  db: D1Database,
+  creation: CreationInsert,
+  sessionId: string,
+  nowSeconds: number,
+): Promise<CreationUpsertResult> {
+  try {
+    const update = async (row: SessionRow): Promise<CreationUpsertResult> => {
+      const replacedKeys: string[] = []
+      if (creation.thumbKey && row.thumb_key && row.thumb_key !== creation.thumbKey) {
+        replacedKeys.push(row.thumb_key)
+      }
+      if (creation.sourceKey && row.source_key && row.source_key !== creation.sourceKey) {
+        replacedKeys.push(row.source_key)
+      }
+      await db
+        .prepare(CREATION_UPDATE_SQL)
+        .bind(
+          creation.state,
+          creation.configHash,
+          creation.thumbKey,
+          creation.sourceKey,
+          nowSeconds,
+          row.id,
+        )
+        .run()
+      return { ok: true, updated: true, id: row.id, replacedKeys, evictedKeys: [] }
+    }
+
+    const existing = await db
+      .prepare(CREATION_SELECT_BY_SESSION_SQL)
+      .bind(sessionId)
+      .first<SessionRow>()
+    if (existing) return update(existing)
+
+    try {
+      await db
+        .prepare(CREATION_SESSION_INSERT_SQL)
+        .bind(
+          creation.id,
+          creation.kind,
+          creation.state,
+          creation.configHash,
+          creation.thumbKey,
+          creation.mediaKey,
+          creation.sourceKey,
+          nowSeconds,
+          sessionId,
+        )
+        .run()
+    } catch {
+      // Racing first saves from the same session: the other insert won the
+      // unique session index, so this save becomes the update.
+      const winner = await db
+        .prepare(CREATION_SELECT_BY_SESSION_SQL)
+        .bind(sessionId)
+        .first<SessionRow>()
+      if (!winner) return { ok: false, error: 'Creations storage is unavailable.' }
+      return update(winner)
+    }
+
+    const evicted = await db.prepare(CREATION_EVICT_SELECT_SQL).all<EvictionRow>()
+    const evictedKeys: string[] = []
+    for (const row of evicted.results ?? []) {
+      for (const key of [row.thumb_key, row.media_key, row.source_key]) {
+        if (typeof key === 'string' && key) evictedKeys.push(key)
+      }
+    }
+    if (evicted.results && evicted.results.length > 0) {
+      await db.prepare(CREATION_EVICT_DELETE_SQL).run()
+    }
+    return { ok: true, updated: false, id: creation.id, replacedKeys: [], evictedKeys }
   } catch {
     return { ok: false, error: 'Creations storage is unavailable.' }
   }

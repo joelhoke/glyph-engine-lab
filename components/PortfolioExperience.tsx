@@ -154,6 +154,11 @@ import {
   mementoToVibeSnapshot,
 } from '../engine/vibeMemento'
 import {
+  clearVibeSession,
+  readVibeSession,
+  writeVibeSession,
+} from '../engine/vibeSessionStore'
+import {
   CreationKind,
   fetchCreationState,
   saveCreation,
@@ -818,13 +823,25 @@ export default function PortfolioExperience() {
   const [vibeCanUndo, setVibeCanUndo] = useState(false)
   const [vibeCanRedo, setVibeCanRedo] = useState(false)
   // Vibe creations (feature/vibe-creations): the tracker watches raw recorded
-  // transactions plus corner-element touches; the first qualification edge
-  // auto-saves the composition to the gallery archive. lastCreationHashRef
-  // dedupes repeat saves of an unchanged composition within the session.
+  // transactions plus corner-element touches; once the session qualifies, a
+  // trailing-debounce autosave keeps the session's ONE archive row updated to
+  // the visitor's latest work (server upserts by vibeSessionIdRef).
+  // lastCreationHashRef dedupes repeat saves of an unchanged composition.
   const mementoTrackerRef = useRef(createVibeMementoTracker())
-  const mementoQualifiedRef = useRef(false)
+  const vibeSessionIdRef = useRef(crypto.randomUUID())
   const lastCreationHashRef = useRef<string | null>(null)
+  const mementoSaveTimeoutRef = useRef<number | null>(null)
+  const mementoSaveInFlightRef = useRef(false)
+  const mementoSaveDirtyRef = useRef(false)
+  const creationToastShownRef = useRef(false)
   const [creationToastOpen, setCreationToastOpen] = useState(false)
+  // Paint stashed when leaving vibe mode (the overlay must not bleed onto
+  // other modes' scenes); restored on return. Data-only — the undo history
+  // and lastPaintSnapshotRef stay intact across mode switches.
+  const stashedPaintRef = useRef<PaintSnapshot | null>(null)
+  // Session-store persist debounce (sessionStorage mirror of the live vibe
+  // state so the composition survives SPA navigation for the whole tab).
+  const vibeSessionPersistTimeoutRef = useRef<number | null>(null)
   // Latest paint-overlay state: the "before" for the next stroke transaction
   // (the canvas only reports stroke ENDS, so this is tracked continuously).
   const lastPaintSnapshotRef = useRef<PaintSnapshot>(createEmptyPaintSnapshot())
@@ -972,7 +989,8 @@ export default function PortfolioExperience() {
     // Creations tracker rides the SAME raw recording calls (pre-coalescing),
     // so repeated slider nudges still accrue engagement steps.
     mementoTrackerRef.current.recordTransaction(transaction)
-    checkMementoQualification()
+    scheduleMementoAutosave()
+    scheduleVibeSessionPersist()
   }
 
   /** Downscaled JPEG of the live field for the archive card: long edge
@@ -1004,7 +1022,8 @@ export default function PortfolioExperience() {
 
   /** Save the current composition to the gallery archive. Fire-and-forget:
    *  never throws, silent on failure, deduped on the memento's config hash
-   *  within the session (the server also dedupes globally). */
+   *  within the session. Autosaves carry the session id so the server updates
+   *  the session's one row to the latest work; exports stay insert-only. */
   const saveCurrentCreation = async (kind: CreationKind, media?: Blob): Promise<void> => {
     try {
       const snapshot = captureVibeSnapshot()
@@ -1045,32 +1064,126 @@ export default function PortfolioExperience() {
         thumb,
         media: mediaBlob,
         source,
+        sessionId: kind === 'auto' ? vibeSessionIdRef.current : undefined,
       })
       if (!result.ok) return
       lastCreationHashRef.current = hash
-      // A duplicate is already archived: dedupe state updates, no toast.
+      // A duplicate is already archived: dedupe state updates, no toast. The
+      // toast greets the session's FIRST save only — autosave updates are silent.
       if (result.duplicate) return
-      setCreationToastOpen(true)
-      trackEvent({
-        name: 'creation_save',
-        params: {
-          kind: saveKind,
-          qualifier: mementoTrackerRef.current.qualifiers()[0] ?? 'steps',
-        },
-      })
+      if (!creationToastShownRef.current) {
+        creationToastShownRef.current = true
+        setCreationToastOpen(true)
+        trackEvent({
+          name: 'creation_save',
+          params: {
+            kind: saveKind,
+            qualifier: mementoTrackerRef.current.qualifiers()[0] ?? 'steps',
+          },
+        })
+      }
     } catch {
       /* silent — archiving never disturbs the playground */
     }
   }
 
-  /** Edge trigger: the FIRST transition into a qualified session auto-saves;
-   *  later transactions only feed the tracker. */
-  const checkMementoQualification = () => {
-    if (mementoQualifiedRef.current) return
+  /** Debounced autosave: once the session meets the minimum engagement
+   *  requirements, every further change schedules a save 2s after the last
+   *  one, so the archived snapshot tracks the visitor's LATEST work rather
+   *  than the first state that crossed the threshold. An in-flight save marks
+   *  the state dirty and triggers one follow-up save when it settles. */
+  const scheduleMementoAutosave = () => {
     if (!mementoTrackerRef.current.isQualified()) return
-    mementoQualifiedRef.current = true
-    void saveCurrentCreation('auto')
+    if (mementoSaveInFlightRef.current) {
+      mementoSaveDirtyRef.current = true
+      return
+    }
+    if (mementoSaveTimeoutRef.current !== null) {
+      window.clearTimeout(mementoSaveTimeoutRef.current)
+    }
+    mementoSaveTimeoutRef.current = window.setTimeout(() => {
+      mementoSaveTimeoutRef.current = null
+      void runMementoAutosave()
+    }, 2000)
   }
+
+  const runMementoAutosave = async (): Promise<void> => {
+    if (mementoSaveInFlightRef.current) {
+      mementoSaveDirtyRef.current = true
+      return
+    }
+    mementoSaveInFlightRef.current = true
+    try {
+      await saveCurrentCreation('auto')
+    } finally {
+      mementoSaveInFlightRef.current = false
+      if (mementoSaveDirtyRef.current) {
+        mementoSaveDirtyRef.current = false
+        scheduleMementoAutosave()
+      }
+    }
+  }
+
+  /** Flush a pending debounced autosave immediately (pagehide / tab hidden).
+   *  Best-effort and fire-and-forget, like every archive save. */
+  const flushMementoAutosave = () => {
+    if (mementoSaveTimeoutRef.current === null) return
+    window.clearTimeout(mementoSaveTimeoutRef.current)
+    mementoSaveTimeoutRef.current = null
+    void runMementoAutosave()
+  }
+
+  /** Persist the live vibe state to sessionStorage (debounced 500ms), so the
+   *  composition survives SPA navigation and component remounts for the whole
+   *  tab session. The live upload ref rides beside the memento — its blob: URL
+   *  stays valid in this document, which is exactly the window covered. */
+  const scheduleVibeSessionPersist = () => {
+    if (vibeSessionPersistTimeoutRef.current !== null) {
+      window.clearTimeout(vibeSessionPersistTimeoutRef.current)
+    }
+    vibeSessionPersistTimeoutRef.current = window.setTimeout(() => {
+      vibeSessionPersistTimeoutRef.current = null
+      persistVibeSession()
+    }, 500)
+  }
+
+  const persistVibeSession = () => {
+    if (!vibeTouchedRef.current) return
+    try {
+      const snapshot = captureVibeSnapshot()
+      const memento = buildVibeMemento(snapshot, {
+        pond: pondEnabledRef.current
+          ? { enabled: true, character: pondCharacterRef.current }
+          : undefined,
+      })
+      writeVibeSession(window.sessionStorage, memento, snapshot.upload ? { ...snapshot.upload } : null)
+    } catch {
+      /* persistence never disturbs the playground */
+    }
+  }
+
+  // Flush pending archive saves and the session mirror when the tab hides or
+  // unloads — the trailing debounce must not strand the visitor's last edits.
+  useEffect(() => {
+    const flush = () => {
+      flushMementoAutosave()
+      if (vibeSessionPersistTimeoutRef.current !== null) {
+        window.clearTimeout(vibeSessionPersistTimeoutRef.current)
+        vibeSessionPersistTimeoutRef.current = null
+        persistVibeSession()
+      }
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flush()
+    }
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   /** Toolbar export hook: a successful share/download archives too — but
    *  only for a qualified session (a default playground exports nothing). */
@@ -1163,9 +1276,13 @@ export default function PortfolioExperience() {
   const pondCharacterRef = useRef(pondCharacter)
   useEffect(() => {
     pondEnabledRef.current = pondEnabled
+    scheduleVibeSessionPersist()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pondEnabled])
   useEffect(() => {
     pondCharacterRef.current = pondCharacter
+    scheduleVibeSessionPersist()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pondCharacter])
   const handlePondChange = (next: PondConfig) => {
     setPondConfig(clampPondConfig(next))
@@ -1460,14 +1577,9 @@ export default function PortfolioExperience() {
         window.history.pushState(null, '', nextUrl)
       }
     }
-    // Leaving vibe with paint on the field asks before discarding it.
-    if (displayed === 'vibe' && key !== 'vibe') {
-      withPaintConfirmation(() => {
-        sceneCanvasRef.current?.clearPaint()
-        doNavigate()
-      })
-      return
-    }
+    // Leaving vibe keeps the visitor's paint and undo history for the whole
+    // session: the mode-change effect stashes the paint overlay (so it never
+    // bleeds onto other modes' scenes) and restores it on return.
     doNavigate()
   }
 
@@ -1550,18 +1662,26 @@ export default function PortfolioExperience() {
     }
   }, [displayed, workDescriptor, collaborateDescriptor])
 
-  // Safety net: whenever the settled experience is not vibe, no paint may
-  // remain on the field. navigateTo confirms-then-clears on the explicit path;
-  // browser back/forward resolves through the hash listener and lands here.
-  // The departure discard is non-recoverable, so the vibe undo history (which
-  // could otherwise restore paint onto a different mode's field) is dropped
-  // with it; the uploaded source itself survives mode switches.
+  // Paint stash: the visitor's paint and undo history survive mode switches
+  // for the whole session. Leaving vibe stashes the overlay and clears the
+  // canvas (paint must never bleed onto work/collaborate scenes — the canvas
+  // stays mounted); returning to vibe restores it. The undo history and
+  // lastPaintSnapshotRef are deliberately left intact.
   useEffect(() => {
-    if (displayed !== 'vibe') {
-      sceneCanvasRef.current?.clearPaint()
-      clearVibeHistory(vibeHistoryRef.current, releaseOrphanedUrl)
-      lastPaintSnapshotRef.current = createEmptyPaintSnapshot()
-      syncVibeHistoryFlags()
+    const canvas = sceneCanvasRef.current
+    if (displayed === 'vibe') {
+      const stash = stashedPaintRef.current
+      stashedPaintRef.current = null
+      if (stash && stash.strokes.length > 0 && canvas) {
+        canvas.restorePaintState(stash)
+        lastPaintSnapshotRef.current = clonePaintSnapshot(stash)
+      }
+      return
+    }
+    if (!canvas || displayed === 'intro') return
+    if (canvas.getPaintStatus().strokeCount > 0) {
+      stashedPaintRef.current = canvas.capturePaintState()
+      canvas.clearPaint()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayed])
@@ -2085,7 +2205,7 @@ export default function PortfolioExperience() {
   const handleAmbientNavigate = (direction: 'next' | 'prev') => {
     if (ambientWipeActive) return
     mementoTrackerRef.current.touchElement('carousel')
-    checkMementoQualification()
+    scheduleMementoAutosave()
     const current = resolveAmbientSceneId(playgroundConfigRef.current.ambient)
     const next = nextAmbientSceneId(current, direction)
     if (sceneCanvasRef.current?.beginAmbientWipe(direction)) {
@@ -2193,6 +2313,7 @@ export default function PortfolioExperience() {
     playgroundConfigRef.current = cloneVibeConfig(defaultConfig)
     sceneCanvasRef.current?.clearPaint()
     lastPaintSnapshotRef.current = createEmptyPaintSnapshot()
+    stashedPaintRef.current = null
     const defaultPaintTool: PaintToolConfig = {
       enabled: false,
       tool: 'paint',
@@ -2210,6 +2331,18 @@ export default function PortfolioExperience() {
     urlRegistryRef.current.releaseOrphans(new Set())
     setUploadError(null)
     syncVibeHistoryFlags()
+    // Reset starts a fresh engagement session: the stored mirror is dropped,
+    // any pending autosave is cancelled, and the tracker must re-qualify
+    // before the archive row sees the next composition.
+    clearVibeSession(window.sessionStorage)
+    if (mementoSaveTimeoutRef.current !== null) {
+      window.clearTimeout(mementoSaveTimeoutRef.current)
+      mementoSaveTimeoutRef.current = null
+    }
+    mementoSaveDirtyRef.current = false
+    mementoTrackerRef.current = createVibeMementoTracker()
+    lastCreationHashRef.current = null
+    creationToastShownRef.current = false
   }
 
   const handlePaintToolChange = (patch: Partial<PaintToolConfig>, historyKey?: string) => {
@@ -2312,6 +2445,56 @@ export default function PortfolioExperience() {
     return () => window.removeEventListener('keydown', handleHistoryKeys)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayed])
+
+  // Session restore (vibe session store): the visitor's in-progress composition
+  // is mirrored to sessionStorage on every change, so remounting (SPA
+  // navigation away and back within the tab) rehydrates it. A manual full-page
+  // refresh deliberately starts fresh (reload clears the mirror); an explicit
+  // `?memento=<id>` link wins over the stored session. No history transaction
+  // is recorded and no mode switch is forced — the work is simply there when
+  // the visitor returns to vibe.
+  const vibeSessionRestoreAttemptedRef = useRef(false)
+  useEffect(() => {
+    if (vibeSessionRestoreAttemptedRef.current) return
+    vibeSessionRestoreAttemptedRef.current = true
+    if (new URLSearchParams(window.location.search).get('memento')) return
+    const nav = performance.getEntriesByType('navigation')[0] as
+      | PerformanceNavigationTiming
+      | undefined
+    if (nav?.type === 'reload') {
+      clearVibeSession(window.sessionStorage)
+      return
+    }
+    const record = readVibeSession(window.sessionStorage)
+    if (!record) return
+    let canceled = false
+    const restore = async () => {
+      const snapshot = mementoToVibeSnapshot(record.memento)
+      // A live in-session upload persisted as its blob: URL; if the URL no
+      // longer resolves (a fresh document in the same tab), drop the upload —
+      // the rest of the composition still restores.
+      if (record.upload && record.memento.source.kind === 'upload') {
+        try {
+          if (!(await fetch(record.upload.url)).ok) throw new Error('dead blob URL')
+          snapshot.upload = { ...record.upload }
+        } catch {
+          snapshot.upload = null
+        }
+        if (canceled) return
+      }
+      applyVibeSnapshot(snapshot)
+      // A piece composed with the pond on comes back with the pond on.
+      if (record.memento.pond?.enabled) {
+        setPondEnabled(true)
+        if (record.memento.pond.character) setPondCharacter(record.memento.pond.character)
+      }
+    }
+    void restore()
+    return () => {
+      canceled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Open-in-playground (feature/vibe-creations): a `?memento=<id>` link loads
   // the archived composition over the default playground — one 'preset'
@@ -3057,7 +3240,7 @@ export default function PortfolioExperience() {
             onSelect={setPondCharacter}
             onInteract={() => {
               mementoTrackerRef.current.touchElement('pond')
-              checkMementoQualification()
+              scheduleMementoAutosave()
             }}
           />
           <SoundControl
@@ -3072,7 +3255,7 @@ export default function PortfolioExperience() {
             onCycleDirection={handleSoundCycleDirection}
             onInteract={() => {
               mementoTrackerRef.current.touchElement('music')
-              checkMementoQualification()
+              scheduleMementoAutosave()
             }}
           />
         </>
