@@ -57,6 +57,14 @@ import {
 } from '../engine/glyphSize'
 import { applyRadialImpulse } from '../engine/impulse'
 import {
+  RIPPLE_DEFAULTS,
+  RippleStore,
+  applyRippleForces,
+  clampRippleConfig,
+  createRippleStore,
+  spawnRipple,
+} from '../engine/ripple'
+import {
   APPROVED_PLAYGROUND_DEFAULTS,
   PlaygroundConfig,
 } from '../engine/playgroundConfig'
@@ -70,6 +78,7 @@ import {
   AmbientField,
   AmbientCollisionGrid,
   applyAmbientRadialImpulse,
+  applyAmbientRipples,
   createAmbientCollisionGrid,
   createAmbientField,
   isHeavyWeatherPreset,
@@ -261,6 +270,16 @@ const THEME_FADE_DURATION_MS = 500
  *  CSS-pixel snapshot and clipped away directionally over the new scene. */
 const AMBIENT_WIPE_DURATION_MS = 650
 
+/** Click/tap "plop": the instant radial kick that accompanies a droplet
+ *  ripple spawn is this fraction of clickImpulseForce (same radius) — the
+ *  impact reads immediately while the traveling wavefront does the rest. */
+const RIPPLE_PLOP_SCALE = 0.35
+
+/** Drag influence sphere: while the pointer is held, the hover radius eases
+ *  toward mouseR × dragInfluenceMult with these exponential time constants. */
+const DRAG_EASE_IN_MS = 200
+const DRAG_EASE_OUT_MS = 250
+
 /** Weather render bucketing: rain/storm streaks and snow/blizzard flakes
  *  group by quantized alpha (and size) so style/font changes happen once per
  *  bucket instead of per particle. */
@@ -326,6 +345,11 @@ type SceneCanvasProps = {
   weatherRepelMult?: number
   clickImpulseRadius?: number
   clickImpulseForce?: number
+  /** Held-pointer (drag) multiplier on the hover influence radius: while
+   *  pressed, mouseR eases toward mouseR × dragInfluenceMult. 1 = no growth. */
+  dragInfluenceMult?: number
+  /** Per-mode amplitude multiplier on droplet ripples spawned by click/tap. */
+  rippleStrength?: number
   sourceLayout?: SourceLayoutConfig
   /** What the field samples its targets from (built-in mark, static image,
    *  or an animated provider). Defaults to the built-in mark. */
@@ -421,6 +445,8 @@ function SceneCanvasInternal(
     weatherRepelMult = 6,
     clickImpulseRadius = 200,
     clickImpulseForce = 10,
+    dragInfluenceMult = 1.6,
+    rippleStrength = 1,
     sourceLayout,
     source,
     targetRegion = null,
@@ -761,6 +787,22 @@ function SceneCanvasInternal(
   const weatherRepelRef = useRef(weatherRepelMult)
   const clickImpulseRadiusRef = useRef(clickImpulseRadius)
   const clickImpulseForceRef = useRef(clickImpulseForce)
+  const dragInfluenceMultRef = useRef(dragInfluenceMult)
+  const rippleStrengthRef = useRef(rippleStrength)
+  // Droplet ripple pool (engine/ripple): spawned on pointerdown, force pass
+  // once per frame. Physics constants are global (RIPPLE_DEFAULTS), not
+  // per-mode; the per-mode knob is rippleStrength above.
+  const ripplesRef = useRef<RippleStore>(createRippleStore(RIPPLE_DEFAULTS.maxConcurrent))
+  const rippleConfigRef = useRef(clampRippleConfig(RIPPLE_DEFAULTS))
+  // Held-pointer state for the drag-expanded influence sphere: set on
+  // non-paint pointerdown, cleared on up/cancel/leave; dragEaseRef is the
+  // exponentially eased 0–1 amount computed once per frame.
+  const pressRef = useRef({ active: false, pointerId: -1 })
+  const dragEaseRef = useRef(0)
+  const dragEaseLastNowRef = useRef(0)
+  // The radius the hover repel and ambient tick actually use: mouseR at rest
+  // (byte-identical hover), grown by the drag ease while pressed.
+  const effectiveMouseRRef = useRef(mouseR)
 
   const [fontSize, setFontSize] = useState(defaultSceneState.fontSize)
   const [textAmount, setTextAmount] = useState(defaultSceneState.textAmount)
@@ -964,6 +1006,8 @@ function SceneCanvasInternal(
   useEffect(() => { weatherRepelRef.current = weatherRepelMult }, [weatherRepelMult])
   useEffect(() => { clickImpulseRadiusRef.current = clickImpulseRadius }, [clickImpulseRadius])
   useEffect(() => { clickImpulseForceRef.current = clickImpulseForce }, [clickImpulseForce])
+  useEffect(() => { dragInfluenceMultRef.current = dragInfluenceMult }, [dragInfluenceMult])
+  useEffect(() => { rippleStrengthRef.current = rippleStrength }, [rippleStrength])
   useEffect(() => { tuningModeRef.current = tuningMode ?? false }, [tuningMode])
   useEffect(() => {
     experienceRef.current = experience
@@ -2372,8 +2416,8 @@ function SceneCanvasInternal(
       stepPx: Math.max(2, radiusPx * 0.4),
     }
     pendingPaintPointsRef.current.push(point.x, point.y)
-    // While painting, the pointer repel fades out and click impulses are
-    // suppressed; procedural target time freezes in the motion update.
+    // While painting, the pointer repel fades out and click impulses/ripples
+    // are suppressed; procedural target time freezes in the motion update.
     startFade()
     try {
       canvasRef.current?.setPointerCapture(event.pointerId)
@@ -2861,6 +2905,8 @@ function SceneCanvasInternal(
       pointerActive: pointer.active,
       pointerX: pointer.x,
       pointerY: pointer.y,
+      activeRipples: ripplesRef.current.count,
+      effectiveMouseR: effectiveMouseRRef.current,
       seed: GLYPH_INIT_SEED,
       simParams: {
         spring: SPRING,
@@ -2930,7 +2976,9 @@ function SceneCanvasInternal(
       const dx = p.x - pointer.x
       const dy = p.y - pointer.y
       const distSq = dx * dx + dy * dy
-      const radius = mouseRRef.current || 0
+      // Effective radius: mouseR at rest; grown by the drag ease while the
+      // pointer is held (computed once per frame in the RAF loop).
+      const radius = effectiveMouseRRef.current || 0
       if (distSq > 0 && distSq < radius * radius) {
         const dist = Math.sqrt(distSq)
         const repelStrength = (1 - dist / radius) * (particleRepelRef.current || 0.48) * pointer.influence
@@ -3590,7 +3638,7 @@ function SceneCanvasInternal(
           vx: velocity.vx,
           vy: velocity.vy,
         },
-        repelRadius: mouseRRef.current || 0,
+        repelRadius: effectiveMouseRRef.current || 0,
         repelStrength: (weatherRepelRef.current || 6) * AMBIENT_POINTER_REPEL_SCALE,
         width,
         height,
@@ -3599,6 +3647,20 @@ function SceneCanvasInternal(
     }
     // Drop the backlog if the tab was throttled so agents never lurch.
     if (steps === 4) ambientTickAccumRef.current = 0
+    // Droplet ripples cross the ambient pool too (typed-array mirror of the
+    // main-field pass), scaled by the shared interaction strength. Applied
+    // once per frame — not per tick — so tick catch-up never double-kicks;
+    // the velocity persists until the next tick integrates it.
+    const ripples = ripplesRef.current
+    if (ripples.count > 0) {
+      applyAmbientRipples(
+        field,
+        ripples,
+        now,
+        rippleConfigRef.current,
+        config.interactionStrength,
+      )
+    }
   }
 
   // Quantized scaled font strings for weather agents (font changes are
@@ -4017,6 +4079,29 @@ function SceneCanvasInternal(
       updatePaintEvolution(now)
       // Animated sources re-sample at the tier's sampling budget.
       sampleAnimatedSourceFrame(now)
+      // Drag influence sphere: ease the held-pointer amount toward 1 while
+      // pressed (≈200ms in) and back toward 0 on release (≈250ms out), then
+      // derive the radius every repel consumer shares. At rest the ease is
+      // exactly 0 and the radius is exactly mouseR, so hover is unchanged.
+      const dtEase = Math.max(0, now - (dragEaseLastNowRef.current || now))
+      dragEaseLastNowRef.current = now
+      const press = pressRef.current
+      const easeTarget = press.active ? 1 : 0
+      const easeRate = press.active ? DRAG_EASE_IN_MS : DRAG_EASE_OUT_MS
+      let dragEase = dragEaseRef.current +
+        (easeTarget - dragEaseRef.current) * (1 - Math.exp(-dtEase / easeRate))
+      if (!press.active && dragEase < 0.001) dragEase = 0
+      dragEaseRef.current = dragEase
+      effectiveMouseRRef.current =
+        dragEase > 0
+          ? mouseRRef.current * (1 + (dragInfluenceMultRef.current - 1) * dragEase)
+          : mouseRRef.current
+      // Droplet ripples: one force pass per frame over the live store. An
+      // empty store costs a single branch, so the idle field is byte-identical.
+      const ripples = ripplesRef.current
+      if (ripples.count > 0) {
+        applyRippleForces(ripples, particlesRef.current, now, rippleConfigRef.current)
+      }
       const mode = sceneModeRef.current
       if (mode === 'svg') drawSvgGlyphScene(now)
       else drawParagraph(now, revealedChars)
@@ -4176,6 +4261,16 @@ function SceneCanvasInternal(
     state.fadeEndTime = 0
   }
 
+  // Drag influence sphere: the press ends with its own pointer (up, cancel,
+  // or leave); the radius ease decays back over ~250ms in the frame loop.
+  const releasePress = (pointerId: number) => {
+    const press = pressRef.current
+    if (press.active && press.pointerId === pointerId) {
+      press.active = false
+      press.pointerId = -1
+    }
+  }
+
   const onCanvasPointerEnter = (event: PointerEvent) => {
     if (event.pointerType === 'touch') return
     updatePointerFromEvent(event, false)
@@ -4220,7 +4315,7 @@ function SceneCanvasInternal(
     const isTouch = event.pointerType === 'touch'
     const state = pointerRef.current
     // Paint mode: a pointer press starts a stroke (mouse, pen, or the first
-    // touch) and never fires a click impulse.
+    // touch) and never fires a click impulse or ripple.
     if (paintToolRef.current.enabled) {
       if (activeStrokeRef.current) return
       if (isTouch && state.touchPointerId !== -1) return
@@ -4244,19 +4339,40 @@ function SceneCanvasInternal(
     } else {
       updatePointerFromEvent(event, false)
     }
-    // Click/tap blast: a one-shot radial velocity kick that the spring+damp
-    // integration settles on its own. Fully skipped under reduced motion —
-    // no impulse and no renderOnce re-arm, so the static frame stays settled.
+    // Drag influence sphere: mark the press (non-paint path only — paint
+    // strokes returned above) so the frame loop grows the hover radius while
+    // the pointer is held. Cleared on up/cancel/leave.
+    pressRef.current.active = true
+    pressRef.current.pointerId = event.pointerId
+    // Click/tap droplet: spawn a traveling-wavefront ripple (engine/ripple)
+    // seeded with the pointer's smoothed velocity so a mid-drag press leaves
+    // a directional wake, plus a small instant "plop" kick so the impact
+    // reads immediately. The spring+damp integration settles both on its own.
+    // Fully skipped under reduced motion — no ripple, no plop, and no
+    // renderOnce re-arm, so the static frame stays settled.
     if (reducedMotionRef.current) return
+    const now = performance.now()
+    const velocity = pointerVelocityRef.current
+    spawnRipple(
+      ripplesRef.current,
+      state.x,
+      state.y,
+      now,
+      rippleStrengthRef.current,
+      velocity.vx,
+      velocity.vy,
+      rippleConfigRef.current,
+    )
     const affected = applyRadialImpulse(
       particlesRef.current,
       state.x,
       state.y,
       clickImpulseRadiusRef.current,
-      clickImpulseForceRef.current,
+      clickImpulseForceRef.current * RIPPLE_PLOP_SCALE,
     )
-    // The ambient pool gets the same radial kick (typed-array mirror of
-    // engine/impulse.ts), scaled by the shared interaction strength.
+    // The ambient pool gets the same plop (typed-array mirror of
+    // engine/impulse.ts), scaled by the shared interaction strength; the
+    // shared ripple store is applied to it in the ambient tick wiring.
     const ambientField = ambientFieldRef.current
     if (ambientField) {
       applyAmbientRadialImpulse(
@@ -4264,7 +4380,9 @@ function SceneCanvasInternal(
         state.x,
         state.y,
         clickImpulseRadiusRef.current,
-        clickImpulseForceRef.current * ambientConfigRef.current.interactionStrength,
+        clickImpulseForceRef.current *
+          RIPPLE_PLOP_SCALE *
+          ambientConfigRef.current.interactionStrength,
       )
     }
     // Private Pond: the same tap kicks the swimming body outward from the
@@ -4277,10 +4395,13 @@ function SceneCanvasInternal(
     patchDiagnostics({
       impulseCount: diagnosticsRef.current.impulseCount + 1,
       lastImpulseAffected: affected,
+      rippleCount: diagnosticsRef.current.rippleCount + 1,
+      activeRipples: ripplesRef.current.count,
     })
   }
 
   const onCanvasPointerUp = (event: PointerEvent) => {
+    releasePress(event.pointerId)
     const stroke = activeStrokeRef.current
     if (stroke && event.pointerId === stroke.pointerId) {
       endPaintStroke()
@@ -4296,12 +4417,14 @@ function SceneCanvasInternal(
 
   const onCanvasPointerLeave = (event: PointerEvent) => {
     if (event.pointerType === 'touch') return
+    releasePress(event.pointerId)
     if (activeStrokeRef.current) return
     clearPointer()
     updateBrushRing(0, 0, false)
   }
 
   const onCanvasPointerCancel = (event: PointerEvent) => {
+    releasePress(event.pointerId)
     const stroke = activeStrokeRef.current
     if (stroke && event.pointerId === stroke.pointerId) {
       endPaintStroke()
@@ -4319,6 +4442,7 @@ function SceneCanvasInternal(
   }
 
   const onLostPointerCapture = (event: PointerEvent) => {
+    releasePress(event.pointerId)
     const stroke = activeStrokeRef.current
     if (stroke && event.pointerId === stroke.pointerId) {
       endPaintStroke()

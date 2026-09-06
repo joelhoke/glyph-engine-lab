@@ -2968,6 +2968,8 @@ export default function PortfolioExperience() {
         weatherRepelMult={sceneConfig.weatherRepelMult}
         clickImpulseRadius={sceneConfig.clickImpulseRadius}
         clickImpulseForce={sceneConfig.clickImpulseForce}
+        dragInfluenceMult={sceneConfig.dragInfluenceMult}
+        rippleStrength={sceneConfig.rippleStrength}
         sourceLayout={sourceLayout}
         source={sceneSource}
         targetRegion={displayed === 'work' ? workTargetRegion : null}

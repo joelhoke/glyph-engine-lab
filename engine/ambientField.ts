@@ -17,6 +17,7 @@ import {
   WeatherPreset,
 } from './ambientConfig'
 import { RandomSource } from './random'
+import { RIPPLE_SPREAD_PX, RippleConfig, RippleStore, pruneRipples } from './ripple'
 
 /**
  * Maximum collision responses a single ambient agent processes per physics
@@ -616,9 +617,10 @@ export function normalizeAmbientField(
 }
 
 /**
- * One-shot radial velocity kick for tap/click blasts — the typed-array mirror
- * of engine/impulse.ts (same linear falloff), so taps feel identical on the
- * ambient pool and the main glyph population.
+ * One-shot radial velocity kick for tap/click "plops" — the typed-array
+ * mirror of engine/impulse.ts (same linear falloff), so taps feel identical
+ * on the ambient pool and the main glyph population. Fired at reduced force
+ * alongside the droplet ripple spawn (applyAmbientRipples below).
  */
 export function applyAmbientRadialImpulse(
   field: AmbientField,
@@ -639,6 +641,65 @@ export function applyAmbientRadialImpulse(
     field.vx[i] += (dx / dist) * kick
     field.vy[i] += (dy / dist) * kick
     affected += 1
+  }
+  return affected
+}
+
+/**
+ * Traveling-wavefront ripple pass for the ambient pool — the typed-array
+ * mirror of engine/ripple.ts applyRippleForces, sharing the caller's store so
+ * the same droplet wave crosses both pools. The force is scaled by the
+ * ambient interaction strength (same contract as the impulse mirror above),
+ * passed in by the caller from the live ambient config.
+ */
+export function applyAmbientRipples(
+  field: AmbientField,
+  store: RippleStore,
+  now: number,
+  config: RippleConfig,
+  interactionStrength: number,
+): number {
+  if (store.count === 0 || interactionStrength === 0) return 0
+  pruneRipples(store, now, config)
+  let affected = 0
+  for (let r = 0; r < store.count; r += 1) {
+    const strength = store.strength[r]
+    if (strength === 0 || config.force === 0) continue
+    const ageMs = now - store.born[r]
+    if (ageMs <= 0) continue
+    const baseRadius = (config.speed * ageMs) / 1000
+    const ecc = store.ecc[r]
+    const phi = store.phi[r]
+    const rx = store.x[r]
+    const ry = store.y[r]
+    const envelope =
+      Math.exp(-ageMs / config.decay) / (1 + baseRadius / RIPPLE_SPREAD_PX)
+    const band = 3 * config.width * (1 + ecc)
+    const reach = baseRadius * (1 + ecc) + band
+    const inner = baseRadius * (1 - ecc) - band
+    const reachSq = reach * reach
+    const innerSq = inner > 0 ? inner * inner : 0
+    const kickScale = envelope * config.force * strength * interactionStrength
+    for (let i = 0; i < field.count; i += 1) {
+      const dx = field.x[i] - rx
+      const dy = field.y[i] - ry
+      const distSq = dx * dx + dy * dy
+      if (distSq <= 0 || distSq > reachSq || distSq < innerSq) continue
+      const dist = Math.sqrt(distSq)
+      const theta = Math.atan2(dy, dx)
+      const angular = 1 - ecc * Math.cos(theta - phi)
+      const radius = baseRadius * angular
+      const widthTheta = config.width * angular
+      const z = (dist - radius) / widthTheta
+      if (z > 3 || z < -3) continue
+      const weight = Math.exp(-z * z)
+      const phase = Math.cos(((dist - radius) * Math.PI * 2) / (config.wavelength * angular))
+      const kick = weight * phase * kickScale
+      if (kick === 0) continue
+      field.vx[i] += (dx / dist) * kick
+      field.vy[i] += (dy / dist) * kick
+      affected += 1
+    }
   }
   return affected
 }

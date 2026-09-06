@@ -16,6 +16,8 @@
 //     Vibe closed/open, at desktop and mobile widths
 //   - pointer repel + click/tap impulses on exposed canvas; impulses survive
 //     mode and slide transitions without a reload
+//   - droplet ripples: click spawns a ripple that expires; press-and-hold
+//     grows the effective influence radius and release eases it back
 //   - UI priority: nav, buttons, cards, composers, rails, and scroll panels
 //     stay interactive and never produce canvas impulses
 //   - Vibe paint: enable, brush-ring sync (size + erase mode), mouse stroke
@@ -139,6 +141,10 @@ const readDiag = (page) =>
     return d
       ? {
           impulseCount: d.impulseCount,
+          rippleCount: d.rippleCount,
+          activeRipples: d.activeRipples,
+          effectiveMouseR: d.effectiveMouseR,
+          baseMouseR: d.simParams ? d.simParams.mouseR : 0,
           pointerActive: d.pointerActive,
           pointerType: d.pointerType,
           pointerX: d.pointerX,
@@ -378,6 +384,94 @@ async function scenarioWork(page) {
     return el ? !!el.closest('.work-experience') : false
   })
   check('work card owns its pointer input (no fall-through)', cardHit === true)
+}
+
+/** Droplet ripple + drag sphere of influence (feature/glyph-droplet-ripple):
+ *  a click spawns a ripple that lives briefly and expires; holding the
+ *  pointer grows the effective influence radius, releasing eases it back. */
+async function scenarioRippleAndDrag(page) {
+  section('Ripple + drag influence')
+  // The page is on a Work slide here (baseline mouseR 120, drag mult 1.5).
+  const point = await expectExposed(
+    page,
+    [[800, 70], [1400, 450], [1300, 820], [800, 870]],
+    'work ripple point',
+  )
+  if (!point) return
+
+  const before = await readDiag(page)
+  if (!before) {
+    check('ripple diagnostics readable', false)
+    return
+  }
+  await page.mouse.click(point.x, point.y)
+  try {
+    await waitFor(
+      async () => {
+        const d = await readDiag(page)
+        return d && d.rippleCount === before.rippleCount + 1 && d.activeRipples >= 1
+      },
+      { label: 'ripple spawn', timeout: 6000 },
+    )
+    check('click spawns a droplet ripple (rippleCount + live store)', true)
+  } catch (err) {
+    check('click spawns a droplet ripple (rippleCount + live store)', false, err.message)
+  }
+  try {
+    await waitFor(async () => (await readDiag(page))?.activeRipples === 0, {
+      label: 'ripple expiry',
+      timeout: 8000,
+    })
+    check('ripples expire past their lifetime', true)
+  } catch (err) {
+    check('ripples expire past their lifetime', false, err.message)
+  }
+
+  // Press-and-hold: the effective influence radius eases up well beyond the
+  // baseline, then eases back on release. Diagnostics push at 5Hz, so poll.
+  const baseR = before.baseMouseR
+  if (!(baseR > 0)) {
+    check('baseline influence radius readable', false, `baseMouseR ${baseR}`)
+    return
+  }
+  await page.mouse.move(point.x, point.y, { steps: 4 })
+  await page.mouse.down()
+  await page.mouse.move(point.x + 30, point.y + 10, { steps: 6 })
+  try {
+    await waitFor(
+      async () => {
+        const d = await readDiag(page)
+        return d && d.effectiveMouseR > baseR * 1.2
+      },
+      { label: 'drag radius growth', timeout: 6000 },
+    )
+    check('press-and-hold grows the effective influence radius', true)
+  } catch (err) {
+    const d = await readDiag(page)
+    check(
+      'press-and-hold grows the effective influence radius',
+      false,
+      `effectiveMouseR ${d?.effectiveMouseR} vs base ${baseR}`,
+    )
+  }
+  await page.mouse.up()
+  try {
+    await waitFor(
+      async () => {
+        const d = await readDiag(page)
+        return d && d.effectiveMouseR < baseR * 1.05
+      },
+      { label: 'drag radius release', timeout: 6000 },
+    )
+    check('release eases the influence radius back to baseline', true)
+  } catch (err) {
+    const d = await readDiag(page)
+    check(
+      'release eases the influence radius back to baseline',
+      false,
+      `effectiveMouseR ${d?.effectiveMouseR} vs base ${baseR}`,
+    )
+  }
 }
 
 async function scenarioCollaborateLanding(page) {
@@ -737,13 +831,18 @@ async function scenarioVibePaint(page) {
     check('stroke leaving and re-entering the canvas stays one stroke', false, err.message)
   }
 
-  // Paint mode never fires click impulses; a click paints a dot instead.
+  // Paint mode never fires click impulses or ripples; a click paints a dot.
   const impulses = await impulseCount(page)
+  const ripplesBefore = (await readDiag(page))?.rippleCount ?? -1
   await page.mouse.click(1450, 600)
   await sleep(500)
   check(
     'paint mode suppresses click impulses',
     (await impulseCount(page)) === impulses,
+  )
+  check(
+    'paint mode suppresses droplet ripples',
+    ((await readDiag(page))?.rippleCount ?? -2) === ripplesBefore,
   )
   try {
     await waitFor(async () => (await readPaint(page))?.strokeCount === 3, {
@@ -1136,11 +1235,16 @@ async function scenarioReducedMotion(browser) {  section('Reduced motion')
   await waitForCanvasReady(page)
   const point = await findExposed(page, [[1500, 450], [800, 120]], 'reduced-motion landing')
   const before = await impulseCount(page)
+  const ripplesBefore = (await readDiag(page))?.rippleCount ?? -1
   await page.mouse.click(point.x, point.y)
   await sleep(700)
   check(
     'reduced motion: click impulses intentionally suppressed (static pose kept)',
     (await impulseCount(page)) === before,
+  )
+  check(
+    'reduced motion: droplet ripples intentionally suppressed',
+    ((await readDiag(page))?.rippleCount ?? -2) === ripplesBefore,
   )
   await context.close()
 }
@@ -1177,6 +1281,7 @@ async function main() {
     const scenarios = [
       ['landing', () => scenarioLanding(page)],
       ['work', () => scenarioWork(page)],
+      ['ripple + drag', () => scenarioRippleAndDrag(page)],
       ['collaborate landing', () => scenarioCollaborateLanding(page)],
       ['chat', () => scenarioChat(page)],
       ['vibe closed', () => scenarioVibeClosed(page)],
