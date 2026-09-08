@@ -479,7 +479,7 @@ export default function WorkExperience({
   // Geometry: progress 0 restores the pure-CSS compact card; any progress >
   // 0 fixes the card in the viewport and interpolates the measured compact
   // rect toward the expanded target. --work-expansion exposes the scrub to
-  // CSS (inline-media sizing, mobile top padding).
+  // CSS (mobile top padding).
   const applyGeometry = (progress: number) => {
     const viewport = panelRef.current
     const card = viewport?.parentElement as HTMLElement | null

@@ -17,6 +17,60 @@ type WorkStoryProps = {
 
 const PREVIEW_THUMB_COUNT = 3
 
+/** Counts a metric's leading numeral up from zero when the stat block
+ *  scrolls into view; suffixes ("+", "s/hr", " → 12") trail the count.
+ *  Reduced-motion sessions get the final value immediately. */
+function MetricValue({ value }: { value: string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const [display, setDisplay] = useState(value)
+
+  useEffect(() => {
+    const node = ref.current
+    if (!node) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const match = value.match(/^([\d,]+)([\s\S]*)$/)
+    if (!match) return
+    const target = parseInt(match[1].replace(/,/g, ''), 10)
+    if (!Number.isFinite(target) || target <= 0) return
+    const suffix = match[2]
+    const grouped = match[1].includes(',')
+    const format = (n: number) =>
+      (grouped ? Math.round(n).toLocaleString('en-US') : String(Math.round(n))) + suffix
+
+    setDisplay(format(0))
+    let frame = 0
+    const duration = 1400
+    let startTime = 0
+    const step = (now: number) => {
+      if (!startTime) startTime = now
+      const t = Math.min((now - startTime) / duration, 1)
+      const eased = 1 - Math.pow(1 - t, 3)
+      setDisplay(format(target * eased))
+      if (t < 1) frame = requestAnimationFrame(step)
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          observer.disconnect()
+          frame = requestAnimationFrame(step)
+        }
+      },
+      { threshold: 0.6 },
+    )
+    observer.observe(node)
+    return () => {
+      observer.disconnect()
+      cancelAnimationFrame(frame)
+    }
+  }, [value])
+
+  return (
+    <span ref={ref} className="work-story-metric-value">
+      {display}
+    </span>
+  )
+}
+
 /**
  * Presentational view of a single case study. The structured narrative is
  * always rendered (no disclosure) — the card's expanded reading panel is
@@ -111,6 +165,16 @@ export default function WorkStoryView({
               <section className="work-story-section">
                 <h4 className="work-story-section-heading">Outcome</h4>
                 <p className="work-story-outcome">{story.outcome}</p>
+                {story.metrics && story.metrics.length > 0 && (
+                  <ul className="work-story-metrics">
+                    {story.metrics.map((metric) => (
+                      <li key={metric.label} className="work-story-metric">
+                        <MetricValue value={metric.value} />
+                        <span className="work-story-metric-label">{metric.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {story.outcomeParagraphs?.map((paragraph, i) => (
                   <p key={i} className="work-story-section-copy">
                     {paragraph}
@@ -308,7 +372,14 @@ function InlineMedia({
 }) {
   if (item.kind === 'image') {
     return (
-      <figure className="work-inline-media work-inline-media--image">
+      <figure
+        className="work-inline-media work-inline-media--image"
+        style={
+          item.inlineWidth
+            ? ({ '--inline-width': `${item.inlineWidth}%` } as React.CSSProperties)
+            : undefined
+        }
+      >
         <button
           type="button"
           className="work-inline-media-button"

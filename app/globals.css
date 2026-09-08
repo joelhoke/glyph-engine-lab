@@ -2153,6 +2153,35 @@ a.experience-nav-button {
   padding-left: 0.9rem;
 }
 
+/* Outcome stat block: headline scale metrics as large numerals. */
+.work-story-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 1rem;
+  margin: 0.4rem 0 0.2rem;
+  padding: 0;
+  list-style: none;
+}
+
+.work-story-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.work-story-metric-value {
+  font-size: 2rem;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--color-accent-vivid);
+}
+
+.work-story-metric-label {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
 /* Related links: always the final story content. */
 .work-story-related {
   display: flex;
@@ -2233,20 +2262,15 @@ a.experience-nav-button {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  /* Scrubbed expansion narrows inline figures toward 40% of the content
-     width on desktop (full width while compact); mobile stays full width. */
+  /* Inline figures hold the full content width at every expansion state,
+     unless the media entry sets an --inline-width percent. */
+  width: 100%;
   margin-inline: auto;
 }
 
 @media (min-width: 761px) {
-  .work-inline-media--image {
-    width: calc(100% - 60% * var(--work-expansion, 0));
-  }
-}
-
-@media (max-width: 760px) {
-  .work-inline-media--image {
-    width: 100%;
+  .work-inline-media {
+    width: var(--inline-width, 100%);
   }
 }
 

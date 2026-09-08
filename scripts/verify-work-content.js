@@ -289,7 +289,11 @@ assert(
 )
 assert(
   !!compensationProject &&
-    JSON.stringify(compensationProject.story.details ?? []).includes('220,000'),
+    JSON.stringify({
+      details: compensationProject.story.details ?? [],
+      metrics: compensationProject.story.metrics ?? [],
+      outcome: compensationProject.story.outcome,
+    }).includes('220,000'),
   'global-compensation story keeps the 220,000-plus-user public context',
 )
 
@@ -305,6 +309,15 @@ for (const story of WORK_STORIES) {
   assert(
     challengeAt >= 0 && approachAt > challengeAt && contributionsAt > approachAt,
     `${story.id}: narrative follows Challenge → Approach → Contributions after the Outcome`,
+  )
+  // headline scale metrics: every public story surfaces 1–3 stat-block
+  // metrics; display data, excluded from the narrative word budget below
+  const metrics = story.metrics ?? []
+  assert(
+    metrics.length >= 1 &&
+      metrics.length <= 3 &&
+      metrics.every((m) => m.value.trim().length > 0 && m.label.trim().length > 0),
+    `${story.id}: public story defines 1–3 headline metrics with non-empty value and label`,
   )
   const parts = [story.outcome, ...(story.outcomeParagraphs ?? [])]
   for (const section of story.details ?? []) {

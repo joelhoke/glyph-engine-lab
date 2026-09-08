@@ -494,8 +494,8 @@ assert(
   'globals.css consumes the scrubbed --work-expansion custom property',
 )
 assert(
-  globalsCss.includes('calc(100% - 60% * var(--work-expansion, 0))'),
-  'desktop inline images scrub toward 40% of the content width',
+  !globalsCss.includes('var(--work-expansion, 0))'),
+  'inline images no longer scrub width with expansion (full width at every state)',
 )
 assert(
   !globalsCss.includes('.work-experience--expanded'),
