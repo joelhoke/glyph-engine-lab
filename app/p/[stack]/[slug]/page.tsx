@@ -1,9 +1,7 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { STACKS, findPrototype, findStack } from '../../../../functions/lib/prototypesManifest'
-import GalleryHeader from '../../../../components/gallery/GalleryHeader'
-import styles from '../../../../components/gallery/gallery.module.css'
+import HostedPrototypeViewer from '../../../../components/gallery/HostedPrototypeViewer'
 
 type ViewerPageProps = {
   params: { stack: string; slug: string }
@@ -44,22 +42,11 @@ export default function ViewerPage({ params }: ViewerPageProps) {
   if (!prototype) notFound()
 
   return (
-    <div className={styles.shell}>
-      <GalleryHeader />
-      <main id="main-content" className={styles.viewerMain}>
-        <div className={styles.viewerBar}>
-          <h1 className={styles.viewerTitle}>{prototype.title}</h1>
-          <Link href={`/p/${stack.slug}`} className={styles.backLink}>
-            ← Back to options
-          </Link>
-        </div>
-        <iframe
-          className={styles.viewerFrame}
-          src={`/p/${stack.slug}/${prototype.slug}/index.html`}
-          sandbox="allow-scripts allow-same-origin"
-          title={`${prototype.title} — interactive prototype`}
-        />
-      </main>
-    </div>
+    <HostedPrototypeViewer
+      title={`${prototype.title} — interactive prototype`}
+      src={`/p/${stack.slug}/${prototype.slug}/index.html`}
+      backHref={`/p/${stack.slug}`}
+      backLabel="Back to options"
+    />
   )
 }

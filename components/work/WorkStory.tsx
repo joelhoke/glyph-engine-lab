@@ -1,9 +1,9 @@
 'use client'
 
-import { RefObject, useRef, useState } from 'react'
+import { RefObject, useEffect, useRef, useState } from 'react'
 import { getWorkMedia, WorkMedia, WorkStory } from '../../content/work'
 import { AnalyticsEvent, outboundHost } from '../../engine/analytics'
-import WorkMediaLightbox from './WorkMediaLightbox'
+import WorkMediaLightbox, { CaptionActionLink } from './WorkMediaLightbox'
 
 type WorkStoryProps = {
   story: WorkStory
@@ -39,7 +39,10 @@ export default function WorkStoryView({
   const media = story.access === 'public' ? (story.media ?? []) : []
   const details = story.access === 'public' ? (story.details ?? []) : []
   // Media placed inline in the narrative never repeats as a gallery thumb.
-  const inlineIds = new Set(details.flatMap((section) => section.mediaIds ?? []))
+  const inlineIds = new Set([
+    ...(story.outcomeMediaIds ?? []),
+    ...details.flatMap((section) => section.mediaIds ?? []),
+  ])
   const galleryMedia = media.filter((entry) => !inlineIds.has(entry.id))
   const previewMedia = galleryMedia.slice(0, PREVIEW_THUMB_COUNT)
 
@@ -113,6 +116,16 @@ export default function WorkStoryView({
                     {paragraph}
                   </p>
                 ))}
+                {story.outcomeMediaIds?.map((mediaId) => {
+                  const entry = getWorkMedia(story, mediaId)
+                  return entry ? (
+                    <InlineMedia
+                      key={mediaId}
+                      item={entry}
+                      onOpenImage={(trigger) => openInlineLightbox(mediaId, trigger)}
+                    />
+                  ) : null
+                })}
               </section>
               {details.map((section) => (
                 <section key={section.heading} className="work-story-section">
@@ -235,7 +248,7 @@ export default function WorkStoryView({
   )
 }
 
-/** Preview tile: image thumbnail, video poster, or embed play tile. */
+/** Preview tile: image thumbnail, video poster, viewer poster, or embed play tile. */
 function GalleryThumb({
   item,
   onOpen,
@@ -246,7 +259,9 @@ function GalleryThumb({
   const label =
     item.kind === 'embed'
       ? `Play ${item.title}`
-      : `View ${item.caption ?? item.alt}`
+      : item.kind === 'viewer'
+        ? `View interactive 3D model: ${item.caption ?? item.alt}`
+        : `View ${item.caption ?? item.alt}`
   return (
     <button
       type="button"
@@ -267,6 +282,16 @@ function GalleryThumb({
       {item.kind === 'video' && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={item.poster} width={item.width} height={item.height} alt="" loading="lazy" />
+      )}
+      {item.kind === 'viewer' && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={item.poster.src}
+          width={item.poster.width}
+          height={item.poster.height}
+          alt=""
+          loading="lazy"
+        />
       )}
       {item.kind === 'embed' && <span aria-hidden="true">▶</span>}
     </button>
@@ -299,7 +324,57 @@ function InlineMedia({
             loading="lazy"
           />
         </button>
-        {item.caption && <figcaption>{item.caption}</figcaption>}
+        {(item.caption || item.captionAction) && (
+          <figcaption>
+            {item.caption}
+            {item.captionAction && (
+              <>
+                {' '}
+                <CaptionActionLink action={item.captionAction} />
+              </>
+            )}
+          </figcaption>
+        )}
+      </figure>
+    )
+  }
+  if (item.kind === 'viewer') {
+    if (item.inlinePlayback === 'live') {
+      return <LiveInlineViewer item={item} />
+    }
+    // Interactive 3D viewer: poster figure like an image; the iframe loads
+    // only inside the lightbox. The pill marks the poster as orbitable.
+    return (
+      <figure className="work-inline-media work-inline-media--image">
+        <button
+          type="button"
+          className="work-inline-media-button"
+          onClick={(event) => onOpenImage(event.currentTarget)}
+          aria-label={`View interactive 3D model: ${item.caption ?? item.alt} (opens a viewer you can drag to orbit)`}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={item.poster.src}
+            width={item.poster.width}
+            height={item.poster.height}
+            alt={item.alt}
+            loading="lazy"
+          />
+          <span className="work-inline-media-hint" aria-hidden="true">
+            3D — drag to orbit
+          </span>
+        </button>
+        {(item.caption || item.captionAction) && (
+          <figcaption>
+            {item.caption}
+            {item.captionAction && (
+              <>
+                {' '}
+                <CaptionActionLink action={item.captionAction} />
+              </>
+            )}
+          </figcaption>
+        )}
       </figure>
     )
   }
@@ -323,11 +398,17 @@ function InlineMedia({
             <track kind="captions" src={item.captionsSrc} label="English captions" default />
           )}
         </video>
-        {(item.caption || item.transcript) && (
+        {(item.caption || item.transcript || item.captionAction) && (
           <figcaption>
             {item.caption}
             {item.transcript && (
               <span className="work-inline-transcript"> Transcript: {item.transcript}</span>
+            )}
+            {item.captionAction && (
+              <>
+                {' '}
+                <CaptionActionLink action={item.captionAction} />
+              </>
             )}
           </figcaption>
         )}
@@ -335,6 +416,51 @@ function InlineMedia({
     )
   }
   return <InlineEmbed item={item} />
+}
+
+function LiveInlineViewer({
+  item,
+}: {
+  item: Extract<WorkMedia, { kind: 'viewer' }>
+}) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null)
+
+  useEffect(() => {
+    const iframe = iframeRef.current
+    if (!iframe) return
+    // Reduced motion: swap to the static single-frame mode. Done post-mount
+    // (not at render) so the static export's prerendered markup hydrates
+    // without a mismatch.
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      iframe.src = `${item.src}?static=1&inline=1`
+    }
+  }, [item.src])
+
+  return (
+    <figure className="work-inline-media work-inline-media--live-viewer">
+      <iframe
+        ref={iframeRef}
+        className="work-inline-live-viewer"
+        src={`${item.src}?inline=1`}
+        title={item.alt}
+        width={item.width}
+        height={item.height}
+        tabIndex={-1}
+      />
+      {/* Whole-figure click-through to the full-screen route; the pill is the
+          visible affordance. The iframe is pointer-events:none so it never
+          traps the click or the page scroll. */}
+      <a
+        className="work-inline-media-open"
+        href="/work/digie-award"
+        aria-label={`Open ${item.caption ?? item.alt} in the full-screen 3D viewer`}
+      >
+        <span className="work-inline-media-fullscreen" aria-hidden="true">
+          Open full screen ↗
+        </span>
+      </a>
+    </figure>
+  )
 }
 
 function InlineEmbed({ item }: { item: Extract<WorkMedia, { kind: 'embed' }> }) {

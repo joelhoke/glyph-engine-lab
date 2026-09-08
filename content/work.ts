@@ -97,7 +97,30 @@ export type WorkMediaEmbed = {
   caption?: string
 }
 
-export type WorkMedia = WorkMediaImage | WorkMediaVideo | WorkMediaEmbed
+/** Self-hosted interactive viewer (e.g. a three.js scene under
+ *  public/assets/work/) — a poster thumbnail inline and in the gallery; the
+ *  same-origin iframe loads only when the visitor opens it in the lightbox.
+ *  Reduced-motion sessions get the viewer's `?static=1` single-frame mode. */
+export type WorkMediaViewer = {
+  kind: 'viewer'
+  id: string
+  /** Same-origin iframe URL (the viewer's embed page). */
+  src: string
+  /** Poster frame shown inline and as the gallery tile (required). */
+  poster: { src: string; width: number; height: number }
+  /** Lightbox stage aspect ratio (iframe width/height attributes). */
+  width: number
+  height: number
+  alt: string
+  caption?: string
+  /** Render the live viewer inline (autonomous motion, inline framing); its
+   *  caption remains exclusive to the full-screen route. */
+  inlinePlayback?: 'live'
+  /** Optional action link rendered on the caption lines (inline + lightbox). */
+  captionAction?: { href: string; label: string }
+}
+
+export type WorkMedia = WorkMediaImage | WorkMediaVideo | WorkMediaEmbed | WorkMediaViewer
 
 export type WorkStoryAttachment = {
   label: string
@@ -133,6 +156,9 @@ export type WorkStory = {
   /** Optional additional outcome narrative, rendered after `outcome` in the
    *  case study's opening Outcome section. */
   outcomeParagraphs?: string[]
+  /** Media rendered directly after the Outcome copy, before the details
+   *  sections. */
+  outcomeMediaIds?: string[]
   /** External references; may be empty. */
   links: WorkStoryLink[]
   /** Public stories render fully; protected stories show only the teaser. */
@@ -176,6 +202,7 @@ export const WORK_STORIES: WorkStory[] = [
       'Microsoft · cross-functional team across design, product management, research, and engineering · 2025–2026',
     outcome:
       'Two agent-integrated operational dashboards that synthesized information spread across 48+ Power BI dashboards and SharePoint folders — and a foundation for an operational ecosystem of tools serving teams domestically and internationally.',
+    outcomeMediaIds: ['digie-award-3d'],
     links: [
       {
         label: 'Realcomm IBcon 2026 Digie award winners announcement',
@@ -212,23 +239,38 @@ export const WORK_STORIES: WorkStory[] = [
           'Live Campus UX and strategy.',
           'Shared architecture supporting the option of broad ecosystem development across operational tooling.',
         ],
-        mediaIds: ['realcomm-keynote'],
+        mediaIds: ['realcomm-highlights'],
       },
     ],
     media: [
       {
         kind: 'video',
-        id: 'realcomm-keynote',
-        src: '/assets/work/RealComm-Keynote.mp4',
+        id: 'realcomm-highlights',
+        src: '/assets/work/RealComm-Highlights.mp4',
         // HEVC primary; H.264 fallback for browsers without HEVC decode.
-        fallbackSrc: '/assets/work/RealComm-Keynote-h264.mp4',
+        fallbackSrc: '/assets/work/RealComm-Highlights-h264.mp4',
         width: 1920,
         height: 1080,
-        alt: 'Excerpt from the Realcomm conference keynote “Microsoft’s AI Frontier Transformation” — a speaker on stage with the keynote title slide behind him.',
-        caption: 'An excerpt from Microsoft’s RealComm 2026 Keynote presentation, which I supported by developing slide content while collaborating on the strategic story and vision. This work led to Microsoft winning the 2026 Digie award for "Most Intelligent Corporate Headquarters".',
-        poster: '/assets/work/RealComm-Keynote-poster.jpg',
-        // TODO: replace with the excerpt's spoken transcript before launch.
-        transcript: 'Transcript for this excerpt is being prepared.',
+        alt: 'Highlights from Microsoft’s RealComm 2026 keynote — the stage screen shows campus-scale stats and the Live Campus Agent and Aura products built on Building Orchestrator.',
+        caption: 'Highlights from Microsoft’s RealComm 2026 keynote presentation, which I supported by developing slide content while collaborating on the strategic story and vision. This work led to Microsoft winning the 2026 Digie award for "Most Intelligent Corporate Headquarters".',
+        poster: '/assets/work/RealComm-Highlights-poster.jpg',
+        // TODO: replace with the video's spoken transcript before launch.
+        transcript: 'Transcript for this video is being prepared.',
+      },
+      {
+        kind: 'viewer',
+        id: 'digie-award-3d',
+        src: '/assets/work/digie-award/embed.html',
+        poster: { src: '/assets/work/digie-award-poster.webp', width: 1600, height: 900 },
+        width: 1600,
+        height: 900,
+        alt: 'Interactive 3D model of the 2026 Digie Award — a faceted crystal trophy etched with the IBCon logo and “Most Intelligent Corporate Campus”, on a glowing blue acrylic base.',
+        caption: 'The 2026 Digie Award, modeled in three.js',
+        inlinePlayback: 'live',
+        captionAction: {
+          href: 'https://www.realcomm.com/realcomm-2026/digies/winners/',
+          label: 'RealComm Digie Awards 2026 winners',
+        },
       },
     ],
     // Microsoft project: the field takes the sampled brand colors straight

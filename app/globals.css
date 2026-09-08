@@ -1798,14 +1798,18 @@ a.experience-nav-button {
   }
 }
 
-/* Readable body text keeps a 44–46rem measure in every state. */
+/* Readable body text keeps a generous-but-bounded measure in every state —
+   wide enough that the card doesn't carry a dead column on desktop, narrow
+   enough that lines stay trackable. The meta block joins the measure so the
+   Role/Context rows wrap at the same right edge as the prose. */
 .work-story-thesis,
 .work-story-outcome,
 .work-story-section-copy,
 .work-story-section-list,
 .work-story-section-callout,
+.work-story-meta,
 .work-mode-intro {
-  max-width: 45rem;
+  max-width: 64rem;
 }
 
 /* The scrolling viewport: carries the padding and content layout the card
@@ -2247,8 +2251,10 @@ a.experience-nav-button {
 }
 
 /* Inline images open the lightbox — the button is the zoom target; it shares
-   the figure's width and centering. */
+   the figure's width and centering. position: relative anchors the viewer
+   hint pill (.work-inline-media-hint). */
 .work-inline-media-button {
+  position: relative;
   padding: 0;
   border: none;
   background: none;
@@ -2256,6 +2262,23 @@ a.experience-nav-button {
   display: block;
   width: 100%;
   max-width: 100%;
+}
+
+/* Interactive-viewer affordance: a small pill over the poster marking it as
+   an orbitable 3D model that opens in the lightbox. Non-interactive — the
+   button underneath owns the click. */
+.work-inline-media-hint {
+  position: absolute;
+  right: 0.6rem;
+  bottom: 0.6rem;
+  font-size: 0.72rem;
+  line-height: 1;
+  color: var(--color-text-muted);
+  background: var(--color-surface-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.4rem 0.65rem;
+  pointer-events: none;
 }
 
 .work-inline-media img,
@@ -2270,6 +2293,64 @@ a.experience-nav-button {
   font-size: 0.78rem;
   line-height: 1.6;
   color: var(--color-text-faint);
+}
+
+.work-inline-media--live-viewer {
+  position: relative;
+  width: 100%;
+  /* Statement band: the award dominates a wide, short dark strip spanning
+     the full content column (no caption inline — it lives on the
+     full-screen route). */
+  max-width: none;
+  overflow: hidden;
+  border: 1px solid var(--color-input-border);
+  border-radius: 8px;
+  background: #0b0d12;
+}
+
+.work-inline-live-viewer {
+  display: block;
+  width: 100%;
+  /* height: auto — the HTML height attribute would otherwise pin the box and
+     defeat the aspect-ratio below. */
+  height: auto;
+  aspect-ratio: 21 / 9;
+  border: none;
+  /* The iframe never owns input: the overlay link (.work-inline-media-open)
+     takes the click-through, and page scroll passes over it. */
+  pointer-events: none;
+}
+
+/* Whole-figure click-through to the full-screen viewer route; the visible
+   affordance is the pill at its bottom-right corner. */
+.work-inline-media-open {
+  position: absolute;
+  inset: 0;
+  text-decoration: none;
+}
+
+.work-inline-media-fullscreen {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  font: inherit;
+  font-size: 0.75rem;
+  color: #f5f7fb;
+  background: rgba(8, 12, 18, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  padding: 0.5rem 0.75rem;
+}
+
+.work-inline-media-open:hover .work-inline-media-fullscreen,
+.work-inline-media-open:focus-visible .work-inline-media-fullscreen {
+  border-color: #8abaff;
+  color: #ffffff;
+}
+
+.work-inline-media-open:focus-visible {
+  outline: 2px solid #8abaff;
+  outline-offset: -2px;
 }
 
 .work-inline-transcript {

@@ -53,6 +53,8 @@ range and the rhythm.
 
 Each section may attach: paragraphs, bullet lists, a callout line,
 attachments (label + URL), and media references (media IDs, see below).
+To place media directly under the standardized Outcome section, use the
+story-level `outcomeMediaIds` list.
 
 ## Links
 
@@ -73,17 +75,29 @@ keeps its own position.
 ## Media (public stories only — one block per asset)
 
 - **Media ID** (unique within the story):
-- **Type** (`image` | `video` | `embed`):
+- **Type** (`image` | `video` | `embed` | `viewer`):
 - **Source** (path under `public/assets/work/` for images/video; images must
   be AVIF, WebP, JPEG, or PNG; hosted video MP4 or WebM):
 - **Thumbnail** (optional smaller preview path):
 - **Dimensions** (width × height, required for images and video):
 - **Alt text** (required, meaningful):
 - **Caption** (optional):
+- **Caption action** (optional label + href rendered on the caption line;
+  external https hrefs open in a new tab with the ↗ marker, internal hrefs
+  stay plain):
 - **Poster** (required for hosted video):
 - **Captions / transcript** (required for hosted video — WebVTT path and/or
   transcript text):
 - **Embed** (for `embed` type: provider `youtube` | `vimeo`, video ID, title —
   the iframe loads only after the visitor chooses to play):
+- **Viewer** (for `viewer` type: same-origin iframe `src` of a self-hosted
+  interactive page, e.g. a three.js scene built into
+  `public/assets/work/<name>/`; a poster with explicit dimensions is required
+  and renders inline + as the gallery tile; stage width × height sets the
+  lightbox aspect; the viewer must support a `?static=1` single-frame mode,
+  which reduced-motion sessions get automatically. Set `inlinePlayback:
+  'live'` to render the running viewer inline (autonomous motion, inline
+  `?inline=1` framing, whole-figure click-through to its full-screen route)
+  instead of the poster):
 - **Confidentiality** (must be `public-approved` to live in this repo;
   anything else goes through the protected publishing flow):

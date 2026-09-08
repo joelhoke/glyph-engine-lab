@@ -78,7 +78,7 @@ export function writeConsent(
 
 export type ExperienceKey = 'intro' | 'work' | 'vibe' | 'collaborate'
 export type AmbientMode = 'off' | 'weather' | 'matrix'
-export type MediaKind = 'image' | 'video' | 'embed'
+export type MediaKind = 'image' | 'video' | 'embed' | 'viewer'
 export type SourceChange = 'builtin' | 'preset' | 'upload'
 export type CreationSaveKind = 'auto' | 'image' | 'clip'
 export type CreationSaveQualifier = 'steps' | 'tools' | 'elements'

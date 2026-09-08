@@ -182,6 +182,14 @@ labels.
   Microsoft `#f25022 #7fba00 #00a4ef #ffb900`).
 - **Case-study media**: AVIF/WebP/JPEG/PNG images and MP4/WebM video with
   posters; lazy-loaded, explicit dimensions, thumbnails 96×64 tiles.
+  Self-hosted interactive viewers (e.g. a three.js scene, media kind
+  `viewer`) ship as a static build under `public/assets/work/<name>/` with a
+  required WebP poster (≤1600px, metadata-stripped, explicit dimensions) for
+  the inline figure and gallery tile; the same-origin iframe loads only in
+  the lightbox, and the viewer must render a static single frame via
+  `?static=1` for reduced-motion sessions. `inlinePlayback: 'live'` mounts
+  the running viewer inline (its `?inline=1` framing) with a whole-figure
+  click-through to the full-screen route.
 - **Icons**: inline SVG only (`components/icons/`), `stroke="currentColor"`,
   1.5px stroke, round caps — no icon font, no emoji in UI chrome.
 

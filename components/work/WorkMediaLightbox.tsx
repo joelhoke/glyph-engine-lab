@@ -173,8 +173,22 @@ export default function WorkMediaLightbox({
   )
 }
 
+/** Caption action link: external hrefs open in a new tab with the ↗ marker
+ *  (the outbound-link pattern from WorkStory / style guide §6); internal
+ *  hrefs (e.g. CreationsGallery's '/?memento=…#vibe') stay plain same-tab. */
+export function CaptionActionLink({ action }: { action: { href: string; label: string } }) {
+  const external = /^https?:\/\//.test(action.href)
+  if (!external) return <a href={action.href}>{action.label}</a>
+  return (
+    <a href={action.href} target="_blank" rel="noopener noreferrer">
+      {action.label}
+      <span aria-hidden="true"> ↗</span>
+    </a>
+  )
+}
+
 function CaptionLine({ item }: { item: WorkMedia }) {
-  // Only image/video media carry the optional caption action link.
+  // Image/video/viewer media carry the optional caption action link.
   const action = 'captionAction' in item ? item.captionAction : undefined
   if (!item.caption && !action) return null
   return (
@@ -183,7 +197,7 @@ function CaptionLine({ item }: { item: WorkMedia }) {
       {action ? (
         <>
           {' '}
-          <a href={action.href}>{action.label}</a>
+          <CaptionActionLink action={action} />
         </>
       ) : null}
     </p>
@@ -233,6 +247,24 @@ function LightboxItem({
           <track kind="captions" src={item.captionsSrc} label="English captions" default />
         )}
       </video>
+    )
+  }
+
+  if (item.kind === 'viewer') {
+    // Self-hosted interactive viewer: no facade — opening the lightbox IS the
+    // explicit interaction. Reduced-motion sessions get the viewer's static
+    // single-frame mode (?static=1) instead of the autonomous sway loop.
+    const reducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    return (
+      <iframe
+        className="work-lightbox-embed"
+        src={reducedMotion ? `${item.src}?static=1` : item.src}
+        title={item.alt}
+        width={item.width}
+        height={item.height}
+      />
     )
   }
 

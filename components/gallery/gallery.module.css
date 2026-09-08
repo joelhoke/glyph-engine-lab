@@ -357,6 +357,14 @@
   background: var(--color-surface);
 }
 
+.viewerCaption {
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--color-text-faint);
+  text-align: center;
+  margin: 0;
+}
+
 /* --- Private-stack placeholder (Phase 1: password/magic-link gate UI) --------- */
 
 .gate {
