@@ -9,6 +9,7 @@ type HostedPrototypeViewerProps = {
   backHref: string
   backLabel: string
   caption?: ReactNode
+  hideMobileFooter?: boolean
 }
 
 /** Shared full-window shell for gallery prototypes and work viewers. */
@@ -18,10 +19,11 @@ export default function HostedPrototypeViewer({
   backHref,
   backLabel,
   caption,
+  hideMobileFooter = false,
 }: HostedPrototypeViewerProps) {
   return (
     <div className={styles.shell}>
-      <GalleryHeader />
+      <GalleryHeader showMobileFooter={!hideMobileFooter} />
       <main id="main-content" className={styles.viewerMain}>
         <div className={styles.viewerBar}>
           <h1 className={styles.viewerTitle}>{title}</h1>

@@ -21,7 +21,7 @@ const NAV_ITEMS: { href: string; label: string; current?: boolean }[] = [
  * On phones (≤560px) the recruiter links move to a fixed bottom bar — the
  * header can't fit them — leaving the lockup and tabs on one row.
  */
-export default function GalleryHeader() {
+export default function GalleryHeader({ showMobileFooter = true }: { showMobileFooter?: boolean }) {
   const recruiterLinks = (
     <>
       <a href={RECRUITER_LINKS.resume.url} target="_blank" rel="noopener noreferrer">
@@ -64,12 +64,14 @@ export default function GalleryHeader() {
         </nav>
         <div className="site-header-links">{recruiterLinks}</div>
       </header>
-      {/* Phone-only bottom bar: the recruiter links that don't fit the
-          header. Hidden on wider viewports (display:none removes it from
-          focus order and AT, so the header copy is the only one). */}
-      <footer className="site-footer">
-        <div className="site-footer-links">{recruiterLinks}</div>
-      </footer>
+      {showMobileFooter ? (
+        /* Phone-only bottom bar: the recruiter links that don't fit the
+            header. Hidden on wider viewports (display:none removes it from
+            focus order and AT, so the header copy is the only one). */
+        <footer className="site-footer">
+          <div className="site-footer-links">{recruiterLinks}</div>
+        </footer>
+      ) : null}
     </>
   )
 }

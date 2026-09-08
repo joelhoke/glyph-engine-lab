@@ -13,6 +13,7 @@ export default function DigieAwardViewerPage() {
       src="/assets/work/digie-award/embed.html"
       backHref="/#work/microsoft-global-operations"
       backLabel="Back to case study"
+      hideMobileFooter
       caption={
         <>
           The 2026 Digie Award, modeled in three.js —{' '}
