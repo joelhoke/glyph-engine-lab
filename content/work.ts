@@ -218,7 +218,7 @@ export const WORK_STORIES: WorkStory[] = [
       'Two agent-integrated operational dashboards that synthesized information spread across 48+ Power BI dashboards and SharePoint folders — and a foundation for an operational ecosystem of tools serving teams domestically and internationally.',
     metrics: [
       { value: '48+', label: 'dashboards and folders synthesized into two tools' },
-      { value: '100s/hr', label: 'alarms and faults across global campuses' },
+      { value: '1500+', label: 'hours saved triaging and onboarding equipment' },
       { value: '2026', label: 'Digie award — Most Intelligent Corporate Headquarters' },
     ],
     outcomeMediaIds: ['digie-award-3d'],
