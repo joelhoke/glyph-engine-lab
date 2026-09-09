@@ -1670,6 +1670,13 @@ function SceneCanvasInternal(
   // back to ~0 means the landing reveal is (re)starting, so the population
   // re-seeds into the rise pose.
   const setLandingLogoScale = (scale: number) => {
+    // Landing-intro stream only. Every other mode's reveal self-advances from
+    // the frame clock — but the intro RAF loop keeps ticking in the
+    // background for its full duration (restored sessions, entering Work
+    // mid-intro), and its pushes share this ref. An unguarded push stomps an
+    // in-flight mode reveal back to 1, turning the next field swap into a
+    // full-opacity spring-morph.
+    if (experienceRef.current !== 'intro') return
     const clamped = clamp(scale, 0, 1)
     if (
       clamped <= LANDING_SCALE_RESTART_EPSILON &&
@@ -2770,13 +2777,22 @@ function SceneCanvasInternal(
   }
 
   // Settled bookkeeping wrapper: every exit (success, superseded, keep-last,
-  // fallback, throw) marks the current request settled, so the reveal hold
-  // can tell "a load is in flight" as request !== settled.
+  // fallback, throw) settles the request THIS call owns — and only if it is
+  // still the latest. A superseded load resolving must NOT mark its in-flight
+  // replacement settled: that would release the reveal hold (request ===
+  // settled) while the new field is still decoding, replaying the old field's
+  // reveal and then spring-morphing it shape-to-shape when the new field
+  // lands at progress 1 (no pose re-seed past progress 1).
   const buildSvgTargets = async () => {
+    // The id inner will own: it increments the counter synchronously before
+    // its first await, so no other request can interleave.
+    const requestId = svgLoadRequestRef.current + 1
     try {
       await buildSvgTargetsInner()
     } finally {
-      svgLoadSettledRef.current = svgLoadRequestRef.current
+      if (requestId === svgLoadRequestRef.current) {
+        svgLoadSettledRef.current = requestId
+      }
     }
   }
 

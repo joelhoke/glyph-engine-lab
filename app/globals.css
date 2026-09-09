@@ -2039,10 +2039,13 @@ a.experience-nav-button {
 
 /* Portrait desktop displays have substantially more vertical runway than the
    horizontal monitor layout. Give that composition its own calibrated card
-   lift while keeping the glyph field on its separate portrait drop. */
+   lift while keeping the glyph field on its separate portrait drop. The card
+   lift ramps at half the viewport's growth (cap reached ~2020dvh) so
+   mid-tall windows keep the card low against the glyph field instead of
+   floating it up into the hero; the very-tall composition is unchanged. */
 @media (min-width: 761px) and (min-height: 1200px) and (orientation: portrait) {
   .work-layout {
-    --work-large-screen-card-shift: clamp(0rem, calc(131.340825dvh - 73.8792140625rem), 35.02422rem);
+    --work-large-screen-card-shift: clamp(0rem, calc(50dvh - 28.125rem), 35.02422rem);
     --work-large-screen-glyph-shift: clamp(0rem, calc(62.37dvh - 35.083125rem), 16.632rem);
   }
 }
