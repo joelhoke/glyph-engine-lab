@@ -158,7 +158,7 @@ assert(
   !!employeeProject &&
     Array.isArray(employeeProject.story.media) &&
     employeeProject.story.media.length === 3 &&
-    employeeProject.story.media[0].src === '/assets/work/EmployeeExperience-MyHub+Viva.png',
+    employeeProject.story.media[0].src === '/assets/work/EmployeeExperience-MyHub+Viva.webp',
   'employee-experience story keeps the MyHub+Viva composite and adds two self-hosted images',
 )
 assert(
@@ -204,7 +204,7 @@ assert(
   'employee-experience story keeps the junior → senior designer progression',
 )
 
-// global-operations editorial facts + Digie link + inline keynote beat
+// global-operations editorial facts + Digie link + inline highlights beat
 const operationsProject = WORK_SLIDES.find(
   (slide) => slide.kind === 'project' && slide.story.id === 'microsoft-global-operations',
 )
@@ -225,10 +225,56 @@ for (const fact of ['48+', '8–12', 'Digie', 'Building Orchestrator', 'Live Cam
 assert(
   !!operationsProject &&
     (operationsProject.story.details ?? []).some((d) =>
-      (d.mediaIds ?? []).includes('realcomm-keynote'),
+      (d.mediaIds ?? []).includes('realcomm-highlights'),
     ),
-  'global-operations story places the keynote video inline in the narrative',
+  'global-operations story places the highlights video inline in the narrative',
 )
+
+// global-operations: the Digie award 3D viewer — entry shape, Outcome
+// placement, scroll-scrub declaration, and on-disk viewer/poster assets
+{
+  const operationsStory = operationsProject?.story
+  const viewer = (operationsStory?.media ?? []).find((m) => m.id === 'digie-award-3d')
+  assert(
+    !!viewer && viewer.kind === 'viewer' && viewer.src === '/assets/work/digie-award/embed.html',
+    'global-operations story carries the digie-award-3d viewer entry',
+  )
+  assert(
+    operationsStory?.outcomeMediaIds?.includes('digie-award-3d'),
+    'global-operations story places the award viewer directly under Outcome',
+  )
+  assert(
+    !(operationsStory?.details ?? []).some((detail) =>
+      (detail.mediaIds ?? []).includes('digie-award-3d'),
+    ),
+    'global-operations story does not duplicate the award viewer in a detail section',
+  )
+  assert(
+    viewer?.kind === 'viewer' && viewer.inlinePlayback === 'live',
+    'award viewer declares live (autonomous) inline playback',
+  )
+  assert(
+    !!viewer &&
+      viewer.kind === 'viewer' &&
+      viewer.captionAction?.href.startsWith('https://') &&
+      viewer.captionAction.label.trim().length > 0,
+    'award viewer captionAction is a labelled https link',
+  )
+  if (viewer && viewer.kind === 'viewer') {
+    assert(
+      fs.existsSync(path.join(projectRoot, 'public', viewer.src)),
+      `viewer src exists in public/ (${viewer.src})`,
+    )
+    assert(
+      fs.existsSync(path.join(projectRoot, 'public', viewer.poster.src)),
+      `viewer poster exists in public/ (${viewer.poster.src})`,
+    )
+    assert(
+      viewer.poster.width > 0 && viewer.poster.height > 0 && viewer.width > 0 && viewer.height > 0,
+      'award viewer carries explicit poster and stage dimensions',
+    )
+  }
+}
 
 // global-compensation: primary external source + public-context scale
 const compensationProject = WORK_SLIDES.find(
@@ -243,7 +289,11 @@ assert(
 )
 assert(
   !!compensationProject &&
-    JSON.stringify(compensationProject.story.details ?? []).includes('220,000'),
+    JSON.stringify({
+      details: compensationProject.story.details ?? [],
+      metrics: compensationProject.story.metrics ?? [],
+      outcome: compensationProject.story.outcome,
+    }).includes('220,000'),
   'global-compensation story keeps the 220,000-plus-user public context',
 )
 
@@ -259,6 +309,15 @@ for (const story of WORK_STORIES) {
   assert(
     challengeAt >= 0 && approachAt > challengeAt && contributionsAt > approachAt,
     `${story.id}: narrative follows Challenge → Approach → Contributions after the Outcome`,
+  )
+  // headline scale metrics: every public story surfaces 1–3 stat-block
+  // metrics; display data, excluded from the narrative word budget below
+  const metrics = story.metrics ?? []
+  assert(
+    metrics.length >= 1 &&
+      metrics.length <= 3 &&
+      metrics.every((m) => m.value.trim().length > 0 && m.label.trim().length > 0),
+    `${story.id}: public story defines 1–3 headline metrics with non-empty value and label`,
   )
   const parts = [story.outcome, ...(story.outcomeParagraphs ?? [])]
   for (const section of story.details ?? []) {

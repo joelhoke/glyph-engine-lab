@@ -52,9 +52,15 @@ type SceneDiagnosticsSnapshot = {
   pointerActive: boolean
   pointerX: number
   pointerY: number
-  // Click/tap radial impulses (patched on pointerdown only).
+  // Click/tap interactions (patched on pointerdown only): the instant plop
+  // impulse count and the droplet ripple spawn count / live store size.
   impulseCount: number
   lastImpulseAffected: number
+  rippleCount: number
+  activeRipples: number
+  // Drag-expanded influence radius actually driving hover repel this frame
+  // (equals simParams.mouseR at rest, grown while the pointer is held).
+  effectiveMouseR: number
   // Motion system (off / organic-flow / parametric-creature) and its variant.
   motionMode: string
   motionVariant: string
@@ -136,6 +142,9 @@ const createDefaultDiagnosticsSnapshot = (): SceneDiagnosticsSnapshot => ({
   pointerY: 0,
   impulseCount: 0,
   lastImpulseAffected: 0,
+  rippleCount: 0,
+  activeRipples: 0,
+  effectiveMouseR: 0,
   motionMode: 'off',
   motionVariant: 'original',
   motionRequestedDensity: 0,

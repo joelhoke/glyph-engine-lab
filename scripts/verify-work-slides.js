@@ -280,12 +280,21 @@ assert(
   'leaving Work resets the expansion progress to compact',
 )
 assert(
-  portfolioSource.includes('deltaPx / gapRangePx()'),
-  'gap wheel input accumulates against the reported expansion range',
+  portfolioSource.includes('viewport.scrollTop += deltaPx'),
+  'gap wheel input scrolls the card content once expansion saturates',
 )
 assert(
-  portfolioSource.includes('touch.startProgress + dy / gapRangePx()'),
-  'gap touch progress is computed from the gesture start Y and start progress',
+  portfolioSource.includes('(up - scrollTop) / gapRangePx()'),
+  'gap wheel input crossing the content top contracts with the unused delta',
+)
+assert(
+  portfolioSource.includes('startScrollTop') &&
+    portfolioSource.includes('viewport.scrollTop = Math.max(0, total - range)'),
+  'gap touch maps the gesture onto progress * range + scrollTop (content scrolls past full expansion)',
+)
+assert(
+  !portfolioSource.includes('contentScrolled'),
+  'the old gap-gesture dead zone (contentScrolled early return) is gone',
 )
 
 // --- 7b. per-slide hero fit (PortfolioExperience + content/work) ------------
@@ -444,9 +453,9 @@ assert(
 
 assert(
   !workStorySource.includes('work-story-disclosure') &&
-    !workStorySource.includes('Read the case study') &&
-    !workStorySource.includes('aria-expanded'),
-  'the Read/Close disclosure is gone — details render immediately',
+    !workStorySource.includes('aria-expanded') &&
+    workStorySource.includes('work-story-read'),
+  'no Read/Close disclosure (details render immediately); the "Read the case study" button is the scroll-scrub affordance, not a disclosure',
 )
 assert(
   workStorySource.includes('inlineIds') && workStorySource.includes('galleryMedia'),
@@ -485,8 +494,8 @@ assert(
   'globals.css consumes the scrubbed --work-expansion custom property',
 )
 assert(
-  globalsCss.includes('calc(100% - 60% * var(--work-expansion, 0))'),
-  'desktop inline images scrub toward 40% of the content width',
+  !globalsCss.includes('var(--work-expansion, 0))'),
+  'inline images no longer scrub width with expansion (full width at every state)',
 )
 assert(
   !globalsCss.includes('.work-experience--expanded'),

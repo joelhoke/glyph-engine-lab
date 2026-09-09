@@ -35,6 +35,14 @@ import { ThemeName } from '../engine/theme'
 import { LANDING_SOURCE_URL } from '../engine/sceneConfig'
 import { createSeededRandom, RandomSource } from '../engine/random'
 import {
+  FIELD_REVEAL_DEFAULTS,
+  FieldRevealConfig,
+  FieldRevealMode,
+  buildStaggerDelays,
+  revealEase,
+  revealGlyphFade,
+} from '../engine/introReveal'
+import {
   isMobileViewport,
   resolveGlyphBudget,
   resolveRenderPixelRatio,
@@ -49,6 +57,14 @@ import {
 } from '../engine/glyphSize'
 import { applyRadialImpulse } from '../engine/impulse'
 import {
+  RIPPLE_DEFAULTS,
+  RippleStore,
+  applyRippleForces,
+  clampRippleConfig,
+  createRippleStore,
+  spawnRipple,
+} from '../engine/ripple'
+import {
   APPROVED_PLAYGROUND_DEFAULTS,
   PlaygroundConfig,
 } from '../engine/playgroundConfig'
@@ -62,6 +78,7 @@ import {
   AmbientField,
   AmbientCollisionGrid,
   applyAmbientRadialImpulse,
+  applyAmbientRipples,
   createAmbientCollisionGrid,
   createAmbientField,
   isHeavyWeatherPreset,
@@ -240,8 +257,8 @@ const DISABLED_PAINT_TOOL: PaintToolConfig = {
   brushDiameter: PAINT_BRUSH_DIAMETER_DEFAULT,
 }
 
-/** Landing logo scale at or below this counts as a scale-in (re)start: the
- *  glyph population snaps to the logo center so the animation grows from it. */
+/** Landing reveal progress at or below this counts as a (re)start: the glyph
+ *  population resets to the rise pose so the render-in grows from there. */
 const LANDING_SCALE_RESTART_EPSILON = 0.001
 
 /** Theme cross-fade (feature/light-dark): on a live system-theme change the
@@ -252,6 +269,16 @@ const THEME_FADE_DURATION_MS = 500
 /** Ambient scene wipe (vibe carousel): the pre-switch frame is retained as a
  *  CSS-pixel snapshot and clipped away directionally over the new scene. */
 const AMBIENT_WIPE_DURATION_MS = 650
+
+/** Click/tap "plop": the instant radial kick that accompanies a droplet
+ *  ripple spawn is this fraction of clickImpulseForce (same radius) — the
+ *  impact reads immediately while the traveling wavefront does the rest. */
+const RIPPLE_PLOP_SCALE = 0.35
+
+/** Drag influence sphere: while the pointer is held, the hover radius eases
+ *  toward mouseR × dragInfluenceMult with these exponential time constants. */
+const DRAG_EASE_IN_MS = 200
+const DRAG_EASE_OUT_MS = 250
 
 /** Weather render bucketing: rain/storm streaks and snow/blizzard flakes
  *  group by quantized alpha (and size) so style/font changes happen once per
@@ -272,6 +299,17 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 /** ease-in-out (quadratic): slow at both ends — theme fades and scene wipes. */
 const easeInOutQuad = (t: number) =>
   t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
+
+/** Weather mood-backdrop palettes per preset (colorA, colorB, base), in
+ *  preset-key order so each canvas can be rasterized lazily on first use. */
+const MESH_BG_PALETTES: Record<keyof MeshBgs, [string, string, string]> = {
+  clear: ['#DAD29C', '#B4EEFF', '#DAD29C'],
+  rain: ['#012840', '#364F59', '#1A3A4A'],
+  storm: ['#070926', '#281259', '#170E40'],
+  wind: ['#6D808C', '#BDAC89', '#94968C'],
+  fog: ['#6E6E6E', '#222222', '#454545'],
+  snow: ['#0D0D0D', '#1C2B3E', '#141C2A'],
+}
 
 function buildMeshBg(colorA: string, colorB: string, base: string, W: number, H: number) {
   const cv = document.createElement('canvas')
@@ -307,6 +345,11 @@ type SceneCanvasProps = {
   weatherRepelMult?: number
   clickImpulseRadius?: number
   clickImpulseForce?: number
+  /** Held-pointer (drag) multiplier on the hover influence radius: while
+   *  pressed, mouseR eases toward mouseR × dragInfluenceMult. 1 = no growth. */
+  dragInfluenceMult?: number
+  /** Per-mode amplitude multiplier on droplet ripples spawned by click/tap. */
+  rippleStrength?: number
   sourceLayout?: SourceLayoutConfig
   /** What the field samples its targets from (built-in mark, static image,
    *  or an animated provider). Defaults to the built-in mark. */
@@ -328,6 +371,9 @@ type SceneCanvasProps = {
    *  parent can record a unified-history transaction around it. */
   onPaintStrokeEnd?: () => void
   experience?: ExperienceMode
+  /** Per-mode field reveal shape (rise + staggered per-glyph fade,
+   *  engine/introReveal). Defaults to FIELD_REVEAL_DEFAULTS. */
+  fieldReveal?: Record<FieldRevealMode, FieldRevealConfig>
   sceneId?: string
   onDiagnosticsUpdate?: (snapshot: SceneDiagnostics) => void
   /** Dev tuning override for the adaptive quality tier; null/undefined = Auto. */
@@ -369,11 +415,16 @@ export type SceneCanvasHandle = {
   /** Restore a snapshot taken by capturePaintState: replaces the stroke
    *  history and redo stack, replays the overlay, and re-renders. */
   restorePaintState: (snapshot: PaintSnapshot) => void
-  /** Landing scale-in driver: writes the current logo scale (0–1) into a ref
-   *  the frame loop reads. Allocation-free, no React state — safe to call at
-   *  full requestAnimationFrame cadence. A (re)start at ~0 snaps every glyph
-   *  to the logo center so the scale-in originates there. */
+  /** Landing scale-in driver: writes the current reveal progress (0–1) into a
+   *  ref the frame loop reads. Allocation-free, no React state — safe to call
+   *  at full requestAnimationFrame cadence. A (re)start at ~0 snaps every
+   *  glyph to the reveal's rise pose so the render-in originates there. */
   setLandingLogoScale: (scale: number) => void
+  /** Mode-entry reveal (work/vibe/collaborate): starts a reveal pass over the
+   *  LIVE field — rise + staggered fade without snapping positions, so the
+   *  springs' cross-scene morph keeps running underneath. The frame loop
+   *  self-advances progress and parks at 1. No-op under reduced motion. */
+  beginFieldReveal: () => void
   /** Ambient scene wipe (vibe carousel): snapshot the live canvas at CSS-pixel
    *  resolution, then reveal the new scene directionally — right-to-left for
    *  'next', left-to-right for 'prev' — over AMBIENT_WIPE_DURATION_MS. The
@@ -394,6 +445,8 @@ function SceneCanvasInternal(
     weatherRepelMult = 6,
     clickImpulseRadius = 200,
     clickImpulseForce = 10,
+    dragInfluenceMult = 1.6,
+    rippleStrength = 1,
     sourceLayout,
     source,
     targetRegion = null,
@@ -403,6 +456,7 @@ function SceneCanvasInternal(
     onPaintStatusChange,
     onPaintStrokeEnd,
     experience = 'intro',
+    fieldReveal = FIELD_REVEAL_DEFAULTS,
     sceneId = 'intro',
     onDiagnosticsUpdate,
     qualityTierOverride = null,
@@ -425,9 +479,19 @@ function SceneCanvasInternal(
     capturePaintState,
     restorePaintState,
     setLandingLogoScale,
+    beginFieldReveal,
     beginAmbientWipe,
   }))
-  const meshBgsRef = useRef<MeshBgs | null>(null)
+  // Lazily filled per preset — only the active weather backdrop exists.
+  const meshBgsRef = useRef<Partial<MeshBgs> | null>(null)
+  // Per-frame background gradient cache, keyed by viewport size + colors.
+  const bgGradientRef = useRef<{
+    width: number
+    height: number
+    color1: string
+    color2: string
+    gradient: CanvasGradient
+  } | null>(null)
   const particlesRef = useRef<Particle[]>([])
   const paragraphTargetsRef = useRef<ParagraphTarget[]>([])
   const sourceCharsRef = useRef<string[]>([])
@@ -669,12 +733,40 @@ function SceneCanvasInternal(
   const experienceRef = useRef<ExperienceMode>(experience)
   const sceneIdRef = useRef(sceneId)
   const onDiagnosticsUpdateRef = useRef(onDiagnosticsUpdate)
-  // Landing scale-in (intro): the current logo scale written imperatively via
-  // setLandingLogoScale, and the centroid of the active target field the
-  // scale transform pulls every glyph target toward. Both read per frame;
-  // the centroid object is mutated in place (allocation-free).
+  // Field reveal (intro landing + mode entries): the current reveal progress
+  // written imperatively via setLandingLogoScale (landing intro stream) or
+  // self-advanced after beginFieldReveal (mode entries), and the centroid of
+  // the active target field used for the center-out/edges-in stagger. Both
+  // read per frame; the centroid object is mutated in place (allocation-free).
   const landingLogoScaleRef = useRef(1)
   const landingCentroidRef = useRef({ x: 0, y: 0 })
+  // Per-mode reveal config mirror and the per-target stagger-delay table
+  // (keyed by target index, rebuilt with the tier field or on config change).
+  const fieldRevealRef = useRef(fieldReveal)
+  const staggerDelayRef = useRef<Float32Array | null>(null)
+  const baseNormXRef = useRef<Float32Array>(new Float32Array(0))
+  const baseNormYRef = useRef<Float32Array>(new Float32Array(0))
+  // Frame clock for self-advancing mode-entry reveals.
+  const lastRevealFrameNowRef = useRef(0)
+  // The landing intro streams progress imperatively; while that stream is
+  // live (writes within this window), self-advance stays out of its way. Once
+  // the stream has parked (sequence complete), a progress reset — e.g. a
+  // return Home — self-advances like any mode entry.
+  const lastRevealStreamNowRef = useRef(0)
+  // Mode-entry reveals hold at progress 0 (fully faded out) until the fresh
+  // scene's field lands, so the reveal never plays over the outgoing scene.
+  // The grace window covers the tick between the begin call and the new
+  // scene's load starting; after that, a load actually in flight keeps the
+  // hold. Same-field transitions (no load) advance once the grace expires.
+  const revealGraceUntilRef = useRef(0)
+  // Load bookkeeping for the hold: buildSvgTargets bumps the request counter
+  // at start and records it settled at every exit, so an in-flight load is
+  // simply request !== settled.
+  const svgLoadSettledRef = useRef(0)
+  // setBaseField marks a true field-identity change; applyMotionField only
+  // re-seeds/restarts an active reveal on those — never on config-only calls,
+  // which otherwise restart the fade several times per mode switch.
+  const freshFieldPendingRef = useRef(false)
 
   // Event-driven diagnostic updates (source loads, mode switches, rebuilds)
   // are rare, so they patch both the mirror and React state directly.
@@ -695,6 +787,22 @@ function SceneCanvasInternal(
   const weatherRepelRef = useRef(weatherRepelMult)
   const clickImpulseRadiusRef = useRef(clickImpulseRadius)
   const clickImpulseForceRef = useRef(clickImpulseForce)
+  const dragInfluenceMultRef = useRef(dragInfluenceMult)
+  const rippleStrengthRef = useRef(rippleStrength)
+  // Droplet ripple pool (engine/ripple): spawned on pointerdown, force pass
+  // once per frame. Physics constants are global (RIPPLE_DEFAULTS), not
+  // per-mode; the per-mode knob is rippleStrength above.
+  const ripplesRef = useRef<RippleStore>(createRippleStore(RIPPLE_DEFAULTS.maxConcurrent))
+  const rippleConfigRef = useRef(clampRippleConfig(RIPPLE_DEFAULTS))
+  // Held-pointer state for the drag-expanded influence sphere: set on
+  // non-paint pointerdown, cleared on up/cancel/leave; dragEaseRef is the
+  // exponentially eased 0–1 amount computed once per frame.
+  const pressRef = useRef({ active: false, pointerId: -1 })
+  const dragEaseRef = useRef(0)
+  const dragEaseLastNowRef = useRef(0)
+  // The radius the hover repel and ambient tick actually use: mouseR at rest
+  // (byte-identical hover), grown by the drag ease while pressed.
+  const effectiveMouseRRef = useRef(mouseR)
 
   const [fontSize, setFontSize] = useState(defaultSceneState.fontSize)
   const [textAmount, setTextAmount] = useState(defaultSceneState.textAmount)
@@ -898,8 +1006,20 @@ function SceneCanvasInternal(
   useEffect(() => { weatherRepelRef.current = weatherRepelMult }, [weatherRepelMult])
   useEffect(() => { clickImpulseRadiusRef.current = clickImpulseRadius }, [clickImpulseRadius])
   useEffect(() => { clickImpulseForceRef.current = clickImpulseForce }, [clickImpulseForce])
+  useEffect(() => { dragInfluenceMultRef.current = dragInfluenceMult }, [dragInfluenceMult])
+  useEffect(() => { rippleStrengthRef.current = rippleStrength }, [rippleStrength])
   useEffect(() => { tuningModeRef.current = tuningMode ?? false }, [tuningMode])
-  useEffect(() => { experienceRef.current = experience }, [experience])
+  useEffect(() => {
+    experienceRef.current = experience
+    // The stagger order is per-mode, so a mode switch reshapes the table.
+    rebuildStaggerDelays()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [experience])
+  useEffect(() => {
+    fieldRevealRef.current = fieldReveal
+    rebuildStaggerDelays()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fieldReveal])
   useEffect(() => { sceneIdRef.current = sceneId }, [sceneId])
   useEffect(() => { onDiagnosticsUpdateRef.current = onDiagnosticsUpdate }, [onDiagnosticsUpdate])
   useEffect(() => { onPaintStatusChangeRef.current = onPaintStatusChange }, [onPaintStatusChange])
@@ -1242,16 +1362,18 @@ function SceneCanvasInternal(
     })
   }
 
-  const buildAllMeshBgs = () => {
+  // Weather mood backdrops are built lazily: only the active preset's canvas
+  // is ever drawn, so each full-viewport rasterization happens on first use
+  // (never for the non-weather modes) and a resize rebuilds nothing until the
+  // active preset's next draw.
+  const getMeshBg = (preset: keyof MeshBgs): HTMLCanvasElement => {
+    const cached = meshBgsRef.current?.[preset]
+    if (cached) return cached
     const { width: W, height: H } = getViewportSize()
-    meshBgsRef.current = {
-      clear: buildMeshBg('#DAD29C', '#B4EEFF', '#DAD29C', W, H),
-      rain: buildMeshBg('#012840', '#364F59', '#1A3A4A', W, H),
-      storm: buildMeshBg('#070926', '#281259', '#170E40', W, H),
-      wind: buildMeshBg('#6D808C', '#BDAC89', '#94968C', W, H),
-      fog: buildMeshBg('#6E6E6E', '#222222', '#454545', W, H),
-      snow: buildMeshBg('#0D0D0D', '#1C2B3E', '#141C2A', W, H),
-    }
+    const [colorA, colorB, base] = MESH_BG_PALETTES[preset]
+    const mesh = buildMeshBg(colorA, colorB, base, W, H)
+    meshBgsRef.current = { ...meshBgsRef.current, [preset]: mesh }
+    return mesh
   }
 
   // Rasterizes the bundled logo paths into a point field. Doubles as the
@@ -1319,6 +1441,7 @@ function SceneCanvasInternal(
     fullFieldColorsRef.current = colors
     fullFieldNormXRef.current = normX
     fullFieldNormYRef.current = normY
+    freshFieldPendingRef.current = true
     applyTierSubsample()
   }
 
@@ -1361,6 +1484,8 @@ function SceneCanvasInternal(
     baseTargetsYRef.current = y
     baseColorsRef.current = colors
     baseCountRef.current = x.length
+    baseNormXRef.current = normX
+    baseNormYRef.current = normY
     // Landing scale-in pivot: the centroid of the active target field. The
     // ref object is mutated in place so the frame loop stays allocation-free.
     const centroid = landingCentroidRef.current
@@ -1378,15 +1503,10 @@ function SceneCanvasInternal(
       centroid.x = center.x
       centroid.y = center.y
     }
-    // A fresh field landing mid scale-in (first source load, replay before
-    // the load finished) re-seeds the population from the real center.
-    if (
-      experienceRef.current === 'intro' &&
-      landingLogoScaleRef.current <= LANDING_SCALE_RESTART_EPSILON
-    ) {
-      snapParticlesToLandingCenter()
-    }
+    // Mid-reveal pose re-seeding lives in applyMotionField, after the active
+    // arrays and target assignment are fresh.
     motionFieldRef.current = buildMotionBaseField(x, y, normX, normY)
+    rebuildStaggerDelays()
     const { gradientT, rowT } = buildTargetSpatialDataFromArrays(x, y)
     targetGradientRef.current = gradientT
     targetRowRef.current = rowT
@@ -1500,31 +1620,82 @@ function SceneCanvasInternal(
     return { x: width * 0.5, y: height * 0.5 }
   }
 
-  // Snap the whole glyph population onto the landing centroid: the origin
-  // pose of the logo scale-in. Allocation-free; positions and velocities only.
-  const snapParticlesToLandingCenter = () => {
-    const center = landingCentroidRef.current
+  /** Active mode's reveal config (the landing intro reads the landing entry). */
+  const revealConfigForActiveMode = (): FieldRevealConfig =>
+    fieldRevealRef.current[experienceRef.current === 'intro' ? 'landing' : experienceRef.current]
+
+  // Rebuild the per-target stagger-delay table for the active mode's order
+  // from the tier-capped base field's normalized coordinates.
+  const rebuildStaggerDelays = () => {
+    staggerDelayRef.current = buildStaggerDelays(
+      revealConfigForActiveMode().staggerOrder,
+      baseNormXRef.current,
+      baseNormYRef.current,
+    )
+  }
+
+  // Rise-pose reset for a field reveal: every glyph starts riseOffsetPx below
+  // its target with zero velocity, so the render-in reads as the field rising
+  // into place (replacing the old snap-to-centroid spring-out). Called at
+  // progress 0 — where every glyph's staggered fade is 0 — so the outgoing
+  // scene disappears cleanly and the new one renders in place instead of
+  // spring-morphing from the previous scene's positions. Unassigned glyphs
+  // (ambient wanderers with no target) are left alone — snapping them to the
+  // centroid would read as a miniature centroid spring-out on every reveal.
+  // Allocation-free; positions and velocities only.
+  const resetParticlesToRevealPose = () => {
+    // The pose tracks the CURRENT reveal progress: full rise at progress 0,
+    // proportionally less when a re-sampled field lands mid-reveal (e.g. the
+    // work stage's post-transition re-measure), so the retarget never pops.
+    const cfg = revealConfigForActiveMode()
+    const rise = cfg.riseOffsetPx * (1 - revealEase(landingLogoScaleRef.current))
+    const map = svgTargetMapRef.current
+    const targetsX = activeTargetsXRef.current
+    const targetsY = activeTargetsYRef.current
+    const targetCount = activeCountRef.current
     const particles = particlesRef.current
     for (let i = 0; i < particles.length; i += 1) {
-      particles[i].x = center.x
-      particles[i].y = center.y
-      particles[i].vx = 0
-      particles[i].vy = 0
+      const targetIndex = map[i]
+      if (targetIndex >= 0 && targetIndex < targetCount) {
+        particles[i].x = targetsX[targetIndex]
+        particles[i].y = targetsY[targetIndex] + rise
+        particles[i].vx = 0
+        particles[i].vy = 0
+      }
     }
   }
 
-  // Imperative landing scale driver (PortfolioExperience's RAF loop pushes
-  // the sequence's logoScale every tick). A transition back to ~0 means a
-  // scale-in is (re)starting, so the population re-seeds from the center.
+  // Imperative landing reveal driver (PortfolioExperience's RAF loop pushes
+  // the sequence's logoScale every tick — the reveal progress). A transition
+  // back to ~0 means the landing reveal is (re)starting, so the population
+  // re-seeds into the rise pose.
   const setLandingLogoScale = (scale: number) => {
     const clamped = clamp(scale, 0, 1)
     if (
       clamped <= LANDING_SCALE_RESTART_EPSILON &&
       landingLogoScaleRef.current > LANDING_SCALE_RESTART_EPSILON
     ) {
-      snapParticlesToLandingCenter()
+      resetParticlesToRevealPose()
     }
     landingLogoScaleRef.current = clamped
+    lastRevealFrameNowRef.current = 0
+    lastRevealStreamNowRef.current = performance.now()
+  }
+
+  // Mode-entry reveal: progress restarts at 0 and the population resets to
+  // the rise pose — at progress 0 every glyph's staggered fade is 0, so the
+  // outgoing scene vanishes and the new scene RE-RENDERS in place (rise +
+  // staggered fade) rather than spring-morphing across the viewport from the
+  // previous scene's positions. Progress holds at 0 until the fresh field
+  // lands (applyMotionField) or the same-field fallback expires, then the
+  // frame loop self-advances and parks at 1. Reduced motion skips the
+  // reveal — the field renders settled.
+  const beginFieldReveal = () => {
+    if (reducedMotionRef.current) return
+    landingLogoScaleRef.current = 0
+    lastRevealFrameNowRef.current = 0
+    revealGraceUntilRef.current = performance.now() + 250
+    resetParticlesToRevealPose()
   }
 
   // Point the draw loop at the right target arrays for the active motion
@@ -1586,6 +1757,19 @@ function SceneCanvasInternal(
       ),
     )
     buildSvgTargetAssignment()
+    // A fresh field landing mid-reveal re-seeds the population into the
+    // (progress-scaled) rise pose so the field renders in place. Progress is
+    // NEVER restarted: the first field of a mode entry lands at progress 0 by
+    // construction (the hold), and a re-sampled field for the SAME scene —
+    // the work stage's post-transition re-measure — must not restart the
+    // fade. Gated on an actual field-identity change: config-only
+    // applyMotionField calls (prop mirrors) leave an active reveal untouched.
+    const freshField = freshFieldPendingRef.current
+    freshFieldPendingRef.current = false
+    if (freshField && landingLogoScaleRef.current < 1) {
+      resetParticlesToRevealPose()
+      lastRevealFrameNowRef.current = 0
+    }
     rebuildPaintIndexAndReplay()
     const assignedCount = countAssignedTargets()
     patchDiagnostics({
@@ -2232,8 +2416,8 @@ function SceneCanvasInternal(
       stepPx: Math.max(2, radiusPx * 0.4),
     }
     pendingPaintPointsRef.current.push(point.x, point.y)
-    // While painting, the pointer repel fades out and click impulses are
-    // suppressed; procedural target time freezes in the motion update.
+    // While painting, the pointer repel fades out and click impulses/ripples
+    // are suppressed; procedural target time freezes in the motion update.
     startFade()
     try {
       canvasRef.current?.setPointerCapture(event.pointerId)
@@ -2390,7 +2574,7 @@ function SceneCanvasInternal(
     return true
   }
 
-  const buildSvgTargets = async () => {
+  const buildSvgTargetsInner = async () => {
     const { width: W, height: H } = getViewportSize()
     const requestId = ++svgLoadRequestRef.current
     // Read the latest source identity from stable refs — never from a render
@@ -2585,6 +2769,17 @@ function SceneCanvasInternal(
     applyMotionField()
   }
 
+  // Settled bookkeeping wrapper: every exit (success, superseded, keep-last,
+  // fallback, throw) marks the current request settled, so the reveal hold
+  // can tell "a load is in flight" as request !== settled.
+  const buildSvgTargets = async () => {
+    try {
+      await buildSvgTargetsInner()
+    } finally {
+      svgLoadSettledRef.current = svgLoadRequestRef.current
+    }
+  }
+
   const activateSceneMode = (mode: SceneMode) => {
     sceneModeRef.current = mode
     if (mode === 'svg') {
@@ -2654,12 +2849,22 @@ function SceneCanvasInternal(
       const lastTarget = paragraphTargetsRef.current[paragraphTargetsRef.current.length - 1]
       contentH = Math.max(H, lastTarget.ty + lineHeightRef.current * 2)
     }
-    canvas.width = W * pixelRatio
-    canvas.height = contentH * pixelRatio
-    canvas.style.width = `${W}px`
-    canvas.style.height = `${contentH}px`
-    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
-    buildAllMeshBgs()
+    // Writing canvas dimensions CLEARS the bitmap, so only write on an
+    // actual size change — resizeScene also fires for glyph-stage region
+    // refits and observer storms where the viewport never changed, and every
+    // redundant write used to blank the field for a frame (visible flash).
+    const nextWidth = W * pixelRatio
+    const nextHeight = contentH * pixelRatio
+    if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
+      canvas.width = nextWidth
+      canvas.height = nextHeight
+      canvas.style.width = `${W}px`
+      canvas.style.height = `${contentH}px`
+      ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
+    }
+    // Drop the lazy weather mood backdrops: the active preset's canvas is
+    // re-rasterized at the new size on its next draw (getMeshBg).
+    meshBgsRef.current = null
     buildParagraphTargets()
     buildSvgTargets()
     ensureParticleCount(Math.max(paragraphTargetsRef.current.length, activeCountRef.current, 120))
@@ -2700,6 +2905,8 @@ function SceneCanvasInternal(
       pointerActive: pointer.active,
       pointerX: pointer.x,
       pointerY: pointer.y,
+      activeRipples: ripplesRef.current.count,
+      effectiveMouseR: effectiveMouseRRef.current,
       seed: GLYPH_INIT_SEED,
       simParams: {
         spring: SPRING,
@@ -2760,14 +2967,18 @@ function SceneCanvasInternal(
     return { x: state.fadeStartX, y: state.fadeStartY, active: true, influence }
   }
 
-  const simulateParticle = (p: Particle) => {
+  const simulateParticle = (p: Particle, pointer: ReturnType<typeof getPointerForFrame>) => {
     // Apply mouse repel force if pointer is nearby (suppressed while painting).
-    const pointer = getPointerForFrame()
+    // The pointer snapshot is hoisted to one sample per frame by the caller —
+    // resolving it per particle cost a fresh object + performance.now() call
+    // for every glyph on the field.
     if (!activeStrokeRef.current && pointer.active && pointer.influence > 0) {
       const dx = p.x - pointer.x
       const dy = p.y - pointer.y
       const distSq = dx * dx + dy * dy
-      const radius = mouseRRef.current || 0
+      // Effective radius: mouseR at rest; grown by the drag ease while the
+      // pointer is held (computed once per frame in the RAF loop).
+      const radius = effectiveMouseRRef.current || 0
       if (distSq > 0 && distSq < radius * radius) {
         const dist = Math.sqrt(distSq)
         const repelStrength = (1 - dist / radius) * (particleRepelRef.current || 0.48) * pointer.influence
@@ -3042,17 +3253,37 @@ function SceneCanvasInternal(
 
     const config = playgroundConfigRef.current ?? APPROVED_PLAYGROUND_DEFAULTS
 
-    const bgGradient = ctx.createRadialGradient(
-      W * 0.5,
-      H * 0.5,
-      0,
-      W * 0.5,
-      H * 0.5,
-      Math.max(W, H) * 0.8,
-    )
-    bgGradient.addColorStop(0, config.backgroundColor1)
-    bgGradient.addColorStop(1, config.backgroundColor2)
-    ctx.fillStyle = bgGradient
+    // Background gradient: inputs (viewport size + the two configured colors)
+    // change only on resize/config edits, so the CanvasGradient is cached
+    // instead of recreated every frame (same idiom as meshBgsRef).
+    let bgCache = bgGradientRef.current
+    if (
+      !bgCache ||
+      bgCache.width !== W ||
+      bgCache.height !== H ||
+      bgCache.color1 !== config.backgroundColor1 ||
+      bgCache.color2 !== config.backgroundColor2
+    ) {
+      const gradient = ctx.createRadialGradient(
+        W * 0.5,
+        H * 0.5,
+        0,
+        W * 0.5,
+        H * 0.5,
+        Math.max(W, H) * 0.8,
+      )
+      gradient.addColorStop(0, config.backgroundColor1)
+      gradient.addColorStop(1, config.backgroundColor2)
+      bgCache = {
+        width: W,
+        height: H,
+        color1: config.backgroundColor1,
+        color2: config.backgroundColor2,
+        gradient,
+      }
+      bgGradientRef.current = bgCache
+    }
+    ctx.fillStyle = bgCache.gradient
     ctx.fillRect(0, 0, W, H)
 
     // Weather mood backdrop (legacy mesh gradients at the ambient
@@ -3089,6 +3320,35 @@ function SceneCanvasInternal(
     const targetCount = activeCountRef.current
     if (targetCount === 0) return
 
+    // Field reveal progress: the landing intro is streamed imperatively via
+    // setLandingLogoScale; mode entries (and a return Home after the stream
+    // has parked) self-advance from the frame clock and park at 1. While a
+    // mode entry waits for its first fresh field (grace window or a load in
+    // flight), progress holds at 0 — the outgoing scene stays fully faded
+    // out. The hold only exists at progress 0: once the fade has started,
+    // later loads (same-scene re-samples) never freeze it.
+    let revealProgress = landingLogoScaleRef.current
+    const revealHoldActive =
+      revealProgress === 0 &&
+      (now < revealGraceUntilRef.current ||
+        svgLoadRequestRef.current !== svgLoadSettledRef.current)
+    const introStreamLive =
+      experienceRef.current === 'intro' && now - lastRevealStreamNowRef.current < 250
+    if (revealProgress < 1 && !introStreamLive && !revealHoldActive) {
+      const durationMs = revealConfigForActiveMode().durationMs
+      const lastNow = lastRevealFrameNowRef.current
+      const dtMs = lastNow > 0 ? Math.min(100, now - lastNow) : 1000 / 60
+      revealProgress = Math.min(1, revealProgress + dtMs / Math.max(1, durationMs))
+      landingLogoScaleRef.current = revealProgress
+    }
+    if (!revealHoldActive) lastRevealFrameNowRef.current = now
+    const revealActive = revealProgress < 1 && !reducedMotionRef.current
+    const revealConfig = revealActive ? revealConfigForActiveMode() : null
+    const revealRise = revealConfig
+      ? revealConfig.riseOffsetPx * (1 - revealEase(revealProgress))
+      : 0
+    const staggerDelays = revealActive ? staggerDelayRef.current : null
+
     const colorContext = colorContextRef.current
     colorContext.mode = colorModeRef.current
     colorContext.palette = paletteRgbRef.current
@@ -3116,6 +3376,10 @@ function SceneCanvasInternal(
     const pondBoundaries = getPondConfig()
     const pondFormation = pondBoundaries ? ensurePondFormation(particles.length) : null
     const formationSuppressed = reducedMotion || activeStrokeRef.current !== null
+    // One pointer snapshot per frame for the whole particle loop (was per
+    // particle inside simulateParticle — a fresh object + performance.now()
+    // for every glyph).
+    const pointer = getPointerForFrame()
     let visibleCount = 0
     let hiddenCount = 0
 
@@ -3135,16 +3399,13 @@ function SceneCanvasInternal(
         p.tx = targetsX[targetIndex]
         p.ty = targetsY[targetIndex]
       }
-      // Landing scale-in (intro only): pull every glyph target toward the
-      // field centroid by the sequence's logo scale — t' = c + (t − c)·s —
-      // so the completed mark reads as scaling out from its own center.
-      // Only the glyph field transforms; the canvas, background, and
-      // atmosphere are untouched. Scalar math, allocation-free.
-      const landingScale = landingLogoScaleRef.current
-      if (landingScale < 1 && experienceRef.current === 'intro') {
-        const center = landingCentroidRef.current
-        p.tx = center.x + (p.tx - center.x) * landingScale
-        p.ty = center.y + (p.ty - center.y) * landingScale
+      // Field reveal: while a reveal is running, every glyph target carries
+      // the vertical rise offset — t' = t + (0, rise·(1 − ease(progress))) —
+      // so the field rises into place through the springs. Only the glyph
+      // field transforms; the canvas, background, and atmosphere are
+      // untouched. Scalar math, allocation-free.
+      if (revealActive) {
+        p.ty += revealRise
       }
       p.char = sourceCharsRef.current[i % Math.max(1, sourceCharsRef.current.length)] || p.char
       p.row = 0
@@ -3155,7 +3416,7 @@ function SceneCanvasInternal(
         p.vx = 0
         p.vy = 0
       } else {
-        simulateParticle(p)
+        simulateParticle(p, pointer)
       }
       // Hard pond boundaries: clamp the glyph center into the canvas and
       // rebound outward-moving velocity off the edges. Reduced-motion's zero
@@ -3175,7 +3436,18 @@ function SceneCanvasInternal(
       colorContext.particleIndex = i
       colorContext.targetIndex = targetIndex
       const color = resolveGlyphColor(colorContext)
-      const alpha = Math.max(0.35, 1 - homeDist / 280) * resolveGlyphAlphaScale(colorContext)
+      let alpha = Math.max(0.35, 1 - homeDist / 280) * resolveGlyphAlphaScale(colorContext)
+      // Staggered per-glyph fade-in during the reveal: each glyph's eased fade
+      // window starts at its delay and completes by progress = 1.
+      if (
+        revealActive &&
+        staggerDelays &&
+        revealConfig &&
+        targetIndex >= 0 &&
+        targetIndex < staggerDelays.length
+      ) {
+        alpha *= revealGlyphFade(revealProgress, staggerDelays[targetIndex], revealConfig.staggerPortion)
+      }
       ctx.fillStyle = formatRgba(color, alpha)
       ctx.fillText(p.char, p.x, p.y)
       visibleCount += 1
@@ -3215,6 +3487,7 @@ function SceneCanvasInternal(
     ctx.fillStyle = 'rgba(10, 10, 10, 1)'
     ctx.fillRect(0, 0, cW, cH)
     const visible = Math.min(revealedChars, paragraphTargetsRef.current.length, particlesRef.current.length)
+    const pointer = getPointerForFrame()
     for (let i = 0; i < visible; i += 1) {
       const t = paragraphTargetsRef.current[i]
       const p = particlesRef.current[i]
@@ -3224,7 +3497,7 @@ function SceneCanvasInternal(
       p.row = t.row
       p.hue = t.hue
       p.head = false
-      simulateParticle(p)
+      simulateParticle(p, pointer)
       const homeDist = Math.sqrt((p.x - p.tx) ** 2 + (p.y - p.ty) ** 2)
       const alpha = Math.max(0.35, 1 - homeDist / 280)
       const hue = (p.hue + now * 0.015) % 360
@@ -3365,7 +3638,7 @@ function SceneCanvasInternal(
           vx: velocity.vx,
           vy: velocity.vy,
         },
-        repelRadius: mouseRRef.current || 0,
+        repelRadius: effectiveMouseRRef.current || 0,
         repelStrength: (weatherRepelRef.current || 6) * AMBIENT_POINTER_REPEL_SCALE,
         width,
         height,
@@ -3374,6 +3647,20 @@ function SceneCanvasInternal(
     }
     // Drop the backlog if the tab was throttled so agents never lurch.
     if (steps === 4) ambientTickAccumRef.current = 0
+    // Droplet ripples cross the ambient pool too (typed-array mirror of the
+    // main-field pass), scaled by the shared interaction strength. Applied
+    // once per frame — not per tick — so tick catch-up never double-kicks;
+    // the velocity persists until the next tick integrates it.
+    const ripples = ripplesRef.current
+    if (ripples.count > 0) {
+      applyAmbientRipples(
+        field,
+        ripples,
+        now,
+        rippleConfigRef.current,
+        config.interactionStrength,
+      )
+    }
   }
 
   // Quantized scaled font strings for weather agents (font changes are
@@ -3635,10 +3922,7 @@ function SceneCanvasInternal(
     const opacity = config.backdropOpacity ?? BACKDROP_OPACITY_DEFAULT
     if (opacity <= 0) return
     const preset = config.weather.preset
-    const meshes = meshBgsRef.current
-    if (!meshes) return
-    const mesh = preset === 'blizzard' ? meshes.snow : meshes[preset]
-    if (!mesh) return
+    const mesh = getMeshBg(preset === 'blizzard' ? 'snow' : preset)
     ctx.save()
     ctx.globalAlpha = opacity
     ctx.drawImage(mesh, 0, 0, W, H)
@@ -3795,6 +4079,29 @@ function SceneCanvasInternal(
       updatePaintEvolution(now)
       // Animated sources re-sample at the tier's sampling budget.
       sampleAnimatedSourceFrame(now)
+      // Drag influence sphere: ease the held-pointer amount toward 1 while
+      // pressed (≈200ms in) and back toward 0 on release (≈250ms out), then
+      // derive the radius every repel consumer shares. At rest the ease is
+      // exactly 0 and the radius is exactly mouseR, so hover is unchanged.
+      const dtEase = Math.max(0, now - (dragEaseLastNowRef.current || now))
+      dragEaseLastNowRef.current = now
+      const press = pressRef.current
+      const easeTarget = press.active ? 1 : 0
+      const easeRate = press.active ? DRAG_EASE_IN_MS : DRAG_EASE_OUT_MS
+      let dragEase = dragEaseRef.current +
+        (easeTarget - dragEaseRef.current) * (1 - Math.exp(-dtEase / easeRate))
+      if (!press.active && dragEase < 0.001) dragEase = 0
+      dragEaseRef.current = dragEase
+      effectiveMouseRRef.current =
+        dragEase > 0
+          ? mouseRRef.current * (1 + (dragInfluenceMultRef.current - 1) * dragEase)
+          : mouseRRef.current
+      // Droplet ripples: one force pass per frame over the live store. An
+      // empty store costs a single branch, so the idle field is byte-identical.
+      const ripples = ripplesRef.current
+      if (ripples.count > 0) {
+        applyRippleForces(ripples, particlesRef.current, now, rippleConfigRef.current)
+      }
       const mode = sceneModeRef.current
       if (mode === 'svg') drawSvgGlyphScene(now)
       else drawParagraph(now, revealedChars)
@@ -3954,6 +4261,16 @@ function SceneCanvasInternal(
     state.fadeEndTime = 0
   }
 
+  // Drag influence sphere: the press ends with its own pointer (up, cancel,
+  // or leave); the radius ease decays back over ~250ms in the frame loop.
+  const releasePress = (pointerId: number) => {
+    const press = pressRef.current
+    if (press.active && press.pointerId === pointerId) {
+      press.active = false
+      press.pointerId = -1
+    }
+  }
+
   const onCanvasPointerEnter = (event: PointerEvent) => {
     if (event.pointerType === 'touch') return
     updatePointerFromEvent(event, false)
@@ -3998,7 +4315,7 @@ function SceneCanvasInternal(
     const isTouch = event.pointerType === 'touch'
     const state = pointerRef.current
     // Paint mode: a pointer press starts a stroke (mouse, pen, or the first
-    // touch) and never fires a click impulse.
+    // touch) and never fires a click impulse or ripple.
     if (paintToolRef.current.enabled) {
       if (activeStrokeRef.current) return
       if (isTouch && state.touchPointerId !== -1) return
@@ -4022,19 +4339,40 @@ function SceneCanvasInternal(
     } else {
       updatePointerFromEvent(event, false)
     }
-    // Click/tap blast: a one-shot radial velocity kick that the spring+damp
-    // integration settles on its own. Fully skipped under reduced motion —
-    // no impulse and no renderOnce re-arm, so the static frame stays settled.
+    // Drag influence sphere: mark the press (non-paint path only — paint
+    // strokes returned above) so the frame loop grows the hover radius while
+    // the pointer is held. Cleared on up/cancel/leave.
+    pressRef.current.active = true
+    pressRef.current.pointerId = event.pointerId
+    // Click/tap droplet: spawn a traveling-wavefront ripple (engine/ripple)
+    // seeded with the pointer's smoothed velocity so a mid-drag press leaves
+    // a directional wake, plus a small instant "plop" kick so the impact
+    // reads immediately. The spring+damp integration settles both on its own.
+    // Fully skipped under reduced motion — no ripple, no plop, and no
+    // renderOnce re-arm, so the static frame stays settled.
     if (reducedMotionRef.current) return
+    const now = performance.now()
+    const velocity = pointerVelocityRef.current
+    spawnRipple(
+      ripplesRef.current,
+      state.x,
+      state.y,
+      now,
+      rippleStrengthRef.current,
+      velocity.vx,
+      velocity.vy,
+      rippleConfigRef.current,
+    )
     const affected = applyRadialImpulse(
       particlesRef.current,
       state.x,
       state.y,
       clickImpulseRadiusRef.current,
-      clickImpulseForceRef.current,
+      clickImpulseForceRef.current * RIPPLE_PLOP_SCALE,
     )
-    // The ambient pool gets the same radial kick (typed-array mirror of
-    // engine/impulse.ts), scaled by the shared interaction strength.
+    // The ambient pool gets the same plop (typed-array mirror of
+    // engine/impulse.ts), scaled by the shared interaction strength; the
+    // shared ripple store is applied to it in the ambient tick wiring.
     const ambientField = ambientFieldRef.current
     if (ambientField) {
       applyAmbientRadialImpulse(
@@ -4042,7 +4380,9 @@ function SceneCanvasInternal(
         state.x,
         state.y,
         clickImpulseRadiusRef.current,
-        clickImpulseForceRef.current * ambientConfigRef.current.interactionStrength,
+        clickImpulseForceRef.current *
+          RIPPLE_PLOP_SCALE *
+          ambientConfigRef.current.interactionStrength,
       )
     }
     // Private Pond: the same tap kicks the swimming body outward from the
@@ -4055,10 +4395,13 @@ function SceneCanvasInternal(
     patchDiagnostics({
       impulseCount: diagnosticsRef.current.impulseCount + 1,
       lastImpulseAffected: affected,
+      rippleCount: diagnosticsRef.current.rippleCount + 1,
+      activeRipples: ripplesRef.current.count,
     })
   }
 
   const onCanvasPointerUp = (event: PointerEvent) => {
+    releasePress(event.pointerId)
     const stroke = activeStrokeRef.current
     if (stroke && event.pointerId === stroke.pointerId) {
       endPaintStroke()
@@ -4074,12 +4417,14 @@ function SceneCanvasInternal(
 
   const onCanvasPointerLeave = (event: PointerEvent) => {
     if (event.pointerType === 'touch') return
+    releasePress(event.pointerId)
     if (activeStrokeRef.current) return
     clearPointer()
     updateBrushRing(0, 0, false)
   }
 
   const onCanvasPointerCancel = (event: PointerEvent) => {
+    releasePress(event.pointerId)
     const stroke = activeStrokeRef.current
     if (stroke && event.pointerId === stroke.pointerId) {
       endPaintStroke()
@@ -4097,6 +4442,7 @@ function SceneCanvasInternal(
   }
 
   const onLostPointerCapture = (event: PointerEvent) => {
+    releasePress(event.pointerId)
     const stroke = activeStrokeRef.current
     if (stroke && event.pointerId === stroke.pointerId) {
       endPaintStroke()

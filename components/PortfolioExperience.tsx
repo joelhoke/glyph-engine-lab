@@ -1,20 +1,25 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import SceneCanvas, { SceneCanvasHandle, SceneTargetRegion } from './SceneCanvas'
 import CanvasFallback from './CanvasFallback'
-import ExperienceNav from './ExperienceNav'
+import SiteHeader from './SiteHeader'
 import ExperienceTransition, { useExperienceTransition } from './ExperienceTransition'
-import WorkExperience, { MIN_EXPANSION_RANGE_PX } from './work/WorkExperience'
-import CollaborateExperience from './collaborate/CollaborateExperience'
+// Work and Collaborate subtrees load on demand (next/dynamic): the landing's
+// first paint is the vibe canvas, and the crawlable digests below carry their
+// content in the static HTML, so deferring these chunks changes neither.
+import { MIN_EXPANSION_RANGE_PX } from './work/expansionRange'
 import VibeExperience, { VibeSurfaceStatus } from './vibe/VibeExperience'
 import VibeToolbar from './vibe/VibeToolbar'
 import AmbientCarousel from './vibe/AmbientCarousel'
 import PondControl from './vibe/PondControl'
 import SoundControl from './vibe/SoundControl'
+import CreationToast from './vibe/CreationToast'
 import SonificationOverlay from './vibe/SonificationOverlay'
 import { PAINT_DEFAULT_BACKGROUND_COLOR, PAINT_DEFAULT_GLYPH_COLOR } from './vibe/PaintPanel'
 import { useSonification } from './vibe/useSonification'
 import { useClipRecorder } from './vibe/useClipRecorder'
+import { useVibeControlLayout } from './vibe/useVibeControlLayout'
 import PrimaryActions, { ExperienceKey, PRIMARY_ACTION_COUNT } from './PrimaryActions'
 import TuningPanel from './tuning/TuningPanel'
 import AnalyticsConsent from './AnalyticsConsent'
@@ -143,6 +148,27 @@ import {
   undoTransaction,
 } from '../engine/vibeHistory'
 import {
+  buildVibeMemento,
+  createVibeMementoTracker,
+  mementoConfigHash,
+  mementoToVibeSnapshot,
+} from '../engine/vibeMemento'
+import {
+  clearVibeSession,
+  readVibeSession,
+  writeVibeSession,
+} from '../engine/vibeSessionStore'
+import {
+  CreationKind,
+  fetchCreationState,
+  saveCreation,
+} from '../engine/creationClient'
+import {
+  FIELD_REVEAL_DEFAULTS,
+  FieldRevealConfig,
+  FieldRevealMode,
+} from '../engine/introReveal'
+import {
   APPROVED_SCENE_DEFAULTS,
   APPROVED_SOURCE_LAYOUT_DEFAULTS,
   SceneConfig,
@@ -213,6 +239,15 @@ type SequenceController = {
 
 const BASE_DOCUMENT_TITLE = 'joel hoke design'
 
+// On-demand tab experiences. ssr:false is safe here: the static export always
+// prerenders the landing (hash routing resolves client-side), and the
+// visually-hidden digests below keep the work/collaborate content in the
+// SSR HTML for crawlers. SceneCanvas itself is NEVER deferred.
+const WorkExperience = dynamic(() => import('./work/WorkExperience'), { ssr: false })
+const CollaborateExperience = dynamic(() => import('./collaborate/CollaborateExperience'), {
+  ssr: false,
+})
+
 /** The visitor-supplied source for the vibe field: an uploaded SVG or raster
  *  image (registry-owned blob: URL), or a preset's built-in SVG. */
 type UploadedSourceState = {
@@ -230,6 +265,12 @@ export default function PortfolioExperience() {
   // deep-link hash resolves to a mode on mount (handled below).
   const [experience, setExperience] = useState<ExperienceMode>('intro')
   const [selected, setSelected] = useState<ExperienceKey | null>(null)
+  // Stable mirror for the mount-once hash listener, whose closure would
+  // otherwise capture the initial mode forever.
+  const experienceRef = useRef<ExperienceMode>('intro')
+  useEffect(() => {
+    experienceRef.current = experience
+  }, [experience])
   const [tuningMode, setTuningMode] = useState(false)
   const [qualityTierOverride, setQualityTierOverride] = useState<QualityTier | null>(null)
   const { displayed, phase: transitionPhase } = useExperienceTransition(experience)
@@ -386,10 +427,12 @@ export default function PortfolioExperience() {
   // reports (compactCardTop - expandedCardTop) — but never inside the
   // measured glyph region, which stays dedicated to canvas interaction. The
   // gaps are pointer-transparent, so these gestures land on the canvas; the
-  // window listeners observe them without intercepting (all passive). The
-  // card's own viewport handles in-card gestures (WorkExperience). Upward gap
-  // input contracts only when the card content is at its top — gap gestures
-  // never scroll content. Non-overflowing slides ignore gap input entirely.
+  // window listeners observe them without intercepting (all passive). Gap
+  // input mirrors the card's own state machine (WorkExperience): downward
+  // input expands first, then scrolls the card content once expansion
+  // saturates; upward input scrolls the content back to its top first, then
+  // contracts with the remainder. Non-overflowing slides ignore gap input
+  // entirely.
   useEffect(() => {
     if (displayed !== 'work') return
     const commitGapProgress = (next: number) => {
@@ -405,19 +448,49 @@ export default function PortfolioExperience() {
       }
     }
     const gapRangePx = () => Math.max(workExpansionRangeRef.current, MIN_EXPANSION_RANGE_PX)
-    const contentScrolled = () => {
-      const viewport = document.querySelector('.work-experience-viewport')
-      return !!viewport && viewport.scrollTop > 1
-    }
+    const gapViewport = () => document.querySelector('.work-experience-viewport')
+    // Top-of-content threshold, matching WorkExperience's TOP_EPSILON.
+    const TOP_EPSILON = 1
+    // Mirrors the card's applyVerticalInput (WorkExperience) for gestures
+    // landing in the gap: expansion consumes downward input first and the
+    // excess scrolls the card content; upward input scrolls the content back
+    // to its top before contracting.
     const applyGapDelta = (deltaPx: number) => {
       if (!workOverflowEligibleRef.current || deltaPx === 0) return
-      if (deltaPx < 0 && contentScrolled()) return
+      const viewport = gapViewport()
       const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      if (reduced) {
-        commitGapProgress(deltaPx > 0 ? 1 : 0)
+      if (deltaPx > 0) {
+        const progress = workExpansionProgressRef.current
+        if (progress < 1) {
+          if (reduced) {
+            commitGapProgress(1)
+            return
+          }
+          const range = gapRangePx()
+          const used = Math.min(deltaPx, (1 - progress) * range)
+          commitGapProgress(progress + used / range)
+          const excess = deltaPx - used
+          if (viewport) viewport.scrollTop = excess > 0 ? viewport.scrollTop + excess : 0
+        } else if (viewport) {
+          // Fully expanded: the gap delta scrolls the card content.
+          viewport.scrollTop += deltaPx
+        }
         return
       }
-      commitGapProgress(workExpansionProgressRef.current + deltaPx / gapRangePx())
+      const up = -deltaPx
+      const scrollTop = viewport ? viewport.scrollTop : 0
+      if (viewport && scrollTop > TOP_EPSILON) {
+        if (scrollTop - up > TOP_EPSILON) {
+          viewport.scrollTop = scrollTop - up
+        } else {
+          // Crossing the top boundary: finish the content scroll, then
+          // contract with the unused delta.
+          viewport.scrollTop = 0
+          commitGapProgress(reduced ? 0 : workExpansionProgressRef.current - (up - scrollTop) / gapRangePx())
+        }
+        return
+      }
+      commitGapProgress(reduced ? 0 : workExpansionProgressRef.current - up / gapRangePx())
     }
     const isInCard = (target: EventTarget | null) =>
       target instanceof Element &&
@@ -441,9 +514,14 @@ export default function PortfolioExperience() {
     }
     // Gesture dedication is decided where the touch BEGINS: a swipe that
     // starts in the glyph region never scrubs the card, even if it travels
-    // over the gap. Like the card, gap touch progress is ABSOLUTE — computed
-    // from the gesture's starting Y and starting progress.
-    let touch: { startY: number; startProgress: number; allowed: boolean } | null = null
+    // over the gap. Like the card, gap touch is ABSOLUTE — computed from the
+    // gesture's starting Y, starting progress, and starting content scroll.
+    let touch: {
+      startY: number
+      startProgress: number
+      startScrollTop: number
+      allowed: boolean
+    } | null = null
     const handleTouchStart = (event: globalThis.TouchEvent) => {
       const point = event.touches[0]
       if (!point) {
@@ -453,22 +531,42 @@ export default function PortfolioExperience() {
       touch = {
         startY: point.clientY,
         startProgress: workExpansionProgressRef.current,
+        startScrollTop: gapViewport()?.scrollTop ?? 0,
         allowed: !isInCard(event.target) && !isInGlyphRegion(point.clientX, point.clientY),
       }
     }
+    // The gesture's total distance maps onto progress * range + scrollTop:
+    // it completes expansion first, then scrolls the card content; reversing
+    // scrolls the content back to its top before contracting (the same
+    // handoff as the card's own touch scrub in WorkExperience).
     const handleTouchMove = (event: globalThis.TouchEvent) => {
       if (!touch?.allowed) return
       const point = event.touches[0]
       if (!point) return
-      const dy = touch.startY - point.clientY
       if (!workOverflowEligibleRef.current) return
-      if (dy < 0 && contentScrolled()) return
+      const dy = touch.startY - point.clientY
+      const viewport = gapViewport()
       const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
       if (reduced) {
-        commitGapProgress(dy > 0 ? 1 : 0)
+        if (dy > 0 && workExpansionProgressRef.current < 1) {
+          commitGapProgress(1)
+        } else if (
+          dy < 0 &&
+          (!viewport || viewport.scrollTop <= TOP_EPSILON) &&
+          workExpansionProgressRef.current > 0
+        ) {
+          if (viewport) viewport.scrollTop = 0
+          commitGapProgress(0)
+        } else if (viewport && workExpansionProgressRef.current === 1) {
+          // Expansion already snapped open: the gesture scrolls content.
+          viewport.scrollTop = Math.max(0, touch.startScrollTop + dy)
+        }
         return
       }
-      commitGapProgress(touch.startProgress + dy / gapRangePx())
+      const range = gapRangePx()
+      const total = Math.max(0, touch.startProgress * range + touch.startScrollTop + dy)
+      commitGapProgress(total / range)
+      if (viewport) viewport.scrollTop = Math.max(0, total - range)
     }
     const handleTouchEnd = () => {
       touch = null
@@ -622,6 +720,18 @@ export default function PortfolioExperience() {
     ...APPROVED_SOURCE_LAYOUT_DEFAULTS,
   }))
 
+  // Field reveal shape per mode (rise offset, stagger order/spread, duration):
+  // editable working copies of the shipped defaults for the tuning panel; the
+  // landing entry seeds from the intro preset's reveal sibling.
+  const [fieldRevealConfig, setFieldRevealConfig] = useState<
+    Record<FieldRevealMode, FieldRevealConfig>
+  >(() => ({
+    landing: { ...portfolioIntroPreset.reveal },
+    work: { ...FIELD_REVEAL_DEFAULTS.work },
+    vibe: { ...FIELD_REVEAL_DEFAULTS.vibe },
+    collaborate: { ...FIELD_REVEAL_DEFAULTS.collaborate },
+  }))
+
   // Vibe's editable composition. Seeded from the generic playground defaults
   // so the intro keeps its established look; on entering vibe it adopts the
   // curated default composition from the scene descriptor until the visitor
@@ -729,6 +839,26 @@ export default function PortfolioExperience() {
   const vibeHistoryRef = useRef<VibeHistory>(createVibeHistory())
   const [vibeCanUndo, setVibeCanUndo] = useState(false)
   const [vibeCanRedo, setVibeCanRedo] = useState(false)
+  // Vibe creations (feature/vibe-creations): the tracker watches raw recorded
+  // transactions plus corner-element touches; once the session qualifies, a
+  // trailing-debounce autosave keeps the session's ONE archive row updated to
+  // the visitor's latest work (server upserts by vibeSessionIdRef).
+  // lastCreationHashRef dedupes repeat saves of an unchanged composition.
+  const mementoTrackerRef = useRef(createVibeMementoTracker())
+  const vibeSessionIdRef = useRef(crypto.randomUUID())
+  const lastCreationHashRef = useRef<string | null>(null)
+  const mementoSaveTimeoutRef = useRef<number | null>(null)
+  const mementoSaveInFlightRef = useRef(false)
+  const mementoSaveDirtyRef = useRef(false)
+  const creationToastShownRef = useRef(false)
+  const [creationToastOpen, setCreationToastOpen] = useState(false)
+  // Paint stashed when leaving vibe mode (the overlay must not bleed onto
+  // other modes' scenes); restored on return. Data-only — the undo history
+  // and lastPaintSnapshotRef stay intact across mode switches.
+  const stashedPaintRef = useRef<PaintSnapshot | null>(null)
+  // Session-store persist debounce (sessionStorage mirror of the live vibe
+  // state so the composition survives SPA navigation for the whole tab).
+  const vibeSessionPersistTimeoutRef = useRef<number | null>(null)
   // Latest paint-overlay state: the "before" for the next stroke transaction
   // (the canvas only reports stroke ENDS, so this is tracked continuously).
   const lastPaintSnapshotRef = useRef<PaintSnapshot>(createEmptyPaintSnapshot())
@@ -870,8 +1000,213 @@ export default function PortfolioExperience() {
     before: VibeStateSnapshot,
     after: VibeStateSnapshot,
   ) => {
-    pushTransaction(vibeHistoryRef.current, { kind, key, before, after }, releaseOrphanedUrl)
+    const transaction = { kind, key, before, after }
+    pushTransaction(vibeHistoryRef.current, transaction, releaseOrphanedUrl)
     syncVibeHistoryFlags()
+    // Creations tracker rides the SAME raw recording calls (pre-coalescing),
+    // so repeated slider nudges still accrue engagement steps.
+    mementoTrackerRef.current.recordTransaction(transaction)
+    scheduleMementoAutosave()
+    scheduleVibeSessionPersist()
+  }
+
+  /** Downscaled JPEG of the live field for the archive card: long edge
+   *  capped at 640px (same staging-canvas read-back idiom as the clip
+   *  recorder), far under the server's 1 MB thumb limit. Null on failure —
+   *  a save proceeds without a thumb. */
+  const captureCreationThumb = (): Promise<Blob | null> => {
+    const canvas = sceneCanvasRef.current?.getCanvas()
+    if (!canvas || canvas.width === 0 || canvas.height === 0) return Promise.resolve(null)
+    const scale = Math.min(1, 640 / Math.max(canvas.width, canvas.height))
+    const staging = document.createElement('canvas')
+    staging.width = Math.max(1, Math.round(canvas.width * scale))
+    staging.height = Math.max(1, Math.round(canvas.height * scale))
+    const stagingCtx = staging.getContext('2d')
+    if (!stagingCtx) return Promise.resolve(null)
+    try {
+      stagingCtx.drawImage(canvas, 0, 0, staging.width, staging.height)
+    } catch {
+      return Promise.resolve(null)
+    }
+    return new Promise((resolve) => {
+      try {
+        staging.toBlob((blob) => resolve(blob), 'image/jpeg', 0.82)
+      } catch {
+        resolve(null)
+      }
+    })
+  }
+
+  /** Save the current composition to the gallery archive. Fire-and-forget:
+   *  never throws, silent on failure, deduped on the memento's config hash
+   *  within the session. Autosaves carry the session id so the server updates
+   *  the session's one row to the latest work; exports stay insert-only. */
+  const saveCurrentCreation = async (kind: CreationKind, media?: Blob): Promise<void> => {
+    try {
+      const snapshot = captureVibeSnapshot()
+      // The pond is session-only for live play but part of a SAVED piece:
+      // a creation archived with the pond on reopens with the pond on.
+      const memento = buildVibeMemento(snapshot, {
+        pond: pondEnabledRef.current
+          ? { enabled: true, character: pondCharacterRef.current }
+          : undefined,
+      })
+      const hash = await mementoConfigHash(memento)
+      if (hash === lastCreationHashRef.current) return
+      const thumb = (await captureCreationThumb()) ?? undefined
+      // An oversize clip degrades to a plain image save (thumb only).
+      let saveKind: CreationKind = kind
+      let mediaBlob: Blob | undefined
+      if (kind === 'clip' && media && media.size <= 25 * 1024 * 1024) {
+        mediaBlob = media
+      } else if (kind === 'clip') {
+        saveKind = 'image'
+      }
+      // A visitor upload still live as a blob: URL goes along so the server
+      // can restore the source later (5 MB cap, images only).
+      let source: Blob | undefined
+      const uploadUrl = snapshot.upload?.url
+      if (uploadUrl && uploadUrl.startsWith('blob:')) {
+        try {
+          const blob = await (await fetch(uploadUrl)).blob()
+          if (blob.size <= 5 * 1024 * 1024) source = blob
+        } catch {
+          /* the save proceeds without a restorable source */
+        }
+      }
+      const result = await saveCreation({
+        kind: saveKind,
+        memento,
+        configHash: hash,
+        thumb,
+        media: mediaBlob,
+        source,
+        sessionId: kind === 'auto' ? vibeSessionIdRef.current : undefined,
+      })
+      if (!result.ok) return
+      lastCreationHashRef.current = hash
+      // A duplicate is already archived: dedupe state updates, no toast. The
+      // toast greets the session's FIRST save only — autosave updates are silent.
+      if (result.duplicate) return
+      if (!creationToastShownRef.current) {
+        creationToastShownRef.current = true
+        setCreationToastOpen(true)
+        trackEvent({
+          name: 'creation_save',
+          params: {
+            kind: saveKind,
+            qualifier: mementoTrackerRef.current.qualifiers()[0] ?? 'steps',
+          },
+        })
+      }
+    } catch {
+      /* silent — archiving never disturbs the playground */
+    }
+  }
+
+  /** Debounced autosave: once the session meets the minimum engagement
+   *  requirements, every further change schedules a save 2s after the last
+   *  one, so the archived snapshot tracks the visitor's LATEST work rather
+   *  than the first state that crossed the threshold. An in-flight save marks
+   *  the state dirty and triggers one follow-up save when it settles. */
+  const scheduleMementoAutosave = () => {
+    if (!mementoTrackerRef.current.isQualified()) return
+    if (mementoSaveInFlightRef.current) {
+      mementoSaveDirtyRef.current = true
+      return
+    }
+    if (mementoSaveTimeoutRef.current !== null) {
+      window.clearTimeout(mementoSaveTimeoutRef.current)
+    }
+    mementoSaveTimeoutRef.current = window.setTimeout(() => {
+      mementoSaveTimeoutRef.current = null
+      void runMementoAutosave()
+    }, 2000)
+  }
+
+  const runMementoAutosave = async (): Promise<void> => {
+    if (mementoSaveInFlightRef.current) {
+      mementoSaveDirtyRef.current = true
+      return
+    }
+    mementoSaveInFlightRef.current = true
+    try {
+      await saveCurrentCreation('auto')
+    } finally {
+      mementoSaveInFlightRef.current = false
+      if (mementoSaveDirtyRef.current) {
+        mementoSaveDirtyRef.current = false
+        scheduleMementoAutosave()
+      }
+    }
+  }
+
+  /** Flush a pending debounced autosave immediately (pagehide / tab hidden).
+   *  Best-effort and fire-and-forget, like every archive save. */
+  const flushMementoAutosave = () => {
+    if (mementoSaveTimeoutRef.current === null) return
+    window.clearTimeout(mementoSaveTimeoutRef.current)
+    mementoSaveTimeoutRef.current = null
+    void runMementoAutosave()
+  }
+
+  /** Persist the live vibe state to sessionStorage (debounced 500ms), so the
+   *  composition survives SPA navigation and component remounts for the whole
+   *  tab session. The live upload ref rides beside the memento — its blob: URL
+   *  stays valid in this document, which is exactly the window covered. */
+  const scheduleVibeSessionPersist = () => {
+    if (vibeSessionPersistTimeoutRef.current !== null) {
+      window.clearTimeout(vibeSessionPersistTimeoutRef.current)
+    }
+    vibeSessionPersistTimeoutRef.current = window.setTimeout(() => {
+      vibeSessionPersistTimeoutRef.current = null
+      persistVibeSession()
+    }, 500)
+  }
+
+  const persistVibeSession = () => {
+    if (!vibeTouchedRef.current) return
+    try {
+      const snapshot = captureVibeSnapshot()
+      const memento = buildVibeMemento(snapshot, {
+        pond: pondEnabledRef.current
+          ? { enabled: true, character: pondCharacterRef.current }
+          : undefined,
+      })
+      writeVibeSession(window.sessionStorage, memento, snapshot.upload ? { ...snapshot.upload } : null)
+    } catch {
+      /* persistence never disturbs the playground */
+    }
+  }
+
+  // Flush pending archive saves and the session mirror when the tab hides or
+  // unloads — the trailing debounce must not strand the visitor's last edits.
+  useEffect(() => {
+    const flush = () => {
+      flushMementoAutosave()
+      if (vibeSessionPersistTimeoutRef.current !== null) {
+        window.clearTimeout(vibeSessionPersistTimeoutRef.current)
+        vibeSessionPersistTimeoutRef.current = null
+        persistVibeSession()
+      }
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flush()
+    }
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /** Toolbar export hook: a successful share/download archives too — but
+   *  only for a qualified session (a default playground exports nothing). */
+  const handleExportCapture = ({ kind, blob }: { kind: 'image' | 'clip'; blob: Blob }) => {
+    if (!mementoTrackerRef.current.isQualified()) return
+    void saveCurrentCreation(kind, kind === 'clip' ? blob : undefined)
   }
 
   /** Default coalesce key from the patch contents: single scalar fields use
@@ -951,6 +1286,21 @@ export default function PortfolioExperience() {
   const [pondConfig, setPondConfig] = useState<PondConfig>(() => ({ ...POND_DEFAULTS }))
   const [pondEnabled, setPondEnabled] = useState(false)
   const [pondCharacter, setPondCharacter] = useState<PondCharacter>('source')
+  // Ref mirrors for the async creations save path (same convention as
+  // playgroundConfigRef/paintToolRef): a saved piece records whether the pond
+  // was on so it can reopen that way (engine/vibeMemento.ts `pond` field).
+  const pondEnabledRef = useRef(pondEnabled)
+  const pondCharacterRef = useRef(pondCharacter)
+  useEffect(() => {
+    pondEnabledRef.current = pondEnabled
+    scheduleVibeSessionPersist()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pondEnabled])
+  useEffect(() => {
+    pondCharacterRef.current = pondCharacter
+    scheduleVibeSessionPersist()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pondCharacter])
   const handlePondChange = (next: PondConfig) => {
     setPondConfig(clampPondConfig(next))
   }
@@ -1001,6 +1351,11 @@ export default function PortfolioExperience() {
     durationOverrideMs: clipDurationOverrideMs,
   })
 
+  /* Floating vibe controls (Sound/Pond FABs + pills) vs the centered toolbar
+     capsule: publishes the measured capsule half-width and per-side
+     horizontal/vertical pill layout so nothing overlaps at mid-size widths. */
+  useVibeControlLayout(displayed === 'vibe' && vibeControlsOpen)
+
   const controllerRef = useRef<SequenceController>({
     startTime: 0,
     pausedElapsed: 0,
@@ -1008,6 +1363,14 @@ export default function PortfolioExperience() {
     speed: 1,
     wasPlayingBeforeHidden: false,
   })
+  // Re-arm hook for the intro rAF loop: the loop parks itself once the
+  // sequence completes, and any controller mutation (play/replay/jump/speed)
+  // or a return to the landing restarts it through this ref.
+  const introLoopRestartRef = useRef<(() => void) | null>(null)
+  const restartIntroLoop = () => introLoopRestartRef.current?.()
+  // Last phase the tick saw — lets the tick skip re-pushing the static
+  // settled output when a re-armed parked loop fires (see the tick's push).
+  const introPrevPhaseRef = useRef<IntroPhase>('logo-scale')
 
   useEffect(() => {
     const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -1028,7 +1391,7 @@ export default function PortfolioExperience() {
 
     reducedMotionQuery.addEventListener('change', handleReducedMotionChange)
 
-    let raf: number
+    let raf: number | null = null
     let lastDiagnosticTick = 0
 
     const updateActionsVisuals = (sequence: IntroSequenceSnapshot) => {
@@ -1089,12 +1452,20 @@ export default function PortfolioExperience() {
 
       // Full-rate visual update path: apply directly to the DOM/canvas
       // without React re-render. The logo scale goes to the canvas
-      // imperatively; the option reveals are CSS custom properties.
-      sceneCanvasRef.current?.setLandingLogoScale(next.logoScale)
+      // imperatively; the option reveals are CSS custom properties. Once the
+      // sequence IS complete and WAS complete last tick its output is static
+      // — skip the push so a re-armed parked loop (return Home) never stomps
+      // a freshly triggered field reveal with the settled scale. The
+      // completing frame itself still pushes the final 1.
+      if (!(next.phase === 'complete' && introPrevPhaseRef.current === 'complete')) {
+        sceneCanvasRef.current?.setLandingLogoScale(next.logoScale)
+      }
+      introPrevPhaseRef.current = next.phase
       const actionMeta = updateActionsVisuals(next)
 
-      // Throttle diagnostic React state updates to ~10fps.
-      if (now - lastDiagnosticTick > 100) {
+      // Throttle diagnostic React state updates to ~10fps. The completing
+      // frame always pushes so the settled state lands before the loop parks.
+      if (next.phase === 'complete' || now - lastDiagnosticTick > 100) {
         const optionsProgress = next.optionsVisible ? next.optionsProgress : 0
         const { itemProgresses, timingFallbackActive } = actionMeta ?? {
           itemProgresses: Array(PRIMARY_ACTION_COUNT).fill(0),
@@ -1130,12 +1501,27 @@ export default function PortfolioExperience() {
         lastDiagnosticTick = now
       }
 
+      // Once complete the sequence output is static — park the loop instead
+      // of rewriting identical DOM state and diagnostics every frame. Any
+      // controller mutation (play/replay/jumpToPhase/speed) or a return to
+      // the landing re-arms it via introLoopRestartRef.
+      if (next.phase === 'complete') {
+        raf = null
+        return
+      }
       raf = requestAnimationFrame(tick)
     }
 
+    // Restart a parked loop (no-op while it is already running).
+    const ensureLoopRunning = () => {
+      if (raf === null) raf = requestAnimationFrame(tick)
+    }
+    introLoopRestartRef.current = ensureLoopRunning
+
     raf = requestAnimationFrame(tick)
     return () => {
-      cancelAnimationFrame(raf)
+      if (raf !== null) cancelAnimationFrame(raf)
+      introLoopRestartRef.current = null
       reducedMotionQuery.removeEventListener('change', handleReducedMotionChange)
     }
   }, [])
@@ -1167,7 +1553,16 @@ export default function PortfolioExperience() {
     return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [])
 
-  const navigateTo = (key: ExperienceSceneKey) => {
+  // Returning to the landing remounts the PrimaryActions node; re-arm the
+  // (possibly parked) intro loop so its next frame reapplies the settled
+  // options classes to the fresh node, exactly as the always-running loop
+  // did before. Mode switches away refresh the diagnostics' optionsMounted.
+  useEffect(() => {
+    restartIntroLoop()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayed])
+
+  const navigateTo = (key: ExperienceSceneKey | null) => {
     const doNavigate = () => {
       // Leaving the full chat page via the nav retains the conversation as
       // the companion (wide) or the minimized resume bar (narrow); entering
@@ -1181,26 +1576,37 @@ export default function PortfolioExperience() {
         setGuideOverlayOpen(false)
       }
       setSelected(key)
-      setExperience(key)
+      setExperience(key ?? 'intro')
+      // Home (null): the scene-adoption effect skips the intro mode, so the
+      // landing's behavior/layout are restored explicitly here — otherwise
+      // the canvas would keep the last section's descriptor behind the
+      // logotype.
+      if (key === null) {
+        setSceneConfig({ ...APPROVED_SCENE_DEFAULTS })
+        setSourceLayout({ ...APPROVED_SOURCE_LAYOUT_DEFAULTS })
+      }
       // Selecting Collaborate from Work/Vibe ALWAYS opens the landing, even
       // when a conversation exists in memory (the landing previews it).
       if (key === 'collaborate') setCollaborateView('landing')
-      if (typeof window !== 'undefined' && window.location.hash !== formatExperienceHash(key)) {
+      // Home strips the hash entirely (pathname + search) instead of
+      // introducing a #home sentinel, so `/` stays the canonical landing URL.
+      const nextUrl = key
+        ? formatExperienceHash(key)
+        : `${window.location.pathname}${window.location.search}`
+      if (
+        typeof window !== 'undefined' &&
+        (key === null ? window.location.hash !== '' : window.location.hash !== nextUrl)
+      ) {
         // pushState (not location.hash assignment) so no hashchange event fires;
         // the listener below owns back/forward navigation only. Every state
         // update simply replaces the previous one, so rapid navigation always
         // resolves to the last selected mode.
-        window.history.pushState(null, '', formatExperienceHash(key))
+        window.history.pushState(null, '', nextUrl)
       }
     }
-    // Leaving vibe with paint on the field asks before discarding it.
-    if (displayed === 'vibe' && key !== 'vibe') {
-      withPaintConfirmation(() => {
-        sceneCanvasRef.current?.clearPaint()
-        doNavigate()
-      })
-      return
-    }
+    // Leaving vibe keeps the visitor's paint and undo history for the whole
+    // session: the mode-change effect stashes the paint overlay (so it never
+    // bleeds onto other modes' scenes) and restores it on return.
     doNavigate()
   }
 
@@ -1210,7 +1616,10 @@ export default function PortfolioExperience() {
   // bare work mode (slide untouched). `#collaborate/chat` deep links open the
   // chat subview while a conversation exists in memory; without turns (e.g. a
   // direct load or reload — page memory only) the hash canonicalizes to the
-  // bare `#collaborate` landing via replaceState.
+  // bare `#collaborate` landing via replaceState. An EMPTY hash is the
+  // canonical home URL: back/forward onto `/` settles the landing (without
+  // replaying the intro) and restores the landing scene defaults. Unrecognized
+  // non-empty hashes (e.g. `#main-content` from the skip link) stay untouched.
   useEffect(() => {
     const applyHash = () => {
       const target = parseExperienceHashTarget(window.location.hash)
@@ -1240,6 +1649,15 @@ export default function PortfolioExperience() {
             setGuideUnseenAnswer(false)
           }
         }
+      } else if (window.location.hash.replace(/^#/, '').trim() === '') {
+        // Home: raw settle (same pattern as the deep-link branch above),
+        // skipped when the landing is already showing so the intro's first
+        // paint never sees a fresh sceneConfig identity mid-sequence.
+        if (experienceRef.current === 'intro') return
+        setSelected(null)
+        setExperience('intro')
+        setSceneConfig({ ...APPROVED_SCENE_DEFAULTS })
+        setSourceLayout({ ...APPROVED_SOURCE_LAYOUT_DEFAULTS })
       }
     }
     applyHash()
@@ -1262,6 +1680,10 @@ export default function PortfolioExperience() {
           : EXPERIENCE_SCENES[displayed]
     setSceneConfig({ ...scene.behavior })
     setSourceLayout({ ...scene.sourceLayout })
+    // Mode entry RE-RENDERS the field (rise + per-mode staggered fade from
+    // the rise pose) — the outgoing scene vanishes at progress 0 and the new
+    // scene renders in place instead of spring-morphing across the viewport.
+    sceneCanvasRef.current?.beginFieldReveal()
     // Vibe entry: adopt the curated default composition so the mode is
     // visually complete before the dock is opened — unless the visitor has
     // already made their own edits, which survive mode switches. Resolved
@@ -1271,18 +1693,41 @@ export default function PortfolioExperience() {
     }
   }, [displayed, workDescriptor, collaborateDescriptor])
 
-  // Safety net: whenever the settled experience is not vibe, no paint may
-  // remain on the field. navigateTo confirms-then-clears on the explicit path;
-  // browser back/forward resolves through the hash listener and lands here.
-  // The departure discard is non-recoverable, so the vibe undo history (which
-  // could otherwise restore paint onto a different mode's field) is dropped
-  // with it; the uploaded source itself survives mode switches.
+  // Returning Home is a page change too: re-render the field (center-out).
+  // The cold-load landing intro drives its own progress stream, so only
+  // transitions BACK to the landing trigger this.
+  const prevDisplayedRef = useRef<ExperienceMode | null>(null)
   useEffect(() => {
-    if (displayed !== 'vibe') {
-      sceneCanvasRef.current?.clearPaint()
-      clearVibeHistory(vibeHistoryRef.current, releaseOrphanedUrl)
-      lastPaintSnapshotRef.current = createEmptyPaintSnapshot()
-      syncVibeHistoryFlags()
+    if (
+      prevDisplayedRef.current !== null &&
+      prevDisplayedRef.current !== 'intro' &&
+      displayed === 'intro'
+    ) {
+      sceneCanvasRef.current?.beginFieldReveal()
+    }
+    prevDisplayedRef.current = displayed
+  }, [displayed])
+
+  // Paint stash: the visitor's paint and undo history survive mode switches
+  // for the whole session. Leaving vibe stashes the overlay and clears the
+  // canvas (paint must never bleed onto work/collaborate scenes — the canvas
+  // stays mounted); returning to vibe restores it. The undo history and
+  // lastPaintSnapshotRef are deliberately left intact.
+  useEffect(() => {
+    const canvas = sceneCanvasRef.current
+    if (displayed === 'vibe') {
+      const stash = stashedPaintRef.current
+      stashedPaintRef.current = null
+      if (stash && stash.strokes.length > 0 && canvas) {
+        canvas.restorePaintState(stash)
+        lastPaintSnapshotRef.current = clonePaintSnapshot(stash)
+      }
+      return
+    }
+    if (!canvas || displayed === 'intro') return
+    if (canvas.getPaintStatus().strokeCount > 0) {
+      stashedPaintRef.current = canvas.capturePaintState()
+      canvas.clearPaint()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayed])
@@ -1290,13 +1735,29 @@ export default function PortfolioExperience() {
   // Focus management: move focus to the mode heading whenever the settled
   // mode (or collaborate subview) changes. The collaborate chat view focuses
   // its own heading instead; returning to the landing refocuses the mode
-  // heading. Focus is never moved to individual guide answers.
+  // heading. Focus is never moved to individual guide answers. The work and
+  // collaborate subtrees load on demand (next/dynamic), so on a first visit
+  // the heading mounts after the swap — retry briefly instead of dropping
+  // the focus move.
   useEffect(() => {
     if (displayed === 'intro') return
-    if (displayed === 'collaborate' && collaborateView === 'chat') {
-      chatHeadingRef.current?.focus({ preventScroll: true })
-    } else {
-      modeHeadingRef.current?.focus({ preventScroll: true })
+    const headingNode = () =>
+      displayed === 'collaborate' && collaborateView === 'chat'
+        ? chatHeadingRef.current
+        : modeHeadingRef.current
+    let raf: number | null = null
+    const deadline = performance.now() + 2000
+    const tryFocus = () => {
+      const node = headingNode()
+      if (node) {
+        node.focus({ preventScroll: true })
+        return
+      }
+      if (performance.now() < deadline) raf = requestAnimationFrame(tryFocus)
+    }
+    tryFocus()
+    return () => {
+      if (raf !== null) cancelAnimationFrame(raf)
     }
   }, [displayed, collaborateView])
 
@@ -1388,14 +1849,8 @@ export default function PortfolioExperience() {
         params: { story_id: target.storyId, presentation: nextPresentation },
       })
     }
-    // Leaving vibe with paint on the field asks before discarding it.
-    if (displayed === 'vibe') {
-      withPaintConfirmation(() => {
-        sceneCanvasRef.current?.clearPaint()
-        doNavigate()
-      })
-      return
-    }
+    // Leaving vibe keeps the visitor's paint (session persistence); the
+    // mode-change effect stashes the overlay and restores it on return.
     doNavigate()
   }
 
@@ -1603,6 +2058,7 @@ export default function PortfolioExperience() {
       ctrl.paused = false
       ctrl.startTime = performance.now()
     }
+    restartIntroLoop()
   }
 
   const pause = () => {
@@ -1649,6 +2105,7 @@ export default function PortfolioExperience() {
       optionItemProgress: Array(PRIMARY_ACTION_COUNT).fill(0),
       actionsInert: true,
     }))
+    restartIntroLoop()
   }
 
   const jumpToPhase = (phase: IntroPhase) => {
@@ -1700,6 +2157,7 @@ export default function PortfolioExperience() {
       ),
       actionsInert: !next.optionsReady,
     }))
+    restartIntroLoop()
   }
 
   const handleSpeedChange = (value: number) => {
@@ -1711,6 +2169,7 @@ export default function PortfolioExperience() {
     }
     ctrl.speed = value
     setDiagnostics((prev) => ({ ...prev, speed: value }))
+    restartIntroLoop()
   }
 
   const handleSceneConfigChange = (key: keyof SceneConfig, value: number) => {
@@ -1729,11 +2188,40 @@ export default function PortfolioExperience() {
     setSourceLayout({ ...APPROVED_SOURCE_LAYOUT_DEFAULTS })
   }
 
+  /** Tuning panel edits the ACTIVE mode's reveal config; every change replays
+   *  the reveal (landing via the intro replay, other modes via a fresh
+   *  mode-entry reveal) so dialing is immediately visible. */
+  const handleFieldRevealChange = (
+    mode: FieldRevealMode,
+    patch: Partial<FieldRevealConfig>,
+  ) => {
+    setFieldRevealConfig((prev) => ({ ...prev, [mode]: { ...prev[mode], ...patch } }))
+    if (displayed === 'intro') replay()
+    else sceneCanvasRef.current?.beginFieldReveal()
+  }
+
+  const resetFieldRevealConfig = () => {
+    setFieldRevealConfig({
+      landing: { ...portfolioIntroPreset.reveal },
+      work: { ...FIELD_REVEAL_DEFAULTS.work },
+      vibe: { ...FIELD_REVEAL_DEFAULTS.vibe },
+      collaborate: { ...FIELD_REVEAL_DEFAULTS.collaborate },
+    })
+    if (displayed === 'intro') replay()
+    else sceneCanvasRef.current?.beginFieldReveal()
+  }
+
   const handleCopyConfiguration = () => {
     const payload = {
       timing: { ...portfolioIntroPreset.timing },
       scene: { ...sceneConfig },
       sourceLayout: { ...sourceLayout },
+      fieldReveal: {
+        landing: { ...fieldRevealConfig.landing },
+        work: { ...fieldRevealConfig.work },
+        vibe: { ...fieldRevealConfig.vibe },
+        collaborate: { ...fieldRevealConfig.collaborate },
+      },
     }
     const json = JSON.stringify(payload, null, 2)
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -1785,6 +2273,8 @@ export default function PortfolioExperience() {
   // onAmbientWipeEnd via microtask, so the nav lock always releases.
   const handleAmbientNavigate = (direction: 'next' | 'prev') => {
     if (ambientWipeActive) return
+    mementoTrackerRef.current.touchElement('carousel')
+    scheduleMementoAutosave()
     const current = resolveAmbientSceneId(playgroundConfigRef.current.ambient)
     const next = nextAmbientSceneId(current, direction)
     if (sceneCanvasRef.current?.beginAmbientWipe(direction)) {
@@ -1892,6 +2382,7 @@ export default function PortfolioExperience() {
     playgroundConfigRef.current = cloneVibeConfig(defaultConfig)
     sceneCanvasRef.current?.clearPaint()
     lastPaintSnapshotRef.current = createEmptyPaintSnapshot()
+    stashedPaintRef.current = null
     const defaultPaintTool: PaintToolConfig = {
       enabled: false,
       tool: 'paint',
@@ -1909,6 +2400,18 @@ export default function PortfolioExperience() {
     urlRegistryRef.current.releaseOrphans(new Set())
     setUploadError(null)
     syncVibeHistoryFlags()
+    // Reset starts a fresh engagement session: the stored mirror is dropped,
+    // any pending autosave is cancelled, and the tracker must re-qualify
+    // before the archive row sees the next composition.
+    clearVibeSession(window.sessionStorage)
+    if (mementoSaveTimeoutRef.current !== null) {
+      window.clearTimeout(mementoSaveTimeoutRef.current)
+      mementoSaveTimeoutRef.current = null
+    }
+    mementoSaveDirtyRef.current = false
+    mementoTrackerRef.current = createVibeMementoTracker()
+    lastCreationHashRef.current = null
+    creationToastShownRef.current = false
   }
 
   const handlePaintToolChange = (patch: Partial<PaintToolConfig>, historyKey?: string) => {
@@ -2011,6 +2514,110 @@ export default function PortfolioExperience() {
     return () => window.removeEventListener('keydown', handleHistoryKeys)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayed])
+
+  // Session restore (vibe session store): the visitor's in-progress composition
+  // is mirrored to sessionStorage on every change, so remounting (SPA
+  // navigation away and back within the tab) rehydrates it. A manual full-page
+  // refresh deliberately starts fresh (reload clears the mirror); an explicit
+  // `?memento=<id>` link wins over the stored session. No history transaction
+  // is recorded and no mode switch is forced — the work is simply there when
+  // the visitor returns to vibe.
+  const vibeSessionRestoreAttemptedRef = useRef(false)
+  useEffect(() => {
+    if (vibeSessionRestoreAttemptedRef.current) return
+    vibeSessionRestoreAttemptedRef.current = true
+    if (new URLSearchParams(window.location.search).get('memento')) return
+    const nav = performance.getEntriesByType('navigation')[0] as
+      | PerformanceNavigationTiming
+      | undefined
+    if (nav?.type === 'reload') {
+      clearVibeSession(window.sessionStorage)
+      return
+    }
+    const record = readVibeSession(window.sessionStorage)
+    if (!record) return
+    let canceled = false
+    const restore = async () => {
+      const snapshot = mementoToVibeSnapshot(record.memento)
+      // A live in-session upload persisted as its blob: URL; if the URL no
+      // longer resolves (a fresh document in the same tab), drop the upload —
+      // the rest of the composition still restores.
+      if (record.upload && record.memento.source.kind === 'upload') {
+        try {
+          if (!(await fetch(record.upload.url)).ok) throw new Error('dead blob URL')
+          snapshot.upload = { ...record.upload }
+        } catch {
+          snapshot.upload = null
+        }
+        if (canceled) return
+      }
+      applyVibeSnapshot(snapshot)
+      // A piece composed with the pond on comes back with the pond on.
+      if (record.memento.pond?.enabled) {
+        setPondEnabled(true)
+        if (record.memento.pond.character) setPondCharacter(record.memento.pond.character)
+      }
+    }
+    void restore()
+    return () => {
+      canceled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Open-in-playground (feature/vibe-creations): a `?memento=<id>` link loads
+  // the archived composition over the default playground — one 'preset'
+  // history transaction (undo returns to the default), paint strokes restored
+  // through the canvas handle via applyVibeSnapshot, then vibe mode with the
+  // control dock open. Runs once per page load; any failure falls through to
+  // the normal page silently.
+  const mementoRestoreAttemptedRef = useRef(false)
+  useEffect(() => {
+    if (mementoRestoreAttemptedRef.current) return
+    mementoRestoreAttemptedRef.current = true
+    const id = new URLSearchParams(window.location.search).get('memento')
+    if (!id) return
+    let canceled = false
+    const restore = async () => {
+      try {
+        const memento = await fetchCreationState(id)
+        if (!memento || canceled) return
+        const snapshot = mementoToVibeSnapshot(memento)
+        // An archived upload source is served as bytes: reify it into an
+        // object URL so the field samples it like a fresh upload.
+        if (memento.source.kind === 'upload' && snapshot.upload) {
+          const response = await fetch(snapshot.upload.url)
+          if (!response.ok) return
+          const blob = await response.blob()
+          if (canceled) return
+          snapshot.upload = { ...snapshot.upload, url: URL.createObjectURL(blob) }
+        }
+        if (canceled) return
+        const before = captureVibeSnapshot()
+        recordVibeTransaction('preset', null, before, snapshot)
+        applyVibeSnapshot(snapshot)
+        // A piece saved with the pond on reopens with the pond on.
+        if (memento.pond?.enabled) {
+          setPondEnabled(true)
+          if (memento.pond.character) setPondCharacter(memento.pond.character)
+        }
+        setSelected('vibe')
+        setExperience('vibe')
+        setVibeControlsOpen(true)
+        const vibeHash = formatExperienceHash('vibe')
+        if (window.location.hash !== vibeHash) {
+          window.history.pushState(null, '', vibeHash)
+        }
+      } catch {
+        /* silent — the normal page is the fallback */
+      }
+    }
+    void restore()
+    return () => {
+      canceled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Presets apply a complete authored composition, resolved against the
   // ACTIVE theme at selection time (feature/light-dark) — the resolution
@@ -2346,6 +2953,7 @@ export default function PortfolioExperience() {
         tuningMode={tuningMode}
         sequenceDiagnostics={diagnostics}
         experience={displayed}
+        fieldReveal={fieldRevealConfig}
         sceneId={
           displayed === 'work'
             ? `work/${getWorkSlideId(getWorkSlide(workSlideIndex))}`
@@ -2360,6 +2968,8 @@ export default function PortfolioExperience() {
         weatherRepelMult={sceneConfig.weatherRepelMult}
         clickImpulseRadius={sceneConfig.clickImpulseRadius}
         clickImpulseForce={sceneConfig.clickImpulseForce}
+        dragInfluenceMult={sceneConfig.dragInfluenceMult}
+        rippleStrength={sceneConfig.rippleStrength}
         sourceLayout={sourceLayout}
         source={sceneSource}
         targetRegion={displayed === 'work' ? workTargetRegion : null}
@@ -2385,13 +2995,16 @@ export default function PortfolioExperience() {
           }
         }}
       />
-      {experience !== 'intro' && (
-        <ExperienceNav
-          active={displayed === 'intro' ? null : displayed}
-          onSelect={navigateTo}
-          className={collaborateChatActive ? 'experience-nav--chat-active' : undefined}
-        />
-      )}
+      {/* Persistent frame (homepage-redesign phase 1): always rendered — on
+          the landing and inside every section — so home, the section tabs,
+          and the recruiter links are one click away from anywhere. Sits
+          above the canvas (z-index contract in globals.css .site-header). */}
+      <SiteHeader
+        active={displayed === 'intro' ? null : displayed}
+        onSelect={navigateTo}
+        onHome={() => navigateTo(null)}
+        className={collaborateChatActive ? 'site-header--chat-active' : undefined}
+      />
       <AnalyticsConsent onClient={(client) => (analyticsClientRef.current = client)} />
       <main
         id="main-content"
@@ -2561,7 +3174,10 @@ export default function PortfolioExperience() {
           client-side hash/navigation state resolves, so the static export
           carries the full story content here instead. Visually hidden but
           semantic; unmounted while the work surface itself is on screen to
-          avoid duplicated content for assistive tech. */}
+          avoid duplicated content for assistive tech. Links are tabIndex={-1}:
+          they exist for crawlers and AT browse mode, and must NOT sit in the
+          keyboard tab order — a tab stop on an invisible, unfocusable-looking
+          target is a WCAG 2.4.7 (Focus Visible) failure. */}
       {displayed !== 'work' && (
         <section className="visually-hidden" aria-label="Work case studies">
           <h2>Work</h2>
@@ -2580,14 +3196,16 @@ export default function PortfolioExperience() {
                 </p>
                 <p>{slide.story.outcome}</p>
                 {slide.story.access === 'protected' ? (
-                  <a href={`/protected-work?story=${slide.story.protectedId}`}>
+                  <a href={`/protected-work?story=${slide.story.protectedId}`} tabIndex={-1}>
                     View this confidential case study
                   </a>
                 ) : (
                   <>
-                    <a href={`#work/${slide.story.id}`}>View this case study</a>
+                    <a href={`#work/${slide.story.id}`} tabIndex={-1}>
+                      View this case study
+                    </a>
                     {slide.story.links.map((link) => (
-                      <a key={link.url} href={link.url}>
+                      <a key={link.url} href={link.url} tabIndex={-1}>
                         {link.label}
                       </a>
                     ))}
@@ -2617,7 +3235,9 @@ export default function PortfolioExperience() {
               ))}
             </ul>
           )}
-          <a href={COLLABORATE_CONTACT.mailtoUrl}>{COLLABORATE_CONTACT.primaryLabel}</a>
+          <a href={COLLABORATE_CONTACT.mailtoUrl} tabIndex={-1}>
+            {COLLABORATE_CONTACT.primaryLabel}
+          </a>
         </section>
       )}
       {/* Crawlable vibe digest: same rationale as the work digest above — the
@@ -2674,6 +3294,7 @@ export default function PortfolioExperience() {
           onSoundPlay={sonification.play}
           onSoundPause={sonification.pause}
           clip={clipRecorder}
+          onExportCapture={handleExportCapture}
         />
       )}
       {displayed === 'vibe' && vibeControlsOpen && (
@@ -2689,6 +3310,10 @@ export default function PortfolioExperience() {
             character={pondCharacter}
             onToggle={() => setPondEnabled((prev) => !prev)}
             onSelect={setPondCharacter}
+            onInteract={() => {
+              mementoTrackerRef.current.touchElement('pond')
+              scheduleMementoAutosave()
+            }}
           />
           <SoundControl
             expanded={soundExpanded}
@@ -2700,6 +3325,10 @@ export default function PortfolioExperience() {
             onPlay={handleSoundPlay}
             onPause={handleSoundPause}
             onCycleDirection={handleSoundCycleDirection}
+            onInteract={() => {
+              mementoTrackerRef.current.touchElement('music')
+              scheduleMementoAutosave()
+            }}
           />
         </>
       )}
@@ -2710,6 +3339,7 @@ export default function PortfolioExperience() {
           getActiveDirection={sonification.getActiveDirection}
         />
       )}
+      <CreationToast open={creationToastOpen} onDismiss={() => setCreationToastOpen(false)} />
       {tuningMode && (
         <TuningPanel
           speed={diagnostics.speed}
@@ -2720,6 +3350,10 @@ export default function PortfolioExperience() {
           sourceLayout={sourceLayout}
           onSourceLayoutChange={handleSourceLayoutChange}
           onResetSourceLayout={resetSourceLayout}
+          fieldReveal={fieldRevealConfig}
+          activeRevealMode={displayed === 'intro' ? 'landing' : displayed}
+          onFieldRevealChange={handleFieldRevealChange}
+          onResetFieldReveal={resetFieldRevealConfig}
           targetCount={diagnostics.targetCount}
           sceneDiagnostics={sceneDiagnostics}
           qualityTierOverride={qualityTierOverride}

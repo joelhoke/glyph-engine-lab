@@ -76,6 +76,9 @@ export type VibeToolbarProps = {
    *  Session-only; the blob never leaves the browser without an explicit
    *  share/download. */
   clip?: ClipRecorderControls
+  /** Fired once per successful export (image share/download, clip
+   *  share/download) so the parent can archive the composition. */
+  onExportCapture?: (args: { kind: 'image' | 'clip'; blob: Blob }) => void
   id?: string
 }
 
@@ -119,6 +122,7 @@ export default function VibeToolbar({
   onSoundPlay,
   onSoundPause,
   clip,
+  onExportCapture,
   id: externalId,
 }: VibeToolbarProps) {
   const generatedId = useId().replace(/:/g, '-')
@@ -402,6 +406,7 @@ export default function VibeToolbar({
         URL.revokeObjectURL(url)
         flashShareFeedback('Image downloaded')
       }
+      onExportCapture?.({ kind: 'image', blob })
     } catch (err) {
       // Canceling the native share sheet throws an AbortError; keep it silent.
       if ((err as Error)?.name === 'AbortError') {
@@ -438,6 +443,7 @@ export default function VibeToolbar({
     link.click()
     URL.revokeObjectURL(url)
     flashShareFeedback('Clip downloaded')
+    onExportCapture?.({ kind: 'clip', blob: clip.preview.blob })
   }
 
   const handleShareClip = async () => {
@@ -449,6 +455,7 @@ export default function VibeToolbar({
     if (navigator.canShare?.(shareData)) {
       try {
         await navigator.share(shareData)
+        onExportCapture?.({ kind: 'clip', blob: clip.preview.blob })
         clip.releasePreview()
       } catch (err) {
         // AbortError = visitor canceled: keep the preview, stay silent.

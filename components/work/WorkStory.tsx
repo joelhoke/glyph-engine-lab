@@ -1,37 +1,102 @@
 'use client'
 
-import { RefObject, useRef, useState } from 'react'
+import { RefObject, useEffect, useRef, useState } from 'react'
 import { getWorkMedia, WorkMedia, WorkStory } from '../../content/work'
 import { AnalyticsEvent, outboundHost } from '../../engine/analytics'
-import WorkMediaLightbox from './WorkMediaLightbox'
+import WorkMediaLightbox, { CaptionActionLink } from './WorkMediaLightbox'
 
 type WorkStoryProps = {
   story: WorkStory
   headingRef?: RefObject<HTMLHeadingElement | null>
+  /** Provided by WorkExperience for public slides that overflow the compact
+   *  fold — the button eases the card straight to full expansion. */
+  onReadCaseStudy?: () => void
   /** Consented public analytics events; no-op before opt-in. */
   onTrackEvent?: (event: AnalyticsEvent) => void
 }
 
 const PREVIEW_THUMB_COUNT = 3
 
+/** Counts a metric's leading numeral up from zero when the stat block
+ *  scrolls into view; suffixes ("+", "s/hr", " → 12") trail the count.
+ *  Reduced-motion sessions get the final value immediately. */
+function MetricValue({ value }: { value: string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const [display, setDisplay] = useState(value)
+
+  useEffect(() => {
+    const node = ref.current
+    if (!node) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const match = value.match(/^([\d,]+)([\s\S]*)$/)
+    if (!match) return
+    const target = parseInt(match[1].replace(/,/g, ''), 10)
+    if (!Number.isFinite(target) || target <= 0) return
+    const suffix = match[2]
+    const grouped = match[1].includes(',')
+    const format = (n: number) =>
+      (grouped ? Math.round(n).toLocaleString('en-US') : String(Math.round(n))) + suffix
+
+    setDisplay(format(0))
+    let frame = 0
+    const duration = 1400
+    let startTime = 0
+    const step = (now: number) => {
+      if (!startTime) startTime = now
+      const t = Math.min((now - startTime) / duration, 1)
+      const eased = 1 - Math.pow(1 - t, 3)
+      setDisplay(format(target * eased))
+      if (t < 1) frame = requestAnimationFrame(step)
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          observer.disconnect()
+          frame = requestAnimationFrame(step)
+        }
+      },
+      { threshold: 0.6 },
+    )
+    observer.observe(node)
+    return () => {
+      observer.disconnect()
+      cancelAnimationFrame(frame)
+    }
+  }, [value])
+
+  return (
+    <span ref={ref} className="work-story-metric-value">
+      {display}
+    </span>
+  )
+}
+
 /**
  * Presentational view of a single case study. The structured narrative is
- * always rendered (no disclosure) — the card's expanded reading panel is what
- * reveals it. Media referenced from narrative sections via mediaIds renders
+ * always rendered (no disclosure) — the card's expanded reading panel is
+ * what reveals it, via scroll scrub or the "Read the case study" button. Media referenced from narrative sections via mediaIds renders
  * inline (images open the lightbox); the gallery is reserved for media NOT
  * placed in the narrative, so nothing appears twice. Related links always
  * come last. Pure semantic HTML — the story is fully readable with the
  * canvas disabled. Protected stories render only their approved teaser plus
  * the confidential-viewer route.
  */
-export default function WorkStoryView({ story, headingRef, onTrackEvent }: WorkStoryProps) {
+export default function WorkStoryView({
+  story,
+  headingRef,
+  onReadCaseStudy,
+  onTrackEvent,
+}: WorkStoryProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const lightboxTriggerRef = useRef<HTMLElement | null>(null)
 
   const media = story.access === 'public' ? (story.media ?? []) : []
   const details = story.access === 'public' ? (story.details ?? []) : []
   // Media placed inline in the narrative never repeats as a gallery thumb.
-  const inlineIds = new Set(details.flatMap((section) => section.mediaIds ?? []))
+  const inlineIds = new Set([
+    ...(story.outcomeMediaIds ?? []),
+    ...details.flatMap((section) => section.mediaIds ?? []),
+  ])
   const galleryMedia = media.filter((entry) => !inlineIds.has(entry.id))
   const previewMedia = galleryMedia.slice(0, PREVIEW_THUMB_COUNT)
 
@@ -76,6 +141,16 @@ export default function WorkStoryView({ story, headingRef, onTrackEvent }: WorkS
         </div>
       </dl>
 
+      {/* Discoverability affordance for the scroll-scrubbed expansion: the
+          compact fold hides the narrative below this point, so the button
+          opens the card straight to the full reading panel. */}
+      {story.access === 'public' && onReadCaseStudy && (
+        <button type="button" className="work-story-read" onClick={onReadCaseStudy}>
+          Read the case study
+          <span aria-hidden="true"> ↓</span>
+        </button>
+      )}
+
       {story.access === 'protected' ? (
         /* Access action, not a related resource — it keeps its position
            directly under the teaser. */
@@ -90,11 +165,31 @@ export default function WorkStoryView({ story, headingRef, onTrackEvent }: WorkS
               <section className="work-story-section">
                 <h4 className="work-story-section-heading">Outcome</h4>
                 <p className="work-story-outcome">{story.outcome}</p>
+                {story.metrics && story.metrics.length > 0 && (
+                  <ul className="work-story-metrics">
+                    {story.metrics.map((metric) => (
+                      <li key={metric.label} className="work-story-metric">
+                        <MetricValue value={metric.value} />
+                        <span className="work-story-metric-label">{metric.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {story.outcomeParagraphs?.map((paragraph, i) => (
                   <p key={i} className="work-story-section-copy">
                     {paragraph}
                   </p>
                 ))}
+                {story.outcomeMediaIds?.map((mediaId) => {
+                  const entry = getWorkMedia(story, mediaId)
+                  return entry ? (
+                    <InlineMedia
+                      key={mediaId}
+                      item={entry}
+                      onOpenImage={(trigger) => openInlineLightbox(mediaId, trigger)}
+                    />
+                  ) : null
+                })}
               </section>
               {details.map((section) => (
                 <section key={section.heading} className="work-story-section">
@@ -217,7 +312,7 @@ export default function WorkStoryView({ story, headingRef, onTrackEvent }: WorkS
   )
 }
 
-/** Preview tile: image thumbnail, video poster, or embed play tile. */
+/** Preview tile: image thumbnail, video poster, viewer poster, or embed play tile. */
 function GalleryThumb({
   item,
   onOpen,
@@ -228,7 +323,9 @@ function GalleryThumb({
   const label =
     item.kind === 'embed'
       ? `Play ${item.title}`
-      : `View ${item.caption ?? item.alt}`
+      : item.kind === 'viewer'
+        ? `View interactive 3D model: ${item.caption ?? item.alt}`
+        : `View ${item.caption ?? item.alt}`
   return (
     <button
       type="button"
@@ -250,6 +347,16 @@ function GalleryThumb({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={item.poster} width={item.width} height={item.height} alt="" loading="lazy" />
       )}
+      {item.kind === 'viewer' && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={item.poster.src}
+          width={item.poster.width}
+          height={item.poster.height}
+          alt=""
+          loading="lazy"
+        />
+      )}
       {item.kind === 'embed' && <span aria-hidden="true">▶</span>}
     </button>
   )
@@ -265,7 +372,14 @@ function InlineMedia({
 }) {
   if (item.kind === 'image') {
     return (
-      <figure className="work-inline-media work-inline-media--image">
+      <figure
+        className="work-inline-media work-inline-media--image"
+        style={
+          item.inlineWidth
+            ? ({ '--inline-width': `${item.inlineWidth}%` } as React.CSSProperties)
+            : undefined
+        }
+      >
         <button
           type="button"
           className="work-inline-media-button"
@@ -281,7 +395,57 @@ function InlineMedia({
             loading="lazy"
           />
         </button>
-        {item.caption && <figcaption>{item.caption}</figcaption>}
+        {(item.caption || item.captionAction) && (
+          <figcaption>
+            {item.caption}
+            {item.captionAction && (
+              <>
+                {' '}
+                <CaptionActionLink action={item.captionAction} />
+              </>
+            )}
+          </figcaption>
+        )}
+      </figure>
+    )
+  }
+  if (item.kind === 'viewer') {
+    if (item.inlinePlayback === 'live') {
+      return <LiveInlineViewer item={item} />
+    }
+    // Interactive 3D viewer: poster figure like an image; the iframe loads
+    // only inside the lightbox. The pill marks the poster as orbitable.
+    return (
+      <figure className="work-inline-media work-inline-media--image">
+        <button
+          type="button"
+          className="work-inline-media-button"
+          onClick={(event) => onOpenImage(event.currentTarget)}
+          aria-label={`View interactive 3D model: ${item.caption ?? item.alt} (opens a viewer you can drag to orbit)`}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={item.poster.src}
+            width={item.poster.width}
+            height={item.poster.height}
+            alt={item.alt}
+            loading="lazy"
+          />
+          <span className="work-inline-media-hint" aria-hidden="true">
+            3D — drag to orbit
+          </span>
+        </button>
+        {(item.caption || item.captionAction) && (
+          <figcaption>
+            {item.caption}
+            {item.captionAction && (
+              <>
+                {' '}
+                <CaptionActionLink action={item.captionAction} />
+              </>
+            )}
+          </figcaption>
+        )}
       </figure>
     )
   }
@@ -289,7 +453,6 @@ function InlineMedia({
     return (
       <figure className="work-inline-media">
         <video
-          src={item.src}
           poster={item.poster}
           width={item.width}
           height={item.height}
@@ -297,15 +460,26 @@ function InlineMedia({
           preload="none"
           aria-label={item.alt}
         >
+          {/* Source children, not a src attribute: with a fallback the browser
+              picks the first playable encoding (HEVC primary, H.264 fallback)
+              without downloading both. */}
+          <source src={item.src} type={item.fallbackSrc ? 'video/mp4; codecs="hvc1"' : undefined} />
+          {item.fallbackSrc && <source src={item.fallbackSrc} type="video/mp4" />}
           {item.captionsSrc && (
             <track kind="captions" src={item.captionsSrc} label="English captions" default />
           )}
         </video>
-        {(item.caption || item.transcript) && (
+        {(item.caption || item.transcript || item.captionAction) && (
           <figcaption>
             {item.caption}
             {item.transcript && (
               <span className="work-inline-transcript"> Transcript: {item.transcript}</span>
+            )}
+            {item.captionAction && (
+              <>
+                {' '}
+                <CaptionActionLink action={item.captionAction} />
+              </>
             )}
           </figcaption>
         )}
@@ -313,6 +487,51 @@ function InlineMedia({
     )
   }
   return <InlineEmbed item={item} />
+}
+
+function LiveInlineViewer({
+  item,
+}: {
+  item: Extract<WorkMedia, { kind: 'viewer' }>
+}) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null)
+
+  useEffect(() => {
+    const iframe = iframeRef.current
+    if (!iframe) return
+    // Reduced motion: swap to the static single-frame mode. Done post-mount
+    // (not at render) so the static export's prerendered markup hydrates
+    // without a mismatch.
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      iframe.src = `${item.src}?static=1&inline=1`
+    }
+  }, [item.src])
+
+  return (
+    <figure className="work-inline-media work-inline-media--live-viewer">
+      <iframe
+        ref={iframeRef}
+        className="work-inline-live-viewer"
+        src={`${item.src}?inline=1`}
+        title={item.alt}
+        width={item.width}
+        height={item.height}
+        tabIndex={-1}
+      />
+      {/* Whole-figure click-through to the full-screen route; the pill is the
+          visible affordance. The iframe is pointer-events:none so it never
+          traps the click or the page scroll. */}
+      <a
+        className="work-inline-media-open"
+        href="/work/digie-award"
+        aria-label={`Open ${item.caption ?? item.alt} in the full-screen 3D viewer`}
+      >
+        <span className="work-inline-media-fullscreen" aria-hidden="true">
+          Open full screen ↗
+        </span>
+      </a>
+    </figure>
+  )
 }
 
 function InlineEmbed({ item }: { item: Extract<WorkMedia, { kind: 'embed' }> }) {

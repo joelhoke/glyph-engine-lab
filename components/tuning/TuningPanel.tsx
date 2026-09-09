@@ -12,7 +12,22 @@ import {
 import { SourceLayoutConfig } from '../../engine/svgTargetSource'
 import { SceneDiagnosticsSnapshot } from '../../engine/diagnostics'
 import { QualityTier } from '../../engine/qualityTiers'
+import {
+  FIELD_REVEAL_DEFAULTS,
+  FieldRevealConfig,
+  FieldRevealMode,
+  REVEAL_STAGGER_ORDERS,
+  RevealStaggerOrder,
+} from '../../engine/introReveal'
 import NumericControl from './NumericControl'
+
+const STAGGER_ORDER_LABELS: Record<RevealStaggerOrder, string> = {
+  uniform: 'Uniform (all together)',
+  'left-right': 'Left to right',
+  'center-out': 'Center out',
+  'edges-in': 'Edges in',
+  shuffle: 'Shuffle',
+}
 
 type TuningPanelProps = {
   speed: number
@@ -23,6 +38,11 @@ type TuningPanelProps = {
   sourceLayout: SourceLayoutConfig
   onSourceLayoutChange: (key: SourceLayoutConfigKey, value: number | string) => void
   onResetSourceLayout: () => void
+  /** Per-mode field reveal config; the section edits the active mode. */
+  fieldReveal: Record<FieldRevealMode, FieldRevealConfig>
+  activeRevealMode: FieldRevealMode
+  onFieldRevealChange: (mode: FieldRevealMode, patch: Partial<FieldRevealConfig>) => void
+  onResetFieldReveal: () => void
   targetCount: number
   sceneDiagnostics: SceneDiagnosticsSnapshot
   /** Debug override for the adaptive quality tier; null = Auto. */
@@ -49,6 +69,10 @@ export default function TuningPanel({
   sourceLayout,
   onSourceLayoutChange,
   onResetSourceLayout,
+  fieldReveal,
+  activeRevealMode,
+  onFieldRevealChange,
+  onResetFieldReveal,
   targetCount,
   sceneDiagnostics,
   qualityTierOverride,
@@ -69,6 +93,12 @@ export default function TuningPanel({
   )
   const sourceLayoutDirty = (Object.keys(APPROVED_SOURCE_LAYOUT_DEFAULTS) as SourceLayoutConfigKey[]).some(
     (key) => sourceLayout[key] !== APPROVED_SOURCE_LAYOUT_DEFAULTS[key],
+  )
+  const activeReveal = fieldReveal[activeRevealMode]
+  const revealDirty = (Object.keys(FIELD_REVEAL_DEFAULTS) as FieldRevealMode[]).some((mode) =>
+    (Object.keys(FIELD_REVEAL_DEFAULTS[mode]) as (keyof FieldRevealConfig)[]).some(
+      (key) => fieldReveal[mode][key] !== FIELD_REVEAL_DEFAULTS[mode][key],
+    ),
   )
 
   return (
@@ -165,6 +195,72 @@ export default function TuningPanel({
         </div>
         <button type="button" className="tuning-reset-button" onClick={onResetSourceLayout}>
           Reset source and layout
+        </button>
+      </section>
+
+      <section className="tuning-section" aria-labelledby="tuning-reveal-heading">
+        <h3 id="tuning-reveal-heading" className="tuning-section-title">
+          Field reveal — {activeRevealMode}
+        </h3>
+        <div className="tuning-controls-grid">
+          <div className="numeric-control">
+            <label htmlFor="reveal-stagger-order" className="numeric-control-label">
+              Stagger order
+            </label>
+            <select
+              id="reveal-stagger-order"
+              value={activeReveal.staggerOrder}
+              onChange={(e) =>
+                onFieldRevealChange(activeRevealMode, {
+                  staggerOrder: e.target.value as RevealStaggerOrder,
+                })
+              }
+              className="tuning-select"
+            >
+              {REVEAL_STAGGER_ORDERS.map((order) => (
+                <option key={order} value={order}>
+                  {STAGGER_ORDER_LABELS[order]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <NumericControl
+            id="reveal-rise-offset"
+            label="Rise offset"
+            value={activeReveal.riseOffsetPx}
+            min={0}
+            max={200}
+            step={2}
+            unit="px"
+            showSlider
+            onChange={(value) => onFieldRevealChange(activeRevealMode, { riseOffsetPx: value })}
+          />
+          <NumericControl
+            id="reveal-stagger-spread"
+            label="Stagger spread"
+            value={activeReveal.staggerPortion}
+            min={0}
+            max={0.9}
+            step={0.05}
+            showSlider
+            onChange={(value) => onFieldRevealChange(activeRevealMode, { staggerPortion: value })}
+          />
+          {activeRevealMode !== 'landing' && (
+            <NumericControl
+              id="reveal-duration"
+              label="Reveal duration"
+              value={activeReveal.durationMs}
+              min={300}
+              max={2000}
+              step={50}
+              unit="ms"
+              showSlider
+              onChange={(value) => onFieldRevealChange(activeRevealMode, { durationMs: value })}
+            />
+          )}
+        </div>
+        <button type="button" className="tuning-reset-button" onClick={onResetFieldReveal}>
+          Reset field reveal
         </button>
       </section>
 
@@ -284,6 +380,7 @@ export default function TuningPanel({
         <div className="tuning-status-grid">
           <div>Interaction values: {sceneDirty ? 'edited' : 'preset'}</div>
           <div>Source/layout: {sourceLayoutDirty ? 'edited' : 'preset'}</div>
+          <div>Field reveal: {revealDirty ? 'edited' : 'preset'}</div>
           <div>Target count: {targetCount}</div>
           <div>Total duration: {Math.round(totalDurationMs)} ms</div>
           <div>Effective option stagger: {Math.round(effectiveOptionStaggerMs)} ms</div>
@@ -295,13 +392,14 @@ export default function TuningPanel({
             Copy configuration
           </button>
         </div>
-        {(sceneDirty || sourceLayoutDirty) && (
+        {(sceneDirty || sourceLayoutDirty || revealDirty) && (
           <button
             type="button"
             className="tuning-reset-button"
             onClick={() => {
               onResetSceneConfig()
               onResetSourceLayout()
+              onResetFieldReveal()
             }}
           >
             Reset all tuning values

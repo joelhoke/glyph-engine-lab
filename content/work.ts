@@ -54,8 +54,14 @@ export type WorkMediaImage = {
   height: number
   alt: string
   caption?: string
+  /** Optional action link rendered on the lightbox caption line (e.g. open a
+   *  captured composition back in the playground). */
+  captionAction?: { href: string; label: string }
   /** Optional smaller preview src; defaults to src. */
   thumbnail?: string
+  /** Optional inline width as a percent of the content column (desktop only;
+   *  mobile stays full width). Defaults to 100. */
+  inlineWidth?: number
 }
 
 /** Hosted video (MP4/WebM). Captions/transcript metadata is required. */
@@ -63,11 +69,18 @@ export type WorkMediaVideo = {
   kind: 'video'
   id: string
   src: string
+  /** Optional second encoding for browsers that can't play `src` — used when
+   *  `src` is HEVC (Safari + Chromium with hardware decode) and the fallback
+   *  is H.264. Rendered as a second <source>; browsers pick the first
+   *  playable one. */
+  fallbackSrc?: string
   width: number
   height: number
   /** Short accessible description of the video content. */
   alt: string
   caption?: string
+  /** Optional action link rendered on the lightbox caption line. */
+  captionAction?: { href: string; label: string }
   /** Poster frame (required for hosted video). */
   poster: string
   /** WebVTT captions track URL. */
@@ -87,7 +100,30 @@ export type WorkMediaEmbed = {
   caption?: string
 }
 
-export type WorkMedia = WorkMediaImage | WorkMediaVideo | WorkMediaEmbed
+/** Self-hosted interactive viewer (e.g. a three.js scene under
+ *  public/assets/work/) — a poster thumbnail inline and in the gallery; the
+ *  same-origin iframe loads only when the visitor opens it in the lightbox.
+ *  Reduced-motion sessions get the viewer's `?static=1` single-frame mode. */
+export type WorkMediaViewer = {
+  kind: 'viewer'
+  id: string
+  /** Same-origin iframe URL (the viewer's embed page). */
+  src: string
+  /** Poster frame shown inline and as the gallery tile (required). */
+  poster: { src: string; width: number; height: number }
+  /** Lightbox stage aspect ratio (iframe width/height attributes). */
+  width: number
+  height: number
+  alt: string
+  caption?: string
+  /** Render the live viewer inline (autonomous motion, inline framing); its
+   *  caption remains exclusive to the full-screen route. */
+  inlinePlayback?: 'live'
+  /** Optional action link rendered on the caption lines (inline + lightbox). */
+  captionAction?: { href: string; label: string }
+}
+
+export type WorkMedia = WorkMediaImage | WorkMediaVideo | WorkMediaEmbed | WorkMediaViewer
 
 export type WorkStoryAttachment = {
   label: string
@@ -107,6 +143,14 @@ export type WorkStoryDetailsSection = {
   mediaIds?: string[]
 }
 
+/** One headline scale metric, rendered large in the Outcome stat block. */
+export type WorkStoryMetric = {
+  /** Display numeral, e.g. '220,000+', '97%+', '48+'. */
+  value: string
+  /** Short muted caption under the numeral. */
+  label: string
+}
+
 export type WorkStory = {
   /** Stable, unique identifier — used as the React key and in diagnostics. */
   id: string
@@ -123,6 +167,12 @@ export type WorkStory = {
   /** Optional additional outcome narrative, rendered after `outcome` in the
    *  case study's opening Outcome section. */
   outcomeParagraphs?: string[]
+  /** Headline scale metrics, rendered as a stat block at the top of the
+   *  Outcome section. Display data — excluded from the narrative word budget. */
+  metrics?: WorkStoryMetric[]
+  /** Media rendered directly after the Outcome copy, before the details
+   *  sections. */
+  outcomeMediaIds?: string[]
   /** External references; may be empty. */
   links: WorkStoryLink[]
   /** Public stories render fully; protected stories show only the teaser. */
@@ -166,6 +216,12 @@ export const WORK_STORIES: WorkStory[] = [
       'Microsoft · cross-functional team across design, product management, research, and engineering · 2025–2026',
     outcome:
       'Two agent-integrated operational dashboards that synthesized information spread across 48+ Power BI dashboards and SharePoint folders — and a foundation for an operational ecosystem of tools serving teams domestically and internationally.',
+    metrics: [
+      { value: '48+', label: 'dashboards and folders synthesized into two tools' },
+      { value: '1500+', label: 'hours saved triaging and onboarding equipment' },
+      { value: '2026', label: 'Digie award — Most Intelligent Corporate Headquarters' },
+    ],
+    outcomeMediaIds: ['digie-award-3d'],
     links: [
       {
         label: 'Realcomm IBcon 2026 Digie award winners announcement',
@@ -178,7 +234,8 @@ export const WORK_STORIES: WorkStory[] = [
       {
         heading: 'The challenge',
         paragraphs: [
-          'A Microsoft campus runs on millions of devices and assets, and it never sits still. Hundreds of thousands of alarms and faults ring across those assets each year — hundreds per hour — while new devices are onboarded daily into a variety of building management systems, each with its own variables and inconsistent naming conventions. The vendor operations teams responsible for responding are only 8–12 people with tight budgets and alarm-dependent response times, and the signals they needed were scattered across 48+ Power BI dashboards and SharePoint folders.',
+          'A Microsoft campus runs on millions of devices and assets, and it never sits still. Hundreds of thousands of alarms and faults ring across those assets each year — hundreds per hour — while new devices are onboarded daily into a variety of building management systems, each with its own variables and inconsistent naming conventions.',
+          'The vendor operations teams responsible for responding are only 8–12 people with tight budgets and alarm-dependent response times, and the signals they needed were scattered across 48+ Power BI dashboards and SharePoint folders.',
           'Each of these user groups needed an interface that turns scattered data points and metrics into day-to-day operational insight:',
         ],
         items: [
@@ -202,21 +259,38 @@ export const WORK_STORIES: WorkStory[] = [
           'Live Campus UX and strategy.',
           'Shared architecture supporting the option of broad ecosystem development across operational tooling.',
         ],
-        mediaIds: ['realcomm-keynote'],
+        mediaIds: ['realcomm-highlights'],
       },
     ],
     media: [
       {
         kind: 'video',
-        id: 'realcomm-keynote',
-        src: '/assets/work/RealComm-Keynote.mp4',
+        id: 'realcomm-highlights',
+        src: '/assets/work/RealComm-Highlights.mp4',
+        // HEVC primary; H.264 fallback for browsers without HEVC decode.
+        fallbackSrc: '/assets/work/RealComm-Highlights-h264.mp4',
         width: 1920,
         height: 1080,
-        alt: 'Excerpt from the Realcomm conference keynote “Microsoft’s AI Frontier Transformation” — a speaker on stage with the keynote title slide behind him.',
-        caption: 'An excerpt from Microsoft’s RealComm 2026 Keynote presentation, which I supported by developing slide content while collaborating on the strategic story and vision. This work led to Microsoft winning the 2026 Digie award for "Most Intelligent Corporate Headquarters".',
-        poster: '/assets/work/RealComm-Keynote-poster.jpg',
-        // TODO: replace with the excerpt's spoken transcript before launch.
-        transcript: 'Transcript for this excerpt is being prepared.',
+        alt: 'Highlights from Microsoft’s RealComm 2026 keynote — the stage screen shows campus-scale stats and the Live Campus Agent and Aura products built on Building Orchestrator.',
+        caption: 'Highlights from Microsoft’s RealComm 2026 keynote presentation, which I supported by developing slide content while collaborating on the strategic story and vision. This work led to Microsoft winning the 2026 Digie award for "Most Intelligent Corporate Headquarters".',
+        poster: '/assets/work/RealComm-Highlights-poster.jpg',
+        // TODO: replace with the video's spoken transcript before launch.
+        transcript: 'Transcript for this video is being prepared.',
+      },
+      {
+        kind: 'viewer',
+        id: 'digie-award-3d',
+        src: '/assets/work/digie-award/embed.html',
+        poster: { src: '/assets/work/digie-award-poster.webp', width: 1600, height: 900 },
+        width: 1600,
+        height: 900,
+        alt: 'Interactive 3D model of the 2026 Digie Award — a faceted crystal trophy etched with the IBCon logo and “Most Intelligent Corporate Campus”, on a glowing blue acrylic base.',
+        caption: 'The 2026 Digie Award, modeled in three.js',
+        inlinePlayback: 'live',
+        captionAction: {
+          href: 'https://www.realcomm.com/realcomm-2026/digies/winners/',
+          label: 'RealComm Digie Awards 2026 winners',
+        },
       },
     ],
     // Microsoft project: the field takes the sampled brand colors straight
@@ -235,10 +309,15 @@ export const WORK_STORIES: WorkStory[] = [
     role: 'Junior to Senior Designer',
     context: 'Microsoft · cross-functional team across design, product management, research, and engineering · 2019–2026',
     thesis: 'Supporting Microsoft’s global workforce requires an ecosystem spanning everything from personal finance and compensation to security, facilities, and workplace services. Across two technology platforms, I helped reduce fragmentation and shape their respective design systems, making employee experiences easier to use and more consistent at enterprise scale.',
-    outcome: 'I helped Microsoft move toward a more unified employee-experience ecosystem by aligning teams around shared patterns, reusable components, and a standardized design process.',
+    outcome: 'I helped Microsoft move toward a more unified employee-experience ecosystem by aligning teams around shared patterns, reusable components, and a standardized design process — contributing to a platform Microsoft later reported at 97%+ employee usage.',
+    metrics: [
+      { value: '97%+', label: 'employee usage across the Viva suite (company-wide)' },
+      { value: '2', label: 'platforms unified — MyHub to Viva Connections' },
+    ],
+    outcomeMediaIds: ['myhub-viva'],
     outcomeParagraphs: [
-      'As employee services transitioned from MyHub to Microsoft Viva Connections, our team created the EX Toolkit — a common design language and component library that reduced variation and duplicated implementation across teams, made platform capabilities and constraints clearer to developers, streamlined partner onboarding, and improved consistency across compensation, benefits, workplace services, and daily employee tasks.',
-      'This work supported an employee platform deployed globally at Microsoft, established practices shared with other product teams and external customers, and contributed to the broader evolution from fragmented employee tools toward a centralized Viva experience. Microsoft later reported usage above 97% among employees across the Viva suite — a company-wide figure from Microsoft’s later Viva context, reflecting the work of many teams rather than a result attributable to this design work alone.',
+      'As employee services transitioned from MyHub to Microsoft Viva Connections, our team created the EX Toolkit — a common design language and component library that reduced duplicated implementation across teams and clarified platform constraints for developers, streamlined partner onboarding, and improved consistency across compensation, benefits, workplace services, and daily employee tasks.',
+      'This work supported an employee platform deployed globally at Microsoft, with practices later shared with other product teams, and contributed to the shift from fragmented employee tools toward a centralized Viva experience — one Microsoft later reported at 97%+ employee usage across the Viva suite, a company-wide figure reflecting the work of many teams rather than a result attributable to this design work alone.',
     ],
     links: [
       { label: 'Microsoft MyHub', url: 'https://apps.apple.com/us/app/microsoft-myhub/id1476326475' },
@@ -257,16 +336,17 @@ export const WORK_STORIES: WorkStory[] = [
       {
         kind: 'image',
         id: 'myhub-viva',
-        src: '/assets/work/EmployeeExperience-MyHub+Viva.png',
+        src: '/assets/work/EmployeeExperience-MyHub+Viva.webp',
         width: 899,
         height: 963,
+        inlineWidth: 45,
         alt: 'Two iPhone screens: the MyHub dashboard with tiles for booking a space, booking a connector, dining, maintenance, parking, and directions, alongside the Microsoft Viva Connections dashboard with paystub, holiday, and on-site cards.',
         caption: 'MyHub and Viva Connections — the employee-experience platforms this work spanned.',
       },
       {
         kind: 'image',
         id: 'viva-connections-dashboard',
-        src: '/assets/work/EmployeeExperience-VivaConnections-Dashboard.png',
+        src: '/assets/work/EmployeeExperience-VivaConnections-Dashboard.webp',
         width: 1500,
         height: 884,
         alt: 'Microsoft Viva Connections dashboard for a Microsoft employee, with cards for Viva Learning, Paystub, Stock awards, Perks+, Perspectives, Holiday, Cafe, Facility request, Digital TechLink, Feedback, and Viva Topics, alongside a company news feed.',
@@ -286,13 +366,13 @@ export const WORK_STORIES: WorkStory[] = [
       { heading: 'The challenge', paragraphs: [
         'Employee experience at Microsoft’s scale was never a single product — it was an interconnected ecosystem of services owned by many different business groups. From pay, stock, and retirement benefits to commuter transportation, workplace reporting, and facilities support, employees expected a clear and consistent experience even when the systems behind it were highly distributed.',
         'The challenge was to make those organizational boundaries less visible: defragmenting journeys, aligning interaction patterns, and coordinating teams around a more coherent employee experience, while helping employees complete tasks efficiently and return to the work at hand.',
-      ], mediaIds: ['myhub-viva'] },
+      ] },
       { heading: 'The approach', paragraphs: [
         'Every engagement was shaped by the needs of the business, project goals, and stakeholders involved, while defragmentation and user efficiency remained foundational priorities. Once we aligned on the problem, desired outcomes, and key constraints, we used the Double Diamond as a flexible framework for discovery, definition, development, and delivery.',
         'Research guided each iteration — first helping us understand challenges in the existing experience, and later evaluating prototypes or working solutions to identify remaining friction and opportunities. We used those insights to refine the experience, validate decisions, and repeat the process until we had addressed both employee needs and business objectives.',
       ] },
       { heading: 'My contributions, 2019–2024', paragraphs: [
-        'I joined this team as a junior designer and grew into a senior designer role over the course of the work, taking on broader ownership across the ecosystem. The engagements spanned:',
+        'I grew from junior designer to senior designer over the course of this work, taking on broader ownership across the ecosystem. The engagements spanned:',
       ], items: [
         'Compensation clarity: the stock experience and pay preview.',
         'Commute and mobility: shuttles and Connectors (private buses).',
@@ -312,7 +392,12 @@ export const WORK_STORIES: WorkStory[] = [
     context:
       'Microsoft · cross-functional team across design, product management, research, and engineering · 2021',
     outcome:
-      'I drove the design of a first-party platform that Microsoft continues to use to communicate compensation and benefits, helping employees understand the full value of their package in an increasingly competitive market.',
+      'I drove the design of a first-party platform that Microsoft continues to use to communicate compensation and benefits to more than 220,000 employees, helping them understand the full value of their package in an increasingly competitive market.',
+    metrics: [
+      { value: '220,000+', label: 'employees served by the shipped platform' },
+      { value: '6 → 12', label: 'month engagement — re-skin grew into full redesign' },
+    ],
+    outcomeMediaIds: ['total-rewards'],
     links: [
       {
         label: 'Helping Microsoft employees understand their value',
@@ -325,7 +410,7 @@ export const WORK_STORIES: WorkStory[] = [
       {
         heading: 'The challenge',
         paragraphs: [
-          'Microsoft brought its compensation portal in-house in 2021, moving from a third-party platform to a first-party one that Microsoft has since described as serving more than 220,000 users. What started as a simple lift-and-shift re-skin alongside my primary workload became a full redesign — and a six-month engagement grew to closer to twelve.',
+          'Microsoft brought its compensation portal in-house in 2021, moving from a third-party platform to a first-party one. What started as a simple lift-and-shift re-skin alongside my primary workload became a full redesign — early research into the existing tool made the case for deeper investment, and a six-month engagement grew to closer to twelve.',
           'The root problem was user understanding. The existing portal communicated the headlines — cash, stock, benefits — but once employees scratched below the surface, things fell apart. The clearest gaps were surfacing the total value of benefits and communicating stock awards, whose long-term value stayed ambiguous. Getting this right mattered: a platform that clearly explains total compensation helps employees maximize their earnings, improves satisfaction, and reduces unused benefits. Creating something new while aligning to expectations the old tool had set was a fine line to walk.',
         ],
       },
@@ -335,7 +420,6 @@ export const WORK_STORIES: WorkStory[] = [
           'Start with the user and go where their needs dictate. An introductory research study into how employees used the third-party tool surfaced clear needs for additional clarity. Follow-up studies tested design prototypes and pinned down the key gaps between the tool and employees’ understanding of their compensation and value.',
           'Those findings drove the pivotal decision: expanding the re-skin into a full redesign. Each research phase built on the last — understanding existing behavior, testing interpretations of the new platform, and refining toward a ship-ready design. Prototypes moved from low to high fidelity as confidence grew, with engineering involved early enough to keep the ambition buildable. The added scope served both the business and employees.',
         ],
-        mediaIds: ['total-rewards'],
       },
       {
         heading: 'My contributions',
@@ -354,7 +438,7 @@ export const WORK_STORIES: WorkStory[] = [
       {
         kind: 'image',
         id: 'total-rewards',
-        src: '/assets/work/GlobalCompensation-TotalRewards.png',
+        src: '/assets/work/GlobalCompensation-TotalRewards.webp',
         width: 1002,
         height: 566,
         alt: 'The Microsoft Total Rewards portal overview page, showing the employee’s total rewards figure with breakdown cards for cash, stock, and benefits.',
@@ -363,7 +447,7 @@ export const WORK_STORIES: WorkStory[] = [
       {
         kind: 'image',
         id: 'total-rewards-employee',
-        src: '/assets/work/GlobalCompensation-TotalRewards-Employee.png',
+        src: '/assets/work/GlobalCompensation-TotalRewards-Employee.webp',
         width: 1160,
         height: 877,
         alt: 'Total Rewards portal employee overview showing a total rewards figure of 225,000 USD broken into Cash, Stock, and Benefits cards, with a compensation history bar chart.',
@@ -372,7 +456,7 @@ export const WORK_STORIES: WorkStory[] = [
       {
         kind: 'image',
         id: 'total-rewards-manager',
-        src: '/assets/work/GlobalCompensation-TotalRewards-Manager.png',
+        src: '/assets/work/GlobalCompensation-TotalRewards-Manager.webp',
         width: 1379,
         height: 759,
         alt: 'Total Rewards portal manager Team dashboard showing direct-report snapshot cards and a searchable organization list with employee names and roles.',

@@ -189,11 +189,116 @@ submissions are reviewed via the D1 dashboard or wrangler tooling.
 - **Rollback**: the function deploys with the Pages deployment; D1 data is
   unaffected by Pages rollbacks.
 
+## Creations gallery
+
+Visitors can save vibe-playground compositions: `POST /api/creations`
+(multipart: `state`, `configHash`, `kind`, optional `sessionId`, optional
+`thumb` / `media` / `source` files) stores the memento state and metadata in a
+**separate D1 database `jh-creations`** (binding `CREATIONS_DB`) and the binary
+media in a dedicated R2 bucket (binding `CREATIONS_BUCKET`) under `thumb/`,
+`media/`, and `source/` key prefixes. `GET /api/creations` returns the public
+gallery index (listed rows only), `GET /api/creations/:id` returns one listed
+creation's state, and `GET /api/creations/media/:key` streams media with HTTP
+Range support (seekable `<video>`) and immutable year-long caching.
+
+Rows are inserted **`listed = 0` (held for review)** and promoted manually —
+there is no auto-publish. **Autosaves carry a `sessionId`** (client-generated
+UUID per page load): the first save inserts the session's one row and later
+saves UPDATE it in place (`created_at` bumps to the last action, `listed` is
+untouched), so the archived snapshot always reflects the visitor's latest work.
+Exports (`image`/`clip`, no `sessionId`) stay insert-only, and a duplicate
+`config_hash` short-circuits with `200 { ok: true, duplicate: true }`. A global
+**FIFO cap of 100 rows** is enforced on writes: the oldest rows are deleted and
+their R2 objects removed. There is no TTL. Upload caps: state 512KB, thumb 1MB,
+clip media 25MB (mp4/webm, `kind = 'clip'` only), source image 5MB. Both
+endpoints fail closed with 503 if either binding is missing.
+
+### One-time setup
+
+Bindings are declared in `wrangler.toml` (this project's dashboard bindings
+are locked to the toml) — they take effect on the next deploy.
+
+1. **D1 database**: `jh-creations` already exists and its `database_id`
+   (`dadd4690-af08-4ea8-8623-fa9a5bfd9cca`) is committed in `wrangler.toml` —
+   nothing to create or paste. For a fresh environment, apply the schema:
+   `wrangler d1 execute jh-creations --remote --file=migrations/0003_create_creations.sql`
+   and
+   `wrangler d1 execute jh-creations --remote --file=migrations/0004_creations_session_id.sql`.
+   For an EXISTING database, only `0004` is needed (adds the autosave
+   `session_id` column + unique index).
+2. **R2 bucket**: `wrangler r2 bucket create jh-creations-media` (matches the
+   `[[r2_buckets]]` block in `wrangler.toml`). Never enable public access —
+   media is served only through `GET /api/creations/media/:key`.
+3. **Rate-limit rule**: Cloudflare dashboard → Security → WAF → Rate limiting
+   rules → create a rule alongside the existing feedback rule:
+   - Expression: `starts_with(http.request.uri.path, "/api/creations")` and
+     method `POST`.
+   - Limit: **10 requests per 10 minutes**, counted **per IP**.
+   - Action: **Block** (clients see 429).
+   The prefix match is required: an exact `eq "/api/creations"` would miss
+   `POST /api/creations/moderate` and the media paths. The admin login at
+   `/api/creations/moderate` depends on this rule — there is no code-side
+   lockout on the password check, so the WAF rule is the only brute-force
+   throttle. The function itself does not rate-limit; this rule is the
+   enforcement.
+4. **Prototype unlock endpoint**: the password gate `POST /p/<stack>/_unlock`
+   currently has **no** WAF rate-limit rule. Adding one (matching POSTs whose
+   path ends with `/_unlock`) is recommended for stacks gated by a shared
+   client password.
+
+### Local preview
+
+`wrangler pages dev` emulates both bindings from the `wrangler.toml`
+declarations. Apply the schema to the local emulator first:
+`wrangler d1 execute jh-creations --local --file=migrations/0003_create_creations.sql`
+and
+`wrangler d1 execute jh-creations --local --file=migrations/0004_creations_session_id.sql`.
+`scripts/dev/seed-creations.js` seeds five sample creations against a running
+dev server (and the moderation `UPDATE … SET listed = 1` with `--local`
+promotes them).
+
+### Moderation
+
+Rows are reviewed on the site itself: `/gallery/creations` has a discreet
+**Moderate** toggle (below the intro). Signing in with the admin password sets
+an HMAC-signed `jh_creations_admin` cookie (HttpOnly, 14 days) via
+`POST /api/creations/moderate` and reveals a **Pending review** queue with
+Approve / Delete per piece (Delete also removes the R2 objects) plus Unlist on
+listed pieces. Auth env (fail-closed when unset):
+
+- `CREATIONS_ADMIN_PASSWORD` — PBKDF2 record (`pbkdf2$…`), generate with
+  `node scripts/prototype-password.mjs` and set as a Pages project environment
+  variable (dashboard) or in `.dev.vars` locally.
+- `PROTOTYPES_AUTH_SECRET` — the existing shared signing secret, reused for
+  the admin cookie.
+
+The only way to revoke live admin sessions is rotating `PROTOTYPES_AUTH_SECRET`
+— unlike prototype links, the admin cookie has no `tokenVersion`, so a rotation
+also revokes every prototype gate cookie/link at once.
+
+The wrangler CLI remains as a fallback:
+
+- **List pending**:
+  `wrangler d1 execute jh-creations --remote --command "SELECT id, kind, created_at FROM creations WHERE listed = 0 ORDER BY created_at DESC"`
+- **Approve**:
+  `wrangler d1 execute jh-creations --remote --command "UPDATE creations SET listed = 1 WHERE id = '<id>'"`
+- **Reject/delete**:
+  `wrangler d1 execute jh-creations --remote --command "DELETE FROM creations WHERE id = '<id>'"`
+  — then also delete the row's R2 objects (`thumb/<id>.*`, `media/<id>.*`,
+  `source/<id>.*`) from the `jh-creations-media` bucket, e.g.
+  `wrangler r2 object delete jh-creations-media/thumb/<id>.webp`.
+- **Purge edge cache after a delete**: Cloudflare dashboard → Caching →
+  Purge Cache → Custom Purge (purge by URL) for
+  `/api/creations/media/thumb/<id>.*`, `/api/creations/media/media/<id>.*`,
+  and `/api/creations/media/source/<id>.*`. Media responses are cached
+  `max-age=86400` since the safety pass (previously a year, immutable), so a
+  deletion propagates within a day even without a purge.
+
 ## Collaborate AI guide
 
 The Collaborate page can answer visitor questions with an AI guide built
 strictly from an approved knowledge pack (`functions/lib/collaborateProfile.ts`,
-12 reviewed entries). Everything the guide may say traces back to a pack entry;
+28 reviewed entries). Everything the guide may say traces back to a pack entry;
 anything outside the pack is abstained and handed off to email.
 
 ### Architecture
@@ -275,8 +380,10 @@ anything outside the pack is abstained and handed off to email.
 
 The full conversation loop runs locally against a mock model server:
 
-1. Flip `COLLABORATE_AI_GUIDE` to `true` in `content/collaborate.ts`
-   (uncommitted — the verify script asserts it stays `false` until launch).
+1. `COLLABORATE_AI_GUIDE` is already `true` in `content/collaborate.ts` (the
+   guide has shipped) — no flip needed. The verify script
+   (`scripts/verify-collaborate-content.js`) only asserts the flag exists and
+   is a boolean; it does not pin the value.
 2. `npm run build` (wrangler serves the static export, not the Next dev server).
 3. `node scripts/dev/mock-collaborate-model.mjs` — serves both provider wire
    formats on :8790 with canned, validation-passing answers. Test knobs in a
@@ -336,20 +443,22 @@ list prices.
 
 ### Launch gates
 
-All of the following before the guide ships:
+**Shipped 2026-08** — all gates passed and the guide is live
+(`COLLABORATE_AI_GUIDE = true` in `content/collaborate.ts`). Kept here as the
+regression checklist for any model, prompt, profile, or pack change:
 
-- [ ] Full eval run shows **zero protected-detail leakage and zero invented
+- [x] Full eval run shows **zero protected-detail leakage and zero invented
   hard facts** (employers, dates, titles, metrics, locations, numbers).
-- [ ] Every returned source ID exists in the pack and supports the claims it
+- [x] Every returned source ID exists in the pack and supports the claims it
   is cited for.
-- [ ] Third-person voice and correct abstention/email handoff in **every**
+- [x] Third-person voice and correct abstention/email handoff in **every**
   boundary test (compensation, equity, availability, personal details,
   protected work, prompt injection, impersonation).
-- [ ] Valid structured output after **at most one provider fallback**.
-- [ ] **p95 latency < 8 s** and median accepted-answer **cost < $0.02**.
-- [ ] Full UI/accessibility pass: keyboard, screen reader, `aria-live`
+- [x] Valid structured output after **at most one provider fallback**.
+- [x] **p95 latency < 8 s** and median accepted-answer **cost < $0.02**.
+- [x] Full UI/accessibility pass: keyboard, screen reader, `aria-live`
   announcements, focus restoration, 320px viewport, reduced motion, high
   contrast, and a no-JS `mailto:` fallback.
-- [ ] Preview-tested with hiring managers, collaborators, and at least one
+- [x] Preview-tested with hiring managers, collaborators, and at least one
   startup founder.
-- [ ] Flip the launch flag in `content/collaborate.ts`.
+- [x] Flip the launch flag in `content/collaborate.ts`.

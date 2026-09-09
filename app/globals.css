@@ -1,5 +1,14 @@
-/* No remote font dependencies: Cutive Mono is used when locally installed,
-   otherwise the system monospace stack takes over (M9 launch hardening). */
+/* Departure Mono (Helena Zhang — departuremono.com, SIL OFL; license at
+   /fonts/DepartureMono-OFL-LICENSE.txt) is self-hosted from public/fonts —
+   no remote font dependencies. If the file fails to load, the system
+   monospace stack takes over (M9 launch hardening). */
+@font-face {
+  font-family: 'Departure Mono';
+  src: url('/fonts/DepartureMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 
 /* Semantic theme tokens (feature/light-dark). Dark is the DEFAULT on :root;
    the light set overrides inside the prefers-color-scheme media query below —
@@ -8,7 +17,7 @@
    controls, states) is authored here. color-scheme keeps native controls
    (scrollbars, form fields) in step with the theme. */
 :root {
-  --font-mono: 'Cutive Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --font-mono: 'Departure Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
   color-scheme: dark;
   /* Theme cross-fade duration for theme-managed chrome (500ms exactly). Only
      applies once <html> carries .theme-ready (set after hydration). */
@@ -53,6 +62,12 @@
   --color-surface-panel: rgba(8, 12, 18, 0.72);
   --color-surface-panel-soft: rgba(6, 9, 14, 0.62);
   --color-surface-panel-strong: rgba(6, 9, 14, 0.92);
+  /* Scene-tinted header surfaces: each scene's canvas background2 at the
+     panel's alpha, so the fixed header dissolves into the active scene's
+     tone (engine/sceneConfig.ts) instead of sitting on it. */
+  --header-surface-work: rgba(16, 24, 38, 0.72);
+  --header-surface-collaborate: rgba(32, 20, 16, 0.72);
+  --header-surface-vibe: rgba(26, 16, 38, 0.72);
   --color-surface-warm-panel: rgba(16, 10, 10, 0.62);
   --color-surface-warm: rgba(24, 14, 12, 0.72);
   --color-action-bg: rgba(14, 18, 24, 0.9);
@@ -119,6 +134,11 @@
     --color-surface-panel: rgba(255, 255, 255, 0.78);
     --color-surface-panel-soft: rgba(255, 255, 255, 0.72);
     --color-surface-panel-strong: rgba(255, 255, 255, 0.94);
+    /* Scene-tinted header surfaces (light): each scene's light background1
+       at the panel's alpha. */
+    --header-surface-work: rgba(232, 238, 246, 0.78);
+    --header-surface-collaborate: rgba(255, 247, 242, 0.78);
+    --header-surface-vibe: rgba(250, 247, 255, 0.78);
     --color-surface-warm-panel: rgba(255, 247, 242, 0.8);
     --color-surface-warm: rgba(255, 247, 242, 0.9);
     --color-action-bg: rgba(255, 255, 255, 0.9);
@@ -151,6 +171,8 @@
   html.theme-ready body,
   html.theme-ready .conversation-surface,
   html.theme-ready .experience-nav-list,
+  html.theme-ready .site-header,
+  html.theme-ready .site-footer,
   html.theme-ready .work-experience,
   html.theme-ready .collaborate-experience,
   html.theme-ready .chat-answer,
@@ -179,6 +201,8 @@
   html.theme-ready body,
   html.theme-ready .conversation-surface,
   html.theme-ready .experience-nav-list,
+  html.theme-ready .site-header,
+  html.theme-ready .site-footer,
   html.theme-ready .work-experience,
   html.theme-ready .collaborate-experience,
   html.theme-ready .chat-answer,
@@ -272,7 +296,8 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4rem 2rem;
+  /* Top clearance covers the fixed site header (incl. safe-area inset). */
+  padding: calc(4.5rem + env(safe-area-inset-top, 0px)) 2rem 4rem;
   pointer-events: none;
 }
 /* Shared hit-testing contract: the foreground layer, the transition wrapper,
@@ -291,6 +316,7 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   gap: 2rem;
   text-align: center;
 }
+
 .primary-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -339,6 +365,7 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   display: inline-flex;
   width: 100%;
 }
+
 .primary-action-button {
   /* Re-enabled over the pointer-transparent foreground column; the grid gaps
      and decorative beams around the buttons still fall through to the canvas. */
@@ -605,7 +632,10 @@ button:focus-visible {
 }
 @media (max-width: 560px) {
   .foreground-layer {
-    padding: 2rem 1rem;
+    /* Single-row phone header on top, recruiter-link footer bar at the
+       bottom — clear both. */
+    padding: calc(4.5rem + env(safe-area-inset-top, 0px)) 1rem
+      calc(4.5rem + env(safe-area-inset-bottom, 0px));
   }
   .primary-actions {
     gap: 0.5rem;
@@ -1375,13 +1405,200 @@ button:focus-visible {
   }
 }
 
-/* Experience shell: persistent nav, mode transition, and mode surfaces. */
-.experience-nav {
+/* Experience shell: persistent site frame, mode transition, and mode
+   surfaces. */
+
+/* Registered so the header's scene tint animates (scene switches tween the
+   custom property; unregistered browsers just snap — same visual result). */
+@property --header-surface {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: rgba(8, 12, 18, 0.72);
+}
+
+/* Site header (persistent frame, every route): home lockup left, section
+   tabs center, recruiter links right. z-index 45: above the foreground layer
+   (20) and the old nav band (40), below the tuning panel (50) and the guide
+   chrome (60+). It OWNS its band's hit-testing, so the canvas can never
+   swallow header clicks. */
+.site-header {
   position: fixed;
-  top: calc(1rem + env(safe-area-inset-top, 0px));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 40;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 45;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  padding: calc(0.55rem + env(safe-area-inset-top, 0px)) 1rem 0.55rem;
+  /* The active scene's tinted surface (falls back to the neutral panel on
+     the landing and gallery routes); the transition tweens scene switches. */
+  --header-surface: var(--color-surface-panel);
+  transition: --header-surface 600ms ease;
+}
+
+.site-header[data-scene='work'],
+.site-footer[data-scene='work'] {
+  --header-surface: var(--header-surface-work);
+}
+
+.site-header[data-scene='collaborate'],
+.site-footer[data-scene='collaborate'] {
+  --header-surface: var(--header-surface-collaborate);
+}
+
+.site-header[data-scene='vibe'],
+.site-footer[data-scene='vibe'] {
+  --header-surface: var(--header-surface-vibe);
+}
+
+/* The surface is a masked layer behind the content: solid at the top edge,
+   dissolved to transparent ~55% down — no hard edge, and the scene shows
+   through the lower half. The mask fades the backdrop blur along the same
+   ramp; content stays fully opaque above it. */
+.site-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--header-surface);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  mask-image: linear-gradient(to bottom, black 0%, transparent 55%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, transparent 55%);
+  pointer-events: none;
+}
+
+.site-header-home {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.25rem 0.9rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+  transition: background 180ms ease, border-color 180ms ease;
+}
+
+.site-header-home:hover,
+.site-header-home:focus-visible {
+  background: var(--color-input-bg);
+}
+
+.site-header-home:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+/* The monogram lockup: inlined with currentColor (components/JHMark.tsx)
+   so it follows --color-text — near-white on dark, near-black on light. */
+.site-header-mark {
+  height: 24px;
+  width: auto;
+  display: block;
+}
+
+.site-header-nav {
+  justify-self: center;
+}
+
+.site-header-links {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.site-header-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.site-header-links a:hover,
+.site-header-links a:focus-visible {
+  color: var(--color-text);
+  background: var(--color-input-bg);
+}
+
+.site-header-links a:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+/* Phone-only bottom bar (≤560px block at the end of this file reveals it):
+   the recruiter links that don't fit the phone header. Mirrors the header's
+   dissolving frame treatment (fading upward). */
+.site-footer {
+  display: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* z-index 15: below the foreground layer (20), so bottom-docked scene
+     controls (the work card's Prev/Next) keep tap priority — the footer
+     visually hides under them rather than blocking their taps. Still above
+     the canvas and scene layers. */
+  z-index: 15;
+  padding: 0.4rem 0.6rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
+  --header-surface: var(--color-surface-panel);
+  transition: --header-surface 600ms ease;
+}
+
+.site-footer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--header-surface);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  mask-image: linear-gradient(to top, black 0%, transparent 55%);
+  -webkit-mask-image: linear-gradient(to top, black 0%, transparent 55%);
+  pointer-events: none;
+}
+
+.site-footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 0.15rem;
+}
+
+.site-footer-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.site-footer-links a:hover,
+.site-footer-links a:focus-visible {
+  color: var(--color-text);
+  background: var(--color-input-bg);
+}
+
+.site-footer-links a:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
 }
 
 .experience-nav-list {
@@ -1406,6 +1623,13 @@ button:focus-visible {
   color: var(--color-text-muted);
   cursor: pointer;
   transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+/* The Gallery tab is a route link (not a mode button) wearing the same pill. */
+a.experience-nav-button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
 }
 
 .experience-nav-button:hover,
@@ -1492,7 +1716,7 @@ button:focus-visible {
 }
 
 /* Primary display headings only: Cabin Bold, self-hosted at build time via
-   next/font (--font-display on body). Everything else stays Cutive Mono. */
+   next/font (--font-display on body). Everything else stays Departure Mono. */
 .vibe-heading,
 .collaborate-heading,
 .work-story-title {
@@ -1574,14 +1798,18 @@ button:focus-visible {
   }
 }
 
-/* Readable body text keeps a 44–46rem measure in every state. */
+/* Readable body text keeps a generous-but-bounded measure in every state —
+   wide enough that the card doesn't carry a dead column on desktop, narrow
+   enough that lines stay trackable. The meta block joins the measure so the
+   Role/Context rows wrap at the same right edge as the prose. */
 .work-story-thesis,
 .work-story-outcome,
 .work-story-section-copy,
 .work-story-section-list,
 .work-story-section-callout,
+.work-story-meta,
 .work-mode-intro {
-  max-width: 45rem;
+  max-width: 64rem;
 }
 
 /* The scrolling viewport: carries the padding and content layout the card
@@ -1701,6 +1929,27 @@ button:focus-visible {
 
 .work-story-link:hover,
 .work-story-link:focus-visible {
+  color: var(--color-accent-strong);
+  border-color: var(--color-accent-strong);
+}
+
+/* "Read the case study" — the compact-fold affordance that opens the card to
+   the full reading panel. Styled like .work-story-link, plus button reset. */
+.work-story-read {
+  align-self: flex-start;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--color-accent);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-accent-border);
+  padding: 0 0 2px;
+  cursor: pointer;
+  transition: color 180ms ease, border-color 180ms ease;
+}
+
+.work-story-read:hover,
+.work-story-read:focus-visible {
   color: var(--color-accent-strong);
   border-color: var(--color-accent-strong);
 }
@@ -1904,6 +2153,35 @@ button:focus-visible {
   padding-left: 0.9rem;
 }
 
+/* Outcome stat block: headline scale metrics as large numerals. */
+.work-story-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 1rem;
+  margin: 0.4rem 0 0.2rem;
+  padding: 0;
+  list-style: none;
+}
+
+.work-story-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.work-story-metric-value {
+  font-size: 2rem;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--color-accent-vivid);
+}
+
+.work-story-metric-label {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
 /* Related links: always the final story content. */
 .work-story-related {
   display: flex;
@@ -1984,26 +2262,23 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  /* Scrubbed expansion narrows inline figures toward 40% of the content
-     width on desktop (full width while compact); mobile stays full width. */
+  /* Inline figures hold the full content width at every expansion state,
+     unless the media entry sets an --inline-width percent. */
+  width: 100%;
   margin-inline: auto;
 }
 
 @media (min-width: 761px) {
-  .work-inline-media--image {
-    width: calc(100% - 60% * var(--work-expansion, 0));
-  }
-}
-
-@media (max-width: 760px) {
-  .work-inline-media--image {
-    width: 100%;
+  .work-inline-media {
+    width: var(--inline-width, 100%);
   }
 }
 
 /* Inline images open the lightbox — the button is the zoom target; it shares
-   the figure's width and centering. */
+   the figure's width and centering. position: relative anchors the viewer
+   hint pill (.work-inline-media-hint). */
 .work-inline-media-button {
+  position: relative;
   padding: 0;
   border: none;
   background: none;
@@ -2011,6 +2286,23 @@ button:focus-visible {
   display: block;
   width: 100%;
   max-width: 100%;
+}
+
+/* Interactive-viewer affordance: a small pill over the poster marking it as
+   an orbitable 3D model that opens in the lightbox. Non-interactive — the
+   button underneath owns the click. */
+.work-inline-media-hint {
+  position: absolute;
+  right: 0.6rem;
+  bottom: 0.6rem;
+  font-size: 0.72rem;
+  line-height: 1;
+  color: var(--color-text-muted);
+  background: var(--color-surface-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.4rem 0.65rem;
+  pointer-events: none;
 }
 
 .work-inline-media img,
@@ -2025,6 +2317,64 @@ button:focus-visible {
   font-size: 0.78rem;
   line-height: 1.6;
   color: var(--color-text-faint);
+}
+
+.work-inline-media--live-viewer {
+  position: relative;
+  width: 100%;
+  /* Statement band: the award dominates a wide, short dark strip spanning
+     the full content column (no caption inline — it lives on the
+     full-screen route). */
+  max-width: none;
+  overflow: hidden;
+  border: 1px solid var(--color-input-border);
+  border-radius: 8px;
+  background: #0b0d12;
+}
+
+.work-inline-live-viewer {
+  display: block;
+  width: 100%;
+  /* height: auto — the HTML height attribute would otherwise pin the box and
+     defeat the aspect-ratio below. */
+  height: auto;
+  aspect-ratio: 21 / 9;
+  border: none;
+  /* The iframe never owns input: the overlay link (.work-inline-media-open)
+     takes the click-through, and page scroll passes over it. */
+  pointer-events: none;
+}
+
+/* Whole-figure click-through to the full-screen viewer route; the visible
+   affordance is the pill at its bottom-right corner. */
+.work-inline-media-open {
+  position: absolute;
+  inset: 0;
+  text-decoration: none;
+}
+
+.work-inline-media-fullscreen {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  font: inherit;
+  font-size: 0.75rem;
+  color: #f5f7fb;
+  background: rgba(8, 12, 18, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  padding: 0.5rem 0.75rem;
+}
+
+.work-inline-media-open:hover .work-inline-media-fullscreen,
+.work-inline-media-open:focus-visible .work-inline-media-fullscreen {
+  border-color: #8abaff;
+  color: #ffffff;
+}
+
+.work-inline-media-open:focus-visible {
+  outline: 2px solid #8abaff;
+  outline-offset: -2px;
 }
 
 .work-inline-transcript {
@@ -3546,18 +3896,32 @@ a.guide-source:focus-visible {
 }
 
 @media (max-width: 760px) {
-  /* Active chat reclaims the nav band on mobile: the Back button is the
-     primary exit (it returns to the landing). display:none removes the nav
-     visually AND from AT/focus; the desktop nav is always visible, and the
-     mobile Collaborate LANDING keeps it (no --chat-active class there). */
-  .experience-nav--chat-active {
+  /* Active chat reclaims the tab band on mobile: the Back button is the
+     primary exit (it returns to the landing). display:none removes the tabs
+     visually AND from AT/focus; the desktop tabs are always visible, and the
+     mobile Collaborate LANDING keeps them (no --chat-active class there).
+     The home lockup and recruiter links stay reachable in every state. */
+  .site-header--chat-active .site-header-nav {
     display: none;
   }
 
-  /* The conversation heading moves into the reclaimed space, just beneath
-     the safe-area inset. */
+  /* Mobile frame compaction: links shrink but never drop below the 44px tap
+     target; the monogram lockup stays (it IS the home target). */
+  .site-header {
+    gap: 0.4rem;
+    padding-left: 0.6rem;
+    padding-right: 0.6rem;
+  }
+
+  .site-header-links a {
+    padding: 0.45rem 0.55rem;
+    font-size: 0.72rem;
+  }
+
+  /* The conversation heading moves up, but still clears the site header —
+     chat-active collapses only the tab row; the lockup + links row stays. */
   .foreground-layer--chat {
-    --collab-top-clearance: calc(env(safe-area-inset-top, 0px) + 1.25rem);
+    --collab-top-clearance: calc(env(safe-area-inset-top, 0px) + 4rem);
   }
 
   /* Suggestion pills (≤7 words / ≤42 chars by contract): each pill is
@@ -3591,6 +3955,29 @@ a.guide-source:focus-visible {
 }
 
 @media (max-width: 560px) {
+  /* Phone frame: the recruiter links don't fit the header, so they move to a
+     fixed bottom bar and the header stays one row (lockup + tabs). The
+     duplicate footer links are display:none on wider viewports, so only one
+     copy is ever visible/focusable. */
+  .site-header-links {
+    display: none;
+  }
+
+  .site-header-nav {
+    justify-self: end;
+  }
+
+  .site-footer {
+    display: block;
+  }
+
+  /* Reserve the privacy FAB's footprint at the footer bar's right end so
+     the centered links never slide under it (components/AnalyticsConsent.css
+     docks the FAB inside the bar on phones). */
+  .site-footer-links {
+    padding-right: 3.25rem;
+  }
+
   .chat-turns {
     padding: 0.15rem;
   }
@@ -3639,11 +4026,11 @@ a.guide-source:focus-visible {
   }
 }
 
-/* Small landscape phones in an active chat: the nav is hidden (≤760px rule
-   above), so the reclaimed clearance wins over the nav-band clearance. */
+/* Small landscape phones in an active chat: the tab row is hidden (≤760px
+   rule above), so the heading clears just the single-row site header. */
 @media (max-width: 760px) and (max-height: 480px) and (orientation: landscape) {
   .foreground-layer--chat {
-    --collab-top-clearance: calc(env(safe-area-inset-top, 0px) + 1.25rem);
+    --collab-top-clearance: calc(env(safe-area-inset-top, 0px) + 4rem);
   }
 }
 
@@ -4931,6 +5318,47 @@ a.guide-source:focus-visible {
   background: var(--color-hover);
 }
 
+/* Creation toast (feature/vibe-creations): transient archive confirmation,
+   bottom-center above the toolbar capsule. Sits just under the toolbar's
+   z-index (40) so an open toolbar panel always covers it. */
+.vibe-creation-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 39;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--color-toolbar-bg);
+  border: 1px solid var(--color-input-border);
+  border-radius: 12px;
+  padding: 0.55rem 0.9rem;
+  box-shadow: 0 18px 60px var(--color-shadow);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--color-text-muted);
+  max-width: calc(100vw - 2rem);
+}
+
+.vibe-creation-toast-dismiss {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0.2rem 0.35rem;
+  line-height: 1;
+  transition: background 160ms ease;
+}
+
+.vibe-creation-toast-dismiss:hover,
+.vibe-creation-toast-dismiss:focus-visible {
+  background: var(--color-hover);
+}
+
 .vibe-share-choice:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
@@ -5161,9 +5589,9 @@ a.guide-source:focus-visible {
     box-sizing: border-box;
   }
 
+  /* Position comes from components/AnalyticsConsent.css (docked inside the
+     phone footer bar); only the shrunk size lives here. */
   .privacy-settings-button {
-    right: 0.75rem;
-    bottom: calc(8.6rem + env(safe-area-inset-bottom, 0px));
     width: 40px;
     height: 40px;
     font-size: 1rem;
@@ -5171,7 +5599,7 @@ a.guide-source:focus-visible {
 
   .consent-banner {
     right: 0.75rem;
-    bottom: calc(11.8rem + env(safe-area-inset-bottom, 0px));
+    bottom: calc(4.25rem + env(safe-area-inset-bottom, 0px));
     width: calc(100vw - 1.5rem);
   }
 }
@@ -5250,11 +5678,11 @@ a.guide-source:focus-visible {
   display: block;
 }
 
-/* Temporary scene chip: top-center keeps it clear of the toolbar, whose
-   panels pop upward from the bottom edge. */
+/* Temporary scene chip: below the fixed site header (top-center keeps it
+   clear of the toolbar, whose panels pop upward from the bottom edge). */
 .vibe-ambient-label {
   position: fixed;
-  top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  top: calc(4.25rem + env(safe-area-inset-top, 0px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 30;
@@ -5274,12 +5702,15 @@ a.guide-source:focus-visible {
 /* =============================================================================
    Vibe corner controls: Sound (lower-left) + Pond (lower-right)
 
-   One persistent, anchored DOM tree per control — no collapsed/expanded
-   swapping. The 66px circular FAB is the anchor: it keeps the exact same
-   screen position in every state (data-state="closed|open|closing" on
-   .vibe-sound-control / .vibe-pond-control). The pill stays mounted behind
-   the FAB (z-index 1 vs 2) and reveals via a clip-path transition, so it
-   visually grows out from behind the FAB and retracts back into it:
+   One persistent DOM tree per control — no collapsed/expanded swapping. The
+   66px circular FAB anchors the resting position (~20vw in from the corner);
+   on open the whole control pushes itself outward (animated left/right
+   transition) only as far as needed to keep the horizontal pill ~48px clear
+   of the measured toolbar capsule, then glides home once the exit completes
+   (data-state="closed|open|closing" on .vibe-sound-control /
+   .vibe-pond-control). The pill stays mounted behind the FAB (z-index 1 vs 2)
+   and reveals via a clip-path transition, so it visually grows out from
+   behind the FAB and retracts back into it:
 
      closed → open    clip-path opens over 340ms ease-out; the inner controls
                       fade + translate in after the shell starts moving
@@ -5296,7 +5727,9 @@ a.guide-source:focus-visible {
    the badge IS the FAB). :focus-visible outlines are separate 2px
    accessibility indicators. No :has()-driven relocation: desktop expands
    horizontally inward (Sound rightward, Pond leftward); ≤640px both expand
-   vertically upward from their lower corners. Pill shells are pure CSS
+   vertically upward from their lower corners, and at measured-tight mid
+   widths useVibeControlLayout switches a side to the same vertical expansion
+   via data-vibe-*-layout="vertical" on <html> (see below). Pill shells are pure CSS
    (border + gradient + box-shadow) so the 2px weight is exact; the supplied
    artwork (public/toolbar/vibe-sound-*.png, AmbientPond.png) is kept as
    reference — the gradient stops below are sampled from it.
@@ -5312,16 +5745,79 @@ a.guide-source:focus-visible {
   bottom: calc(5.0625rem + env(safe-area-inset-bottom, 0px));
   z-index: 30;
   pointer-events: none;
+  /* The open-state push-out (below) animates: same timing as the pill's
+     340ms clip-path expansion so FAB and shell travel together. */
+  transition:
+    left 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    right 340ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .vibe-sound-control {
-  /* ~40% of the way from the left edge toward the center toolbar. */
-  left: calc(20vw + env(safe-area-inset-left, 0px));
+  /* Resting anchor: ~40% of the way from the left edge toward the center
+     toolbar, gliding cornerward only enough to keep the FAB itself clear of
+     the measured capsule (--vibe-capsule-half, published by
+     useVibeControlLayout; 14rem fallback) and on-screen (0.75rem floor). */
+  left: calc(
+    max(0.75rem, min(20vw, 50% - var(--vibe-capsule-half, 14rem) - 4.875rem)) +
+      env(safe-area-inset-left, 0px)
+  );
 }
 
 .vibe-pond-control {
-  /* ~40% of the way from the right edge toward the center toolbar. */
-  right: calc(20vw + env(safe-area-inset-right, 0px));
+  /* Mirror of the Sound control's resting anchor, from the right edge. */
+  right: calc(
+    max(0.75rem, min(20vw, 50% - var(--vibe-capsule-half, 14rem) - 4.875rem)) +
+      env(safe-area-inset-right, 0px)
+  );
+}
+
+/* Open (and mid-close, so the exit geometry stays put): the control pushes
+   itself outward from its resting anchor until the horizontal pill keeps a
+   ~48px (3rem) gap to the toolbar capsule, reserving the pill's measured
+   footprint (--vibe-*-pill-w, published by useVibeControlLayout; 11rem /
+   23rem fallbacks). At wide viewports the min() keeps the 20vw anchor and
+   nothing moves. */
+.vibe-sound-control[data-state='open'],
+.vibe-sound-control[data-state='closing'] {
+  left: calc(
+    max(
+        0.75rem,
+        min(20vw, 50% - var(--vibe-capsule-half, 14rem) - var(--vibe-sound-pill-w, 11rem) - 3rem)
+      ) + env(safe-area-inset-left, 0px)
+  );
+}
+
+.vibe-pond-control[data-state='open'],
+.vibe-pond-control[data-state='closing'] {
+  right: calc(
+    max(
+        0.75rem,
+        min(20vw, 50% - var(--vibe-capsule-half, 14rem) - var(--vibe-pond-pill-w, 23rem) - 3rem)
+      ) + env(safe-area-inset-right, 0px)
+  );
+}
+
+/* Vertical expansion (the measured last resort at mid widths): the pill
+   grows upward, so there is no horizontal footprint to reserve and no
+   push-out — this FAB-only glide covers every state (it out-specifies the
+   open-state rules above). ≥641px only: ≤640px is the media query's own
+   corner pinning, and letting this override apply there would compute a
+   slightly different anchor (15px vs 0.75rem) and animate the FAB for no
+   reason when the layout attribute lands. */
+@media (min-width: 641px) {
+  html[data-vibe-sound-layout='vertical'] .vibe-sound-control {
+    left: calc(
+      max(0.75rem, min(20vw, 50% - var(--vibe-capsule-half, 14rem) - 4.875rem)) +
+        env(safe-area-inset-left, 0px)
+    );
+  }
+
+  html[data-vibe-pond-layout='vertical'] .vibe-pond-control {
+    right: calc(
+      max(0.75rem, min(20vw, 50% - var(--vibe-capsule-half, 14rem) - 4.875rem)) +
+        env(safe-area-inset-right, 0px)
+    );
+  }
 }
 
 .vibe-sound-control > *,
@@ -5665,10 +6161,58 @@ a.guide-source:focus-visible {
   color: var(--color-text-muted);
 }
 
-/* Narrow screens (≤640px): both FABs keep the lower corners (20vw would
-   collide with the nearly full-width toolbar capsule; row center ≈ 3.2rem +
-   33px above the bottom) and each pill expands vertically UPWARD from behind
-   its FAB. The inner column-reverses so the DOM order reads from the anchor
+/* Measured vertical pill expansion at mid widths (>640px): on web the pills
+   open horizontally whenever the real estate exists (the FAB anchor reserves
+   the footprint — see the glide rules above); useVibeControlLayout sets
+   data-vibe-*-layout="vertical" on <html> only when a side's pill would not
+   fit horizontally even from a corner-pinned FAB. That side's pill then
+   expands vertically UPWARD from behind its FAB — the same treatment as the
+   ≤640px media query below (keep the two in sync). The FAB keeps its glided
+   position on the capsule row (bottom: 5.0625rem); only the pill direction
+   changes. */
+html[data-vibe-sound-layout='vertical'] .vibe-sound-pill,
+html[data-vibe-pond-layout='vertical'] .vibe-pond-pill {
+  top: auto;
+  bottom: 0;
+  width: 66px;
+  height: auto;
+  clip-path: inset(100% 0 0 0 round 999px);
+}
+
+html[data-vibe-sound-layout='vertical'] .vibe-sound-control[data-state='open'] .vibe-sound-pill,
+html[data-vibe-pond-layout='vertical'] .vibe-pond-control[data-state='open'] .vibe-pond-pill {
+  clip-path: inset(0 0 0 0 round 999px);
+}
+
+html[data-vibe-sound-layout='vertical'] .vibe-sound-pill-inner,
+html[data-vibe-pond-layout='vertical'] .vibe-pond-pill-inner {
+  flex-direction: column-reverse;
+  align-items: stretch;
+  height: auto;
+  gap: 6px;
+  /* 66px FAB + 8px gap reserved at the anchor (bottom) side. */
+  padding: 12px 6px 74px;
+  transform: translateY(8px);
+}
+
+html[data-vibe-sound-layout='vertical'] .vibe-sound-control[data-state='open'] .vibe-sound-pill-inner,
+html[data-vibe-pond-layout='vertical'] .vibe-pond-control[data-state='open'] .vibe-pond-pill-inner {
+  transform: none;
+}
+
+/* Narrower padding keeps "Source" inside the 66px-wide pill while the
+   stretched buttons keep ≥44px on both axes. */
+html[data-vibe-pond-layout='vertical'] .vibe-pond-choice {
+  width: 100%;
+  padding: 0.45rem 0.5rem;
+}
+
+/* Narrow screens (≤640px): both FABs keep the lower corners (the glide
+   anchor would collide with the nearly full-width toolbar capsule; row
+   center ≈ 3.2rem + 33px above the bottom) and each pill expands vertically
+   UPWARD from behind its FAB — the same vertical treatment the
+   data-vibe-*-layout="vertical" rules above apply at measured-tight mid
+   widths. The inner column-reverses so the DOM order reads from the anchor
    outward: Sound = Play/Pause then Direction; Pond = Source, Fish, Jelly,
    Ray. */
 @media (max-width: 640px) {

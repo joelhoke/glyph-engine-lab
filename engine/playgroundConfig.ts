@@ -30,7 +30,7 @@ export const GLYPH_COLOR_MODE_OPTIONS: { value: GlyphColorMode; label: string }[
 ]
 
 export const GLYPH_FONT_OPTIONS = [
-  { value: "'Cutive Mono', monospace", label: 'Cutive Mono' },
+  { value: "'Departure Mono', monospace", label: 'Departure Mono' },
   { value: "'Courier New', monospace", label: 'Courier New' },
   { value: "'Georgia', serif", label: 'Georgia' },
   { value: "'Arial', sans-serif", label: 'Arial' },
@@ -74,7 +74,7 @@ export const VIBE_DEFAULT_PLAYGROUND: PlaygroundConfig = {
   glyphPalette: [...ROYGBV_GLYPH_PALETTE],
   backgroundColor1: '#0d0a14',
   backgroundColor2: '#1a1026',
-  glyphFont: "'Cutive Mono', monospace",
+  glyphFont: "'Departure Mono', monospace",
   glyphColorMode: 'image-gradient',
   glyphSizePt: 12,
   motion: { ...MOTION_DEFAULTS },
@@ -87,7 +87,7 @@ export const APPROVED_PLAYGROUND_DEFAULTS: PlaygroundConfig = {
   glyphPalette: [...ROYGBV_GLYPH_PALETTE],
   backgroundColor1: '#0a0a0a',
   backgroundColor2: '#12121a',
-  glyphFont: "'Cutive Mono', monospace",
+  glyphFont: "'Departure Mono', monospace",
   glyphColorMode: 'image-gradient',
   glyphSizePt: 12,
   motion: { ...MOTION_DEFAULTS },

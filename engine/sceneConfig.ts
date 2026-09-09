@@ -51,6 +51,10 @@ export type SceneDescriptor = {
     weatherRepelMult: number
     clickImpulseRadius: number
     clickImpulseForce: number
+    /** Held-pointer multiplier on the hover influence radius (drag sphere). */
+    dragInfluenceMult: number
+    /** Amplitude multiplier for droplet ripples spawned by click/tap. */
+    rippleStrength: number
   }
   sourceLayout: SourceLayoutConfig
   /** Copy hooks for the mode surface and document title. */
@@ -67,6 +71,8 @@ const DEFAULT_BEHAVIOR = {
   weatherRepelMult: 6,
   clickImpulseRadius: 220,
   clickImpulseForce: 12,
+  dragInfluenceMult: 1.7,
+  rippleStrength: 1.0,
 }
 
 // Work mode sits behind long-form copy, so the field responds to the pointer
@@ -77,6 +83,8 @@ const WORK_BEHAVIOR = {
   weatherRepelMult: 3,
   clickImpulseRadius: 150,
   clickImpulseForce: 5,
+  dragInfluenceMult: 1.5,
+  rippleStrength: 0.7,
 }
 
 // Collaborate is a conversation surface, so the field should feel warmer and
@@ -87,6 +95,8 @@ const COLLABORATE_BEHAVIOR = {
   weatherRepelMult: 2,
   clickImpulseRadius: 180,
   clickImpulseForce: 8,
+  dragInfluenceMult: 1.4,
+  rippleStrength: 0.85,
 }
 
 const DEFAULT_SOURCE_LAYOUT: SourceLayoutConfig = {
@@ -114,7 +124,7 @@ export const LANDING_SOURCE_URL = '/assets/JH-Logotype.svg'
  */
 export const VIBE_THEMED_PLAYGROUND: ThemedPlaygroundConfig = {
   glyphText: 'play · bend · make it yours · vibe · ',
-  glyphFont: "'Cutive Mono', monospace",
+  glyphFont: "'Departure Mono', monospace",
   glyphColorMode: 'image-gradient',
   glyphSizePt: 12,
   motion: { ...APPROVED_PLAYGROUND_DEFAULTS.motion, custom: { ...APPROVED_PLAYGROUND_DEFAULTS.motion.custom } },

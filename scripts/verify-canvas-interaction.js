@@ -16,12 +16,15 @@
 //     Vibe closed/open, at desktop and mobile widths
 //   - pointer repel + click/tap impulses on exposed canvas; impulses survive
 //     mode and slide transitions without a reload
+//   - droplet ripples: click spawns a ripple that expires; press-and-hold
+//     grows the effective influence radius and release eases it back
 //   - UI priority: nav, buttons, cards, composers, rails, and scroll panels
 //     stay interactive and never produce canvas impulses
 //   - Vibe paint: enable, brush-ring sync (size + erase mode), mouse stroke
-//     commit, strokes leaving/re-entering the viewport, erase, clear,
-//     undo/redo, no painting through UI, impulse suppression while painting,
-//     and the destructive-action confirmation when leaving with paint
+//     commit, strokes leaving/re-entering the viewport, background-channel
+//     isolation, erase, clear, undo/redo, no painting through UI, impulse
+//     suppression while painting, and stash-and-restore when leaving with
+//     paint (no discard confirmation by design)
 //   - touch: tap impulse, canvas touch drag, panel touch scrolling, touch paint
 //   - reduced motion: impulses intentionally suppressed (static is not a
 //     regression)
@@ -139,6 +142,10 @@ const readDiag = (page) =>
     return d
       ? {
           impulseCount: d.impulseCount,
+          rippleCount: d.rippleCount,
+          activeRipples: d.activeRipples,
+          effectiveMouseR: d.effectiveMouseR,
+          baseMouseR: d.simParams ? d.simParams.mouseR : 0,
           pointerActive: d.pointerActive,
           pointerType: d.pointerType,
           pointerX: d.pointerX,
@@ -380,6 +387,94 @@ async function scenarioWork(page) {
   check('work card owns its pointer input (no fall-through)', cardHit === true)
 }
 
+/** Droplet ripple + drag sphere of influence (feature/glyph-droplet-ripple):
+ *  a click spawns a ripple that lives briefly and expires; holding the
+ *  pointer grows the effective influence radius, releasing eases it back. */
+async function scenarioRippleAndDrag(page) {
+  section('Ripple + drag influence')
+  // The page is on a Work slide here (baseline mouseR 120, drag mult 1.5).
+  const point = await expectExposed(
+    page,
+    [[800, 70], [1400, 450], [1300, 820], [800, 870]],
+    'work ripple point',
+  )
+  if (!point) return
+
+  const before = await readDiag(page)
+  if (!before) {
+    check('ripple diagnostics readable', false)
+    return
+  }
+  await page.mouse.click(point.x, point.y)
+  try {
+    await waitFor(
+      async () => {
+        const d = await readDiag(page)
+        return d && d.rippleCount === before.rippleCount + 1 && d.activeRipples >= 1
+      },
+      { label: 'ripple spawn', timeout: 6000 },
+    )
+    check('click spawns a droplet ripple (rippleCount + live store)', true)
+  } catch (err) {
+    check('click spawns a droplet ripple (rippleCount + live store)', false, err.message)
+  }
+  try {
+    await waitFor(async () => (await readDiag(page))?.activeRipples === 0, {
+      label: 'ripple expiry',
+      timeout: 8000,
+    })
+    check('ripples expire past their lifetime', true)
+  } catch (err) {
+    check('ripples expire past their lifetime', false, err.message)
+  }
+
+  // Press-and-hold: the effective influence radius eases up well beyond the
+  // baseline, then eases back on release. Diagnostics push at 5Hz, so poll.
+  const baseR = before.baseMouseR
+  if (!(baseR > 0)) {
+    check('baseline influence radius readable', false, `baseMouseR ${baseR}`)
+    return
+  }
+  await page.mouse.move(point.x, point.y, { steps: 4 })
+  await page.mouse.down()
+  await page.mouse.move(point.x + 30, point.y + 10, { steps: 6 })
+  try {
+    await waitFor(
+      async () => {
+        const d = await readDiag(page)
+        return d && d.effectiveMouseR > baseR * 1.2
+      },
+      { label: 'drag radius growth', timeout: 6000 },
+    )
+    check('press-and-hold grows the effective influence radius', true)
+  } catch (err) {
+    const d = await readDiag(page)
+    check(
+      'press-and-hold grows the effective influence radius',
+      false,
+      `effectiveMouseR ${d?.effectiveMouseR} vs base ${baseR}`,
+    )
+  }
+  await page.mouse.up()
+  try {
+    await waitFor(
+      async () => {
+        const d = await readDiag(page)
+        return d && d.effectiveMouseR < baseR * 1.05
+      },
+      { label: 'drag radius release', timeout: 6000 },
+    )
+    check('release eases the influence radius back to baseline', true)
+  } catch (err) {
+    const d = await readDiag(page)
+    check(
+      'release eases the influence radius back to baseline',
+      false,
+      `effectiveMouseR ${d?.effectiveMouseR} vs base ${baseR}`,
+    )
+  }
+}
+
 async function scenarioCollaborateLanding(page) {
   section('Collaborate landing')
   await expectUiClickNoImpulse(page, '.experience-nav-button >> text=Collaborate', 'nav “Collaborate”')
@@ -476,8 +571,25 @@ async function scenarioChat(page) {
 
 /** Full-length scroll layout: the transcript spans the shell's full height
  *  while header and bottom cluster float above it; the final card still
- *  clears the prompt rail by a full response line at the pinned end. */
+ *  clears the prompt rail by a full response line at the pinned end. The
+ *  newest answer's entrance settle (chat-answer-in: 320ms translateY(10px)
+ *  → 0, app/globals.css) must finish before measuring — the contract covers
+ *  the pinned REST position, and mid-animation the card rides up to 10px low. */
 async function assertChatOverlayLayout(page, label) {
+  try {
+    await waitFor(
+      async () =>
+        page.evaluate(() => {
+          const answers = document.querySelectorAll('.chat-answer')
+          const last = answers[answers.length - 1]
+          if (!last) return false
+          return last.getAnimations().every((a) => a.playState === 'finished')
+        }),
+      { label: 'answer entrance settle', timeout: 4000 },
+    )
+  } catch {
+    // Fall through and measure anyway — the check below reports the failure.
+  }
   const layout = await page.evaluate(() => {
     const shell = document.querySelector('.chat-shell')
     const t = document.querySelector('.chat-transcript')
@@ -737,13 +849,18 @@ async function scenarioVibePaint(page) {
     check('stroke leaving and re-entering the canvas stays one stroke', false, err.message)
   }
 
-  // Paint mode never fires click impulses; a click paints a dot instead.
+  // Paint mode never fires click impulses or ripples; a click paints a dot.
   const impulses = await impulseCount(page)
+  const ripplesBefore = (await readDiag(page))?.rippleCount ?? -1
   await page.mouse.click(1450, 600)
   await sleep(500)
   check(
     'paint mode suppresses click impulses',
     (await impulseCount(page)) === impulses,
+  )
+  check(
+    'paint mode suppresses droplet ripples',
+    ((await readDiag(page))?.rippleCount ?? -2) === ripplesBefore,
   )
   try {
     await waitFor(async () => (await readPaint(page))?.strokeCount === 3, {
@@ -780,11 +897,20 @@ async function scenarioVibePaint(page) {
   await waitFor(async () => (await readPaint(page))?.strokeCount === 3, { label: 'redo' })
   check('paint undo/redo restore committed strokes', true)
 
-  // Background-channel paint: enable the background color, drag, and confirm
-  // a background stroke commits (its own channel, separate from glyph paint).
+  // Background-channel paint: enabling painting force-selects BOTH channels
+  // (off→on defaults, PortfolioExperience handlePaintToolChange), so the
+  // background channel is already on — turn the GLYPH channel off instead to
+  // isolate a background-only stroke: it must commit, increment the
+  // background stroke count by exactly one, and leave glyph paint untouched.
+  const preBackground = await readPaint(page)
   await page.click('button.vibe-toolbar-category[aria-label="Paint"]')
   await page.waitForSelector('.vibe-paint-panel', { timeout: 10000 })
-  await page.click('label:has-text("Background color")')
+  const bgChecked = await page.evaluate(
+    () =>
+      document.querySelector('.vibe-paint-channel input[id^="paint-bg-color-"]')?.checked === true,
+  )
+  check('background channel is on by default once painting is enabled', bgChecked)
+  await page.click('label:has-text("Glyph color")')
   await page.mouse.move(1400, 420)
   await page.mouse.down()
   await page.mouse.move(1300, 520, { steps: 8 })
@@ -793,14 +919,31 @@ async function scenarioVibePaint(page) {
     await waitFor(
       async () => {
         const p = await readPaint(page)
-        return p && p.strokeCount === 4 && p.backgroundStrokeCount === 1
+        return (
+          p &&
+          preBackground &&
+          p.strokeCount === preBackground.strokeCount + 1 &&
+          p.backgroundStrokeCount === preBackground.backgroundStrokeCount + 1 &&
+          p.paintedTargetCount === preBackground.paintedTargetCount
+        )
       },
       { label: 'background paint stroke', timeout: 6000 },
     )
-    check('background paint stroke commits (background channel)', true)
+    check('background paint stroke commits (background channel only)', true)
   } catch (err) {
-    check('background paint stroke commits (background channel)', false, err.message)
+    check(
+      'background paint stroke commits (background channel only)',
+      false,
+      `${err.message} — now ${JSON.stringify(await readPaint(page))}`,
+    )
   }
+  // Restore the glyph channel so the remaining paint flow runs on both;
+  // Escape closes the popout (VibeToolbar), keeping the next section's
+  // "click Paint to open" step valid.
+  await page.click('button.vibe-toolbar-category[aria-label="Paint"]')
+  await page.waitForSelector('.vibe-paint-panel', { timeout: 10000 })
+  await page.click('label:has-text("Glyph color")')
+  await page.keyboard.press('Escape')
 
   // Erase mode: ring restyles, stroke commits. (A canvas pointerdown closed
   // the popout — the tool state lives in the shell — so re-open it first.)
@@ -833,24 +976,44 @@ async function scenarioVibePaint(page) {
   await waitFor(async () => (await readPaint(page))?.strokeCount === 0, { label: 'clear' })
   check('clear paint empties the overlay', true)
 
-  // Destructive confirmation: leaving vibe with paint asks first.
+  // Leaving vibe with paint: nothing is destroyed — the overlay is STASHED
+  // for the session (PortfolioExperience "Paint stash" effect), the shared
+  // canvas shows no paint in other modes, and returning to vibe restores it.
+  // No discard confirmation fires on this path by design.
   await page.mouse.move(1400, 300)
   await page.mouse.down()
   await page.mouse.move(1300, 420, { steps: 8 })
   await page.mouse.up()
   await waitFor(async () => (await readPaint(page))?.strokeCount === 1, { label: 'repaint' })
   await page.click('.experience-nav-button >> text=Work')
-  await page.waitForSelector('.paint-confirm-overlay', { timeout: 8000 })
-  check('leaving vibe with paint shows the discard confirmation', true)
-  await page.click('.paint-confirm-button:has-text("Keep painting")')
-  await sleep(400)
-  const stillVibe = await page.evaluate(() => window.location.hash === '#vibe')
-  check('cancel keeps painting and stays in vibe', stillVibe && (await readPaint(page))?.strokeCount === 1)
-  await page.click('.experience-nav-button >> text=Work')
-  await page.waitForSelector('.paint-confirm-overlay', { timeout: 8000 })
-  await page.click('.paint-confirm-button:has-text("Discard and continue")')
   await page.waitForSelector('.work-experience', { timeout: 15000 })
-  check('confirm discards paint and navigates', (await readPaint(page))?.strokeCount === 0)
+  await sleep(400)
+  check(
+    'leaving vibe with paint navigates without a discard confirmation',
+    !(await page.evaluate(() => !!document.querySelector('.paint-confirm-overlay'))),
+  )
+  check(
+    'work shows a paint-free canvas (paint stashed, not bled through)',
+    (await readPaint(page))?.strokeCount === 0,
+    `strokeCount ${(await readPaint(page))?.strokeCount}`,
+  )
+  await page.evaluate(() => {
+    window.location.hash = '#vibe'
+  })
+  await page.waitForSelector('.vibe-cta, .vibe-toolbar', { timeout: 15000 })
+  try {
+    await waitFor(async () => (await readPaint(page))?.strokeCount === 1, {
+      label: 'paint restore',
+      timeout: 8000,
+    })
+    check('returning to vibe restores the stashed paint', true)
+  } catch (err) {
+    check('returning to vibe restores the stashed paint', false, err.message)
+  }
+  // End the cycle on Work (stash again — no confirmation) for the
+  // listener-persistence scenario that follows.
+  await page.click('.experience-nav-button >> text=Work')
+  await page.waitForSelector('.work-experience', { timeout: 15000 })
 }
 
 async function scenarioListenersSurvive(page) {
@@ -1136,11 +1299,16 @@ async function scenarioReducedMotion(browser) {  section('Reduced motion')
   await waitForCanvasReady(page)
   const point = await findExposed(page, [[1500, 450], [800, 120]], 'reduced-motion landing')
   const before = await impulseCount(page)
+  const ripplesBefore = (await readDiag(page))?.rippleCount ?? -1
   await page.mouse.click(point.x, point.y)
   await sleep(700)
   check(
     'reduced motion: click impulses intentionally suppressed (static pose kept)',
     (await impulseCount(page)) === before,
+  )
+  check(
+    'reduced motion: droplet ripples intentionally suppressed',
+    ((await readDiag(page))?.rippleCount ?? -2) === ripplesBefore,
   )
   await context.close()
 }
@@ -1177,6 +1345,7 @@ async function main() {
     const scenarios = [
       ['landing', () => scenarioLanding(page)],
       ['work', () => scenarioWork(page)],
+      ['ripple + drag', () => scenarioRippleAndDrag(page)],
       ['collaborate landing', () => scenarioCollaborateLanding(page)],
       ['chat', () => scenarioChat(page)],
       ['vibe closed', () => scenarioVibeClosed(page)],

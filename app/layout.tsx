@@ -6,9 +6,9 @@ import './globals.css'
 // Cabin 700 for primary display headings (Vibe/Collaborate headings, Work
 // slide titles, protected case-study titles); Cabin 400 for the collaborate
 // conversation copy (visitor messages, guide answers, composer text, preview
-// excerpts — the intentional exception to the Cutive Mono default, see
+// excerpts — the intentional exception to the Departure Mono default, see
 // docs/style-guide.md §3.3). next/font self-hosts at build time — no runtime
-// request to Google. Everything else keeps the Cutive Mono stack.
+// request to Google. Everything else keeps the Departure Mono stack.
 const cabin = Cabin({
   weight: ['400', '700'],
   subsets: ['latin'],

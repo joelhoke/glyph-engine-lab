@@ -1,12 +1,15 @@
 /**
- * One-shot radial impulse for click/tap blasts.
+ * One-shot radial impulse for click/tap "plops".
  *
  * Applies an instantaneous velocity kick to every particle within a radius,
  * pushing them away from the impact point with the same linear falloff the
- * hover repulsion uses (maximal at the center, zero at the edge). The
- * existing spring+damp integration then settles the field back on its own —
- * the impulse runs once per pointerdown, adds no per-frame work, and keeps
- * the simulation deterministic (no DOM, no randomness).
+ * hover repulsion uses (maximal at the center, zero at the edge). Since the
+ * droplet-ripple feature (engine/ripple.ts) this no longer carries the whole
+ * click response: pointerdown fires it once at a reduced force as the instant
+ * impact "plop", while the traveling wavefront ripple does the sustained
+ * work. The existing spring+damp integration then settles the field back on
+ * its own — the impulse runs once per pointerdown, adds no per-frame work,
+ * and keeps the simulation deterministic (no DOM, no randomness).
  */
 
 type ImpulseParticle = {

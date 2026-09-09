@@ -93,6 +93,12 @@ for (const story of WORK_STORIES) {
         hasExtension(entry.src, VIDEO_EXTENSIONS),
         `${story.id}/${entry.id}: video src is MP4/WebM`,
       )
+      if (entry.fallbackSrc) {
+        assert(
+          hasExtension(entry.fallbackSrc, VIDEO_EXTENSIONS) && localAssetExists(entry.fallbackSrc),
+          `${story.id}/${entry.id}: fallback video source exists (${entry.fallbackSrc})`,
+        )
+      }
       assert(
         typeof entry.poster === 'string' && entry.poster.length > 0 && localAssetExists(entry.poster),
         `${story.id}/${entry.id}: video has an existing poster`,
@@ -203,10 +209,10 @@ if (process.platform === 'darwin') {
 // docs/work-media-sources.md with its source page, original asset URL,
 // retrieval date, and displayed caption (feature/work-expanding-case-study)
 const ADDED_ASSETS = [
-  'EmployeeExperience-VivaConnections-Dashboard.png',
+  'EmployeeExperience-VivaConnections-Dashboard.webp',
   'EmployeeExperience-VivaConnections.jpg',
-  'GlobalCompensation-TotalRewards-Employee.png',
-  'GlobalCompensation-TotalRewards-Manager.png',
+  'GlobalCompensation-TotalRewards-Employee.webp',
+  'GlobalCompensation-TotalRewards-Manager.webp',
 ]
 const manifestPath = path.join(projectRoot, 'docs', 'work-media-sources.md')
 assert(fs.existsSync(manifestPath), 'the work-media provenance manifest exists')

@@ -11,9 +11,17 @@
 name = "glyph-engine-lab"
 pages_build_output_dir = "out"
 
+# Pin the Functions runtime to the compatibility date local development has
+# always used (wrangler pages dev defaults to 2026-08-20 when none is set).
+# Without this the project inherits its original dashboard date, under which
+# the multipart formData parser returns file parts as STRINGS — every
+# POST /api/creations upload then fails validation with 400.
+compatibility_date = "2026-08-20"
+
 # Non-secret configuration for the collaborate AI guide (see docs/deployment.md,
 # "Collaborate AI guide"). The dashboard manages ONLY secrets for this project
-# (AIG_TOKEN, OPENAI_API_KEY, DEEPSEEK_API_KEY) — never put those here.
+# (AIG_TOKEN, OPENAI_API_KEY, DEEPSEEK_API_KEY, MOONSHOT_API_KEY,
+# PROTOTYPES_AUTH_SECRET, CREATIONS_ADMIN_PASSWORD) — never put those here.
 [vars]
 CF_ACCOUNT_ID = "42cf2d6bb1238015365cb8aa5cbeb251"
 AIG_GATEWAY_ID = "jh-guide"
@@ -33,3 +41,36 @@ MOONSHOT_MODEL = "kimi-k2.6"
 # [[r2_buckets]]
 # binding = "PROTECTED_BUCKET"
 # bucket_name = "jh-protected-work"
+
+# R2 binding for hosted prototypes (docs/prototypes-plan.md). The bucket was
+# created once with:
+#   wrangler r2 bucket create jh-prototypes
+# The binding is declared HERE because this project's dashboard bindings are
+# locked to wrangler.toml ("Bindings for this project are being managed
+# through wrangler.toml") — it takes effect on the next deployment. Bundles
+# are uploaded under /<stack>/<slug>/<file> with
+# scripts/publish-prototypes.mjs (`wrangler r2 object put`) and served through
+# functions/p/[[path]].ts; they NEVER go into public/ or the static export.
+# For local dev, `wrangler pages dev` emulates R2 from this same binding (or
+# pass --r2=PROTOTYPES_BUCKET on the command line).
+
+[[r2_buckets]]
+binding = "PROTOTYPES_BUCKET"
+bucket_name = "jh-prototypes"
+
+# D1 + R2 bindings for the creations gallery (docs/deployment.md, "Creations
+# gallery"). Declared HERE for the same reason as PROTOTYPES_BUCKET — dashboard
+# bindings are locked to wrangler.toml. One-time setup:
+#   wrangler d1 create jh-creations        → paste the real database_id below
+#   wrangler d1 execute jh-creations --remote --file=migrations/0003_create_creations.sql
+#   wrangler r2 bucket create jh-creations-media
+# `wrangler pages dev` emulates both bindings locally from these declarations.
+
+[[d1_databases]]
+binding = "CREATIONS_DB"
+database_name = "jh-creations"
+database_id = "dadd4690-af08-4ea8-8623-fa9a5bfd9cca"
+
+[[r2_buckets]]
+binding = "CREATIONS_BUCKET"
+bucket_name = "jh-creations-media"

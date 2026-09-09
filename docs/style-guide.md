@@ -126,7 +126,8 @@ case studies supply their own mark or omit it. Hero sources with white
 wordmarks ship `#101826` light twins via `lightSourceUrl` (e.g.
 `story-03-light.svg`, `building-multiple-light.svg`).
 
-**Weather mesh backdrops** (`SceneCanvas.buildAllMeshBgs`): clear
+**Weather mesh backdrops** (`SceneCanvas.MESH_BG_PALETTES`, rasterized
+lazily per preset by `getMeshBg`): clear
 `#DDEBEE/#F2E6D8`, rain `#012840/#364F59`, storm `#070926/#281259`, wind
 `#6D808C/#BDAC89`, fog `#6E6E6E/#222222`, snow `#0D0D0D/#1C2B3E`. Painted
 at the ambient config's `backdropOpacity` (default 0.55; the landing's
@@ -151,11 +152,12 @@ Two typefaces, both self-hosted (no remote font requests):
   excerpts (~1rem, line-height 1.6–1.7, `font-weight: 400`, letter-spacing
   0.02em for legibility). Loaded from the
   same self-hosted `next/font` build as Cabin Bold.
-- **Cutive Mono** — everything else: body copy, navigation, toolbar and
+- **Departure Mono** — everything else: body copy, navigation, toolbar and
   control text, Work mode labels, narrative section headings, dialogs,
   tuning UI, conversation metadata (timestamps, speaker labels), source
-  chips, suggested prompts, and the glyph particles themselves. Falls back
-  to the system mono stack (`--font-mono` in `globals.css`).
+  chips, suggested prompts, and the glyph particles themselves. Self-hosted
+  from `public/fonts` via `@font-face` in `globals.css` (SIL OFL, license
+  alongside the woff2); falls back to the system mono stack (`--font-mono`).
 
 | Style | Spec |
 |---|---|
@@ -168,7 +170,7 @@ Two typefaces, both self-hosted (no remote font requests):
 | Wordmark | lowercase always: "joel hoke design", letter-spacing 0.08em |
 
 Rules: Cabin never becomes a body, control, or particle font outside the
-conversation-copy exception above; Cutive Mono is never removed; sentence
+conversation-copy exception above; Departure Mono is never removed; sentence
 case for prose, lowercase for the wordmark, uppercase only for eyebrow
 labels.
 
@@ -180,6 +182,14 @@ labels.
   Microsoft `#f25022 #7fba00 #00a4ef #ffb900`).
 - **Case-study media**: AVIF/WebP/JPEG/PNG images and MP4/WebM video with
   posters; lazy-loaded, explicit dimensions, thumbnails 96×64 tiles.
+  Self-hosted interactive viewers (e.g. a three.js scene, media kind
+  `viewer`) ship as a static build under `public/assets/work/<name>/` with a
+  required WebP poster (≤1600px, metadata-stripped, explicit dimensions) for
+  the inline figure and gallery tile; the same-origin iframe loads only in
+  the lightbox, and the viewer must render a static single frame via
+  `?static=1` for reduced-motion sessions. `inlinePlayback: 'live'` mounts
+  the running viewer inline (its `?inline=1` framing) with a whole-figure
+  click-through to the full-screen route.
 - **Icons**: inline SVG only (`components/icons/`), `stroke="currentColor"`,
   1.5px stroke, round caps — no icon font, no emoji in UI chrome.
 
@@ -192,14 +202,21 @@ labels.
 - **Buttons**: pill (radius 999px), min-height 44px, mono at 0.82rem;
   default = translucent panel + border, hover = border to `#8abaff` and
   text to `#f7fbff`; primary (consent) = `#8fe3f5` fill on `#06090e`.
-  Landing primary actions (`.primary-action-button`) are larger: min-height
-  60px desktop / 56px mobile, padding `1.25rem 2rem` desktop /
-  `1rem 1.25rem` mobile — always above the 44px accessibility floor.
+  The persistent site frame (`.site-header`, z-index 45 — above the
+  foreground layer, below the tuning panel) carries the home lockup (the
+  `JHMark` monogram, currentColor so it follows the theme), the section
+  tabs (`.experience-nav-list` pill classes — Gallery is a route link, not
+  a mode), and the recruiter links; on ≤560px phones the recruiter links
+  move to a fixed bottom bar (`.site-footer`) so the header stays one row.
 - **Focus**: 2px `#8abaff` outline, 3–4px offset, `:focus-visible` only —
   never remove it.
 - **Motion**: 160–320ms ease transitions; opacity + ≤18px translate for
   entrances (`work-story-in`); ambient canvas motion must respect
-  `prefers-reduced-motion` (static representative frame).
+  `prefers-reduced-motion` (static representative frame). The canvas glyph
+  field's render-in is a designed exception: a ~900ms rise +
+  shuffle-staggered per-glyph fade (`engine/introReveal.ts`) on every
+  mode entry — landing, work, vibe, collaborate — tunable per mode in
+  the tuning panel.
 
 ## 5. Brand voice
 

@@ -30,9 +30,15 @@ interface R2GetOptions {
   range?: R2Range
 }
 
+interface R2PutOptions {
+  httpMetadata?: R2HTTPMetadata
+}
+
 interface R2Bucket {
   head(key: string): Promise<R2Object | null>
   get(key: string, options?: R2GetOptions): Promise<R2ObjectBody | null>
+  put(key: string, value: ReadableStream | ArrayBuffer | string, options?: R2PutOptions): Promise<R2Object>
+  delete(keys: string | string[]): Promise<void>
 }
 
 type PagesEventContext<Env, Params extends string = string> = {
@@ -53,6 +59,8 @@ type PagesFunction<Env = unknown, Params extends string = string> = (
 interface D1PreparedStatement {
   bind(...values: unknown[]): D1PreparedStatement
   run(): Promise<unknown>
+  first<T = unknown>(column?: string): Promise<T | null>
+  all<T = unknown>(): Promise<{ results: T[] }>
 }
 
 interface D1Database {

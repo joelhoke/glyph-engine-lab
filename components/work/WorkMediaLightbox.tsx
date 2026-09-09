@@ -146,7 +146,7 @@ export default function WorkMediaLightbox({
         <div className="work-lightbox-stage">
           <LightboxItem key={item.id} item={item} videoRef={videoRef} />
         </div>
-        {item.caption && <p className="work-lightbox-caption">{item.caption}</p>}
+        <CaptionLine item={item} />
         {media.length > 1 && (
           <div className="work-lightbox-controls">
             <button
@@ -170,6 +170,37 @@ export default function WorkMediaLightbox({
       </div>
     </div>,
     document.body,
+  )
+}
+
+/** Caption action link: external hrefs open in a new tab with the ↗ marker
+ *  (the outbound-link pattern from WorkStory / style guide §6); internal
+ *  hrefs (e.g. CreationsGallery's '/?memento=…#vibe') stay plain same-tab. */
+export function CaptionActionLink({ action }: { action: { href: string; label: string } }) {
+  const external = /^https?:\/\//.test(action.href)
+  if (!external) return <a href={action.href}>{action.label}</a>
+  return (
+    <a href={action.href} target="_blank" rel="noopener noreferrer">
+      {action.label}
+      <span aria-hidden="true"> ↗</span>
+    </a>
+  )
+}
+
+function CaptionLine({ item }: { item: WorkMedia }) {
+  // Image/video/viewer media carry the optional caption action link.
+  const action = 'captionAction' in item ? item.captionAction : undefined
+  if (!item.caption && !action) return null
+  return (
+    <p className="work-lightbox-caption">
+      {item.caption}
+      {action ? (
+        <>
+          {' '}
+          <CaptionActionLink action={action} />
+        </>
+      ) : null}
+    </p>
   )
 }
 
@@ -201,7 +232,6 @@ function LightboxItem({
       <video
         ref={videoRef as RefObject<HTMLVideoElement>}
         className="work-lightbox-media"
-        src={item.src}
         poster={item.poster}
         width={item.width}
         height={item.height}
@@ -209,10 +239,32 @@ function LightboxItem({
         preload="none"
         aria-label={item.alt}
       >
+        {/* Same dual-source pattern as WorkStory: HEVC primary, H.264
+            fallback — the browser picks the first playable encoding. */}
+        <source src={item.src} type={item.fallbackSrc ? 'video/mp4; codecs="hvc1"' : undefined} />
+        {item.fallbackSrc && <source src={item.fallbackSrc} type="video/mp4" />}
         {item.captionsSrc && (
           <track kind="captions" src={item.captionsSrc} label="English captions" default />
         )}
       </video>
+    )
+  }
+
+  if (item.kind === 'viewer') {
+    // Self-hosted interactive viewer: no facade — opening the lightbox IS the
+    // explicit interaction. Reduced-motion sessions get the viewer's static
+    // single-frame mode (?static=1) instead of the autonomous sway loop.
+    const reducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    return (
+      <iframe
+        className="work-lightbox-embed"
+        src={reducedMotion ? `${item.src}?static=1` : item.src}
+        title={item.alt}
+        width={item.width}
+        height={item.height}
+      />
     )
   }
 
