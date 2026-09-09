@@ -2319,6 +2319,156 @@ a.experience-nav-button {
   color: var(--color-text-faint);
 }
 
+.work-media-carousel {
+  --work-media-carousel-edge-inset: 2rem;
+  width: calc(100% + 4rem);
+  margin: 0 -2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.work-media-carousel-viewport {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 8%;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.work-media-carousel-viewport[data-edge='start'] {
+  padding-left: var(--work-media-carousel-edge-inset);
+}
+
+.work-media-carousel-viewport[data-edge='end'] {
+  padding-right: var(--work-media-carousel-edge-inset);
+}
+
+.work-media-carousel-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.work-media-carousel-track {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  padding-left: calc(8% + var(--work-media-carousel-edge-inset));
+  padding-right: 8%;
+}
+
+.work-media-carousel-end-spacer {
+  /* Sized so the trailing gap after the last image equals the edge inset
+     (flex gap contributes the other 1rem). align-self: stretch gives it
+     height — a zero-height box would not extend the scrollable area. */
+  flex: 0 0 calc(var(--work-media-carousel-edge-inset) - 1rem);
+  align-self: stretch;
+}
+
+.work-media-carousel-image {
+  display: block;
+  flex: 0 0 min(84%, 54rem);
+  width: min(84%, 54rem);
+  padding: 0;
+  border: 1px solid var(--color-input-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--color-surface-panel);
+  cursor: zoom-in;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  opacity: 0.48;
+  filter: grayscale(1);
+  transform: scale(0.95);
+  transition: filter 220ms ease, opacity 220ms ease, transform 220ms ease, border-color 180ms ease;
+}
+
+.work-media-carousel-image[aria-current='true'] {
+  opacity: 1;
+  filter: none;
+  transform: scale(1);
+}
+
+.work-media-carousel-image img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.work-media-carousel-image:hover,
+.work-media-carousel-image:focus-visible {
+  border-color: var(--color-accent);
+}
+
+.work-media-carousel-caption {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  text-align: center;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--color-text-faint);
+}
+
+.work-media-carousel-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+}
+
+.work-media-carousel-control {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-surface-panel);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.work-media-carousel-control:hover,
+.work-media-carousel-control:focus-visible {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.work-media-carousel-progress {
+  min-width: 2.7rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 560px) {
+  .work-media-carousel {
+    --work-media-carousel-edge-inset: 1.25rem;
+    width: calc(100% + 2.5rem);
+    margin-inline: -1.25rem;
+  }
+
+  .work-media-carousel-track {
+    gap: 0.65rem;
+    padding-left: calc(6% + var(--work-media-carousel-edge-inset));
+    padding-right: 6%;
+  }
+
+  .work-media-carousel-end-spacer {
+    flex-basis: calc(var(--work-media-carousel-edge-inset) - 0.65rem);
+  }
+
+  .work-media-carousel-image {
+    flex-basis: 88%;
+    width: 88%;
+  }
+
+  .work-media-carousel-caption {
+    flex-wrap: wrap;
+  }
+}
+
 .work-inline-media--live-viewer {
   position: relative;
   width: 100%;

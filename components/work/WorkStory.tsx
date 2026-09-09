@@ -1,7 +1,7 @@
 'use client'
 
 import { RefObject, useEffect, useRef, useState } from 'react'
-import { getWorkMedia, WorkMedia, WorkStory } from '../../content/work'
+import { getWorkMedia, WorkMedia, WorkMediaImage, WorkStory } from '../../content/work'
 import { AnalyticsEvent, outboundHost } from '../../engine/analytics'
 import WorkMediaLightbox, { CaptionActionLink } from './WorkMediaLightbox'
 
@@ -209,16 +209,26 @@ export default function WorkStoryView({
                   {section.callout && (
                     <p className="work-story-section-callout">{section.callout}</p>
                   )}
-                  {section.mediaIds?.map((mediaId) => {
-                    const entry = getWorkMedia(story, mediaId)
-                    return entry ? (
-                      <InlineMedia
-                        key={mediaId}
-                        item={entry}
-                        onOpenImage={(trigger) => openInlineLightbox(mediaId, trigger)}
-                      />
-                    ) : null
-                  })}
+                  {section.mediaPresentation === 'carousel' && section.mediaIds ? (
+                    <MediaCarousel
+                      heading={section.heading}
+                      media={section.mediaIds
+                        .map((mediaId) => getWorkMedia(story, mediaId))
+                        .filter((entry): entry is WorkMediaImage => entry?.kind === 'image')}
+                      onOpenImage={(mediaId, trigger) => openInlineLightbox(mediaId, trigger)}
+                    />
+                  ) : (
+                    section.mediaIds?.map((mediaId) => {
+                      const entry = getWorkMedia(story, mediaId)
+                      return entry ? (
+                        <InlineMedia
+                          key={mediaId}
+                          item={entry}
+                          onOpenImage={(trigger) => openInlineLightbox(mediaId, trigger)}
+                        />
+                      ) : null
+                    })
+                  )}
                   {section.attachments?.map((attachment) => (
                     <a
                       key={attachment.url}
@@ -309,6 +319,149 @@ export default function WorkStoryView({
         />
       )}
     </article>
+  )
+}
+
+/** Full-width, manually navigated screen carousel for a narrative section. */
+function MediaCarousel({
+  heading,
+  media,
+  onOpenImage,
+}: {
+  heading: string
+  media: WorkMediaImage[]
+  onOpenImage: (mediaId: string, trigger: HTMLElement) => void
+}) {
+  const [index, setIndex] = useState(0)
+  const viewportRef = useRef<HTMLDivElement | null>(null)
+  const itemRefs = useRef<Array<HTMLButtonElement | null>>([])
+  const indexRef = useRef(0)
+  const programmaticIndexRef = useRef<number | null>(null)
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const item = media[index]
+
+  useEffect(
+    () => () => {
+      if (settleTimerRef.current) clearTimeout(settleTimerRef.current)
+    },
+    [],
+  )
+
+  if (!item) return null
+
+  const setActiveIndex = (next: number) => {
+    indexRef.current = next
+    setIndex(next)
+  }
+
+  const goTo = (direction: number) => {
+    const target = ((indexRef.current + direction) % media.length + media.length) % media.length
+    const targetElement = itemRefs.current[target]
+    if (!targetElement) return
+
+    programmaticIndexRef.current = target
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current)
+    setActiveIndex(target)
+    requestAnimationFrame(() => {
+      targetElement.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      })
+    })
+    settleTimerRef.current = setTimeout(() => {
+      programmaticIndexRef.current = null
+    }, 500)
+  }
+
+  const handleScroll = () => {
+    if (programmaticIndexRef.current !== null) return
+    const viewport = viewportRef.current
+    if (!viewport) return
+    const midpoint = viewport.scrollLeft + viewport.clientWidth / 2
+    let closestIndex = 0
+    let closestDistance = Infinity
+    itemRefs.current.forEach((element, candidateIndex) => {
+      if (!element) return
+      const distance = Math.abs(element.offsetLeft + element.offsetWidth / 2 - midpoint)
+      if (distance < closestDistance) {
+        closestDistance = distance
+        closestIndex = candidateIndex
+      }
+    })
+    if (closestIndex !== indexRef.current) setActiveIndex(closestIndex)
+  }
+
+  const itemCount = media.length
+
+  return (
+    <figure className="work-media-carousel">
+      <div
+        ref={viewportRef}
+        className="work-media-carousel-viewport"
+        role="region"
+        aria-roledescription="carousel"
+        aria-label={`${heading} screens`}
+        data-edge={index === 0 ? 'start' : index === itemCount - 1 ? 'end' : undefined}
+        onScroll={handleScroll}
+      >
+        <div className="work-media-carousel-track">
+          {media.map((entry, entryIndex) => (
+            <button
+              key={entry.id}
+              ref={(element) => {
+                itemRefs.current[entryIndex] = element
+              }}
+              type="button"
+              className="work-media-carousel-image"
+              onClick={(event) => onOpenImage(entry.id, event.currentTarget)}
+              aria-label={`View ${entry.caption ?? entry.alt}`}
+              aria-current={entryIndex === index ? 'true' : undefined}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={entry.src}
+                width={entry.width}
+                height={entry.height}
+                alt=""
+                loading={entryIndex === 0 ? 'eager' : 'lazy'}
+              />
+            </button>
+          ))}
+          {/* Trailing inset at the scroll end. A real element (not a
+             track ::after or end padding): end-side padding and zero-height
+             pseudo-elements don't extend the scrollable overflow area, so
+             the last image ended up flush against the container edge. */}
+          <span className="work-media-carousel-end-spacer" aria-hidden="true" />
+        </div>
+      </div>
+      <figcaption className="work-media-carousel-caption">
+        {item.caption}
+        {itemCount > 1 && (
+          <span className="work-media-carousel-controls">
+            <button
+              type="button"
+              className="work-media-carousel-control"
+              onClick={() => goTo(-1)}
+              aria-label={`Previous ${heading} screen`}
+            >
+              <span aria-hidden="true">←</span>
+            </button>
+            <span className="work-media-carousel-progress" aria-live="polite">
+              {index + 1} / {itemCount}
+            </span>
+            <button
+              type="button"
+              className="work-media-carousel-control"
+              onClick={() => goTo(1)}
+              aria-label={`Next ${heading} screen`}
+            >
+              <span aria-hidden="true">→</span>
+            </button>
+          </span>
+        )}
+      </figcaption>
+    </figure>
   )
 }
 

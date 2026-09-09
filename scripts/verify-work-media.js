@@ -136,6 +136,29 @@ for (const story of WORK_STORIES) {
       )
       // interaction-loaded: an embed entry must not carry a ready iframe src
       assert(!('src' in entry), `${story.id}/${entry.id}: embed is interaction-loaded (no eager src)`)
+    } else if (entry.kind === 'viewer') {
+      assert(
+        typeof entry.src === 'string' && entry.src.length > 0 && localAssetExists(entry.src),
+        `${story.id}/${entry.id}: viewer has an existing same-origin source`,
+      )
+      assert(
+        Number.isInteger(entry.width) && entry.width > 0 && Number.isInteger(entry.height) && entry.height > 0,
+        `${story.id}/${entry.id}: viewer has positive integer dimensions`,
+      )
+      assert(
+        typeof entry.alt === 'string' && entry.alt.trim().length > 0,
+        `${story.id}/${entry.id}: viewer has an accessible description`,
+      )
+      assert(
+        typeof entry.poster?.src === 'string' &&
+          entry.poster.src.length > 0 &&
+          Number.isInteger(entry.poster.width) &&
+          entry.poster.width > 0 &&
+          Number.isInteger(entry.poster.height) &&
+          entry.poster.height > 0 &&
+          localAssetExists(entry.poster.src),
+        `${story.id}/${entry.id}: viewer has an existing poster with dimensions`,
+      )
     } else {
       assert(false, `${story.id}/${entry.id}: unknown media kind "${entry.kind}"`)
     }

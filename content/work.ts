@@ -141,6 +141,8 @@ export type WorkStoryDetailsSection = {
   attachments?: WorkStoryAttachment[]
   /** IDs of media entries rendered within this section. */
   mediaIds?: string[]
+  /** Present section images as one full-width, navigable carousel. */
+  mediaPresentation?: 'carousel'
 }
 
 /** One headline scale metric, rendered large in the Outcome stat block. */
@@ -244,6 +246,8 @@ export const WORK_STORIES: WorkStory[] = [
           'Facility managers — owning consistent, disruption-free operations for individual buildings across temperature, facilities, services, projects, and events. Served by Live Campus.',
           'District facility managers — owning campus health: operational cost and capital expenditure across multiple buildings. Served by Live Campus.',
         ],
+        mediaIds: ['live-campus-portfolio', 'live-campus-building', 'live-campus-room'],
+        mediaPresentation: 'carousel',
       },
       {
         heading: 'The approach',
@@ -251,6 +255,11 @@ export const WORK_STORIES: WorkStory[] = [
           'Deep user learning anchored everything: multiple rounds of workshops, qualitative research interviews, and feedback sessions to understand the key jobs to be done by each user group. That learning led deeper into the operational stack — buildings, devices, assets, faults, alarms, facilities requests, work orders, preventative maintenance — and into architectural models and interactive prototypes that the team validated and refined through repeated research cycles.',
           'The result was two products on one operational stack: Building Orchestrator for operations teams, and Live Campus for lobby hosts and facility managers — on a shared architecture that keeps the door open to a broader ecosystem of operational tooling.',
         ],
+      },
+      {
+        heading: 'Building Orchestrator',
+        mediaIds: ['bo-production-audit-building-alarms', 'bo-production-audit-site-dashboard'],
+        mediaPresentation: 'carousel',
       },
       {
         heading: 'My contributions',
@@ -291,6 +300,51 @@ export const WORK_STORIES: WorkStory[] = [
           href: 'https://www.realcomm.com/realcomm-2026/digies/winners/',
           label: 'RealComm Digie Awards 2026 winners',
         },
+      },
+      {
+        kind: 'image',
+        id: 'live-campus-portfolio',
+        src: '/assets/work/global-operations/live-campus/portfolio.png',
+        width: 1920,
+        height: 1080,
+        alt: 'Live Campus portfolio dashboard showing an East campus map, building and structure status markers, operational metrics, and a Copilot insight panel.',
+        caption: 'Live Campus: portfolio-level operations view.',
+      },
+      {
+        kind: 'image',
+        id: 'live-campus-building',
+        src: '/assets/work/global-operations/live-campus/building.png',
+        width: 1920,
+        height: 1080,
+        alt: 'Live Campus building dashboard showing Building 31, a floor-plan overlay, operational insights, work orders, cost, events, employee count, and temperature metrics.',
+        caption: 'Live Campus: building-level operations view.',
+      },
+      {
+        kind: 'image',
+        id: 'live-campus-room',
+        src: '/assets/work/global-operations/live-campus/room.png',
+        width: 1920,
+        height: 1080,
+        alt: 'Live Campus room dashboard showing Room 1000, a detailed floor plan, operational insights, and a Copilot panel with suggested actions.',
+        caption: 'Live Campus: room-level operations view.',
+      },
+      {
+        kind: 'image',
+        id: 'bo-production-audit-building-alarms',
+        src: '/assets/work/global-operations/bo-production-audit/building-alarms.png',
+        width: 1920,
+        height: 1001,
+        alt: 'Building Orchestrator alarms view for Building 22 showing an alarm distribution chart, an alarm table, building details, and Copilot suggestions.',
+        caption: 'Building Orchestrator: Building Alarms',
+      },
+      {
+        kind: 'image',
+        id: 'bo-production-audit-site-dashboard',
+        src: '/assets/work/global-operations/bo-production-audit/site-dashboard.png',
+        width: 1920,
+        height: 1056,
+        alt: 'Building Orchestrator campus dashboard showing a mapped East campus, operational metrics, onboarding actions, and a Copilot insight panel.',
+        caption: 'Building orchestrator: Operations Lead Dashboard',
       },
     ],
     // Microsoft project: the field takes the sampled brand colors straight
