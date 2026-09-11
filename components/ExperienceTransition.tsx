@@ -23,6 +23,7 @@ export function useExperienceTransition(target: ExperienceMode) {
   const [phase, setPhase] = useState<ExperienceTransitionPhase>('settled')
   const displayedRef = useRef(target)
   const timersRef = useRef<number[]>([])
+  const firstChangeRef = useRef(true)
 
   useEffect(() => {
     if (target === displayedRef.current) return undefined
@@ -34,7 +35,17 @@ export function useExperienceTransition(target: ExperienceMode) {
     clearTimers()
 
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    if (reducedMotion) {
+    // Deep-link loads (marked inline on <html> before first paint) swap
+    // instantly like reduced motion: the visitor asked for a specific view —
+    // typically back/forward navigation — so the landing never plays. The
+    // prerendered landing is hidden by CSS while the attribute is present;
+    // removing it here reveals the incoming mode exactly as it mounts.
+    const deepLinked = document.documentElement.hasAttribute('data-deep-link')
+    if (firstChangeRef.current && deepLinked) {
+      document.documentElement.removeAttribute('data-deep-link')
+    }
+    firstChangeRef.current = false
+    if (reducedMotion || deepLinked) {
       displayedRef.current = target
       setDisplayed(target)
       setPhase('settled')

@@ -107,6 +107,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Inline first so the branded chrome never flashes unstyled when the
             external stylesheet is slow, blocked, or rejected. */}
         <style dangerouslySetInnerHTML={{ __html: CRITICAL_FALLBACK_CSS }} />
+        {/* Marks recognized mode deep links (`#work/...`, `#vibe`,
+            `#collaborate`) before first paint so the shell can resolve them
+            instantly — back/forward onto a deep link returns to that view
+            instead of flashing the landing and animating away from it. The
+            mode list mirrors EXPERIENCE_SCENE_KEYS in engine/experienceHash. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var h=location.hash.replace(/^#/,'').trim().toLowerCase().split('/')[0];if(h==='work'||h==='vibe'||h==='collaborate'){document.documentElement.setAttribute('data-deep-link','')}}catch(e){}})()`,
+          }}
+        />
         {/* Gates the globals.css theme transitions until after hydration, so
             the first paint never animates — only live system changes fade. */}
         <ThemeReady />

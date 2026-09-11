@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ReactNode } from 'react'
 import GalleryHeader from './GalleryHeader'
+import ViewerBackLink from './ViewerBackLink'
 import styles from './gallery.module.css'
 
 type HostedPrototypeViewerProps = {
@@ -10,6 +11,10 @@ type HostedPrototypeViewerProps = {
   backLabel: string
   caption?: ReactNode
   hideMobileFooter?: boolean
+  /** Back returns to the previous in-site screen via browser history when one
+      exists (restoring its exact view and scroll position); backHref remains
+      the fallback for direct visits. */
+  backViaHistory?: boolean
 }
 
 /** Shared full-window shell for gallery prototypes and work viewers. */
@@ -20,6 +25,7 @@ export default function HostedPrototypeViewer({
   backLabel,
   caption,
   hideMobileFooter = false,
+  backViaHistory = false,
 }: HostedPrototypeViewerProps) {
   return (
     <div className={styles.shell}>
@@ -27,9 +33,15 @@ export default function HostedPrototypeViewer({
       <main id="main-content" className={styles.viewerMain}>
         <div className={styles.viewerBar}>
           <h1 className={styles.viewerTitle}>{title}</h1>
-          <Link href={backHref} className={styles.backLink}>
-            ← {backLabel}
-          </Link>
+          {backViaHistory ? (
+            <ViewerBackLink href={backHref} className={styles.backLink}>
+              ← {backLabel}
+            </ViewerBackLink>
+          ) : (
+            <Link href={backHref} className={styles.backLink}>
+              ← {backLabel}
+            </Link>
+          )}
         </div>
         <iframe
           className={styles.viewerFrame}

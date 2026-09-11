@@ -1671,6 +1671,14 @@ a.experience-nav-button {
   transform: none;
 }
 
+/* Deep-link loads (`#work/...`, `#vibe`, `#collaborate` — marked inline by the
+   root layout before first paint): keep the prerendered landing out of view
+   until the shell resolves the hash and mounts the deep-linked mode, which
+   removes the attribute as it swaps in. */
+html[data-deep-link] .experience-transition {
+  visibility: hidden;
+}
+
 .mode-surface {
   max-width: 720px;
   color: var(--color-text);
