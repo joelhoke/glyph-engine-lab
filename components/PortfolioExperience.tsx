@@ -84,6 +84,11 @@ import {
   captureSeasonalAtmosphereInput,
   resolveSeasonalAtmosphere,
 } from '../engine/seasonalAtmosphere'
+import {
+  buildLiveWeatherUrl,
+  LiveConditions,
+  mapLiveConditions,
+} from '../engine/liveWeather'
 import { AmbientConfig } from '../engine/ambientConfig'
 import {
   AMBIENT_SCENE_COUNT,
@@ -238,6 +243,13 @@ type SequenceController = {
 }
 
 const BASE_DOCUMENT_TITLE = 'joel hoke design'
+
+/** Live Seattle weather (engine/liveWeather.ts): per-load fetch with a short
+ *  timeout, and a sessionStorage cache so repeat loads within a session
+ *  reuse the mapped conditions. */
+const LIVE_WEATHER_CACHE_KEY = 'jh-live-weather'
+const LIVE_WEATHER_CACHE_TTL_MS = 30 * 60 * 1000
+const LIVE_WEATHER_TIMEOUT_MS = 4000
 
 // On-demand tab experiences. ssr:false is safe here: the static export always
 // prerenders the landing (hash routing resolves client-side), and the
@@ -816,9 +828,10 @@ export default function PortfolioExperience() {
   // in useSonification. Expanding never starts audio.
   const [soundExpanded, setSoundExpanded] = useState(false)
 
-  // Landing seasonal atmosphere (Stage 3): computed once on mount from the
-  // local date/locale and applied at full intensity from the first landing
-  // frame — no ramp.
+  // Landing atmosphere: the Seattle-tuned seasonal mood first (computed on
+  // mount from the local date/locale), swapped for live Seattle conditions
+  // when the Open-Meteo fetch resolves — applied at full intensity from the
+  // first landing frame, no ramp.
   const [landingAmbient, setLandingAmbient] = useState<AmbientConfig | null>(null)
 
   // Vibe-only paint tool state (session-only; never URL-persisted) and the
@@ -2759,10 +2772,13 @@ export default function PortfolioExperience() {
     setUploadPending(false)
   }
 
-  // Seasonal landing atmosphere: resolve once on mount (client-only — the
-  // inputs are the local clock and Intl locale/timezone, both injected into
-  // the pure resolver) and apply immediately at full intensity. Never live
-  // weather; see engine/seasonalAtmosphere.
+  // Landing atmosphere: the Seattle-tuned seasonal mood resolves
+  // synchronously on mount (client-only — the inputs are the local clock and
+  // Intl locale/timezone, both injected into the pure resolver), then live
+  // Seattle conditions (engine/liveWeather.ts) swap in when the fetch lands.
+  // Offline, slow, or malformed responses silently keep the seasonal mood.
+  // The mapped result caches in sessionStorage so repeat loads within a
+  // session skip the refetch.
   useEffect(() => {
     const resolved = Intl.DateTimeFormat().resolvedOptions()
     setLandingAmbient(
@@ -2773,6 +2789,70 @@ export default function PortfolioExperience() {
         }),
       ),
     )
+
+    const readCache = (): LiveConditions | null => {
+      try {
+        const raw = window.sessionStorage.getItem(LIVE_WEATHER_CACHE_KEY)
+        if (!raw) return null
+        const cached = JSON.parse(raw)
+        if (typeof cached.at !== 'number' || Date.now() - cached.at > LIVE_WEATHER_CACHE_TTL_MS) {
+          return null
+        }
+        return cached.conditions ?? null
+      } catch {
+        return null
+      }
+    }
+
+    let cancelled = false
+    const controller = new AbortController()
+    const applyLive = (conditions: LiveConditions | null) => {
+      if (cancelled || !conditions) return
+      const config = mapLiveConditions(conditions)
+      if (config) setLandingAmbient(config)
+    }
+
+    const cached = readCache()
+    if (cached) {
+      applyLive(cached)
+    } else {
+      const timeout = window.setTimeout(() => controller.abort(), LIVE_WEATHER_TIMEOUT_MS)
+      fetch(buildLiveWeatherUrl(), { signal: controller.signal })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data) => {
+          const current = data?.current
+          if (
+            !current ||
+            typeof current.weather_code !== 'number' ||
+            typeof current.wind_speed_10m !== 'number'
+          ) {
+            return
+          }
+          const conditions: LiveConditions = {
+            weatherCode: current.weather_code,
+            windSpeedMs: current.wind_speed_10m,
+            isDay: current.is_day !== 0,
+          }
+          try {
+            window.sessionStorage.setItem(
+              LIVE_WEATHER_CACHE_KEY,
+              JSON.stringify({ at: Date.now(), conditions }),
+            )
+          } catch {
+            // Private-mode storage failures only cost the next load a refetch.
+          }
+          applyLive(conditions)
+        })
+        .catch(() => {
+          // Offline/slow/blocked: the seasonal mood already applied above.
+        })
+        .finally(() => window.clearTimeout(timeout))
+    }
+
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
   }, [])
 
   // Leaving vibe settles back to the closed-card presentation; if the
@@ -2830,7 +2910,8 @@ export default function PortfolioExperience() {
   }, [displayed, workDescriptor, collaborateDescriptor, uploadedSource, workSlideIndex, theme])
 
   // The landing runs on the themed canvas gradient (engine/theme) with the
-  // seasonal atmosphere adopted as soon as it resolves; the work/collaborate
+  // landing atmosphere (seasonal first, live Seattle conditions when the
+  // fetch lands) adopted as soon as it resolves; the work/collaborate
   // scenes resolve their themed baselines against the active theme; vibe
   // keeps its own playground config untouched.
   const scenePlayground = useMemo<PlaygroundConfig>(() => {

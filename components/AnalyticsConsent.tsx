@@ -322,12 +322,15 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
             >
               <p className="consent-copy">
                 Uploads are processed entirely in your browser and never leave
-                your device. The landing atmosphere is a seasonal mood from
-                your local date — no location or weather services. Confidential
-                work is authenticated separately and never tracked. Optional
-                analytics (GA4) count page and feature use only after you allow
-                them. Optional feedback submissions are stored server-side for
-                180 days with an optional reply email — no other personal data.
+                your device. The landing atmosphere reflects the current
+                weather in Seattle (the designer's home base) via one
+                anonymous request to Open-Meteo — no location or data of yours
+                is involved; offline, it falls back to a seasonal mood.
+                Confidential work is authenticated separately and never
+                tracked. Optional analytics (GA4) count page and feature use
+                only after you allow them. Optional feedback submissions are
+                stored server-side for 180 days with an optional reply email —
+                no other personal data.
               </p>
               <p className="consent-copy">
                 The AI guide to Joel sends collaborate messages to the server,

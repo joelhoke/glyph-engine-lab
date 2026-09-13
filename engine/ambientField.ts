@@ -44,7 +44,6 @@ export const AMBIENT_DRAG_FORCE_SCALE = 0.9
 
 /** Line height the matrix streams space their rows on, in px. */
 export const MATRIX_LINE_HEIGHT = 17
-
 /** Base glyph width used for matrix column spacing, in px. */
 export const MATRIX_GLYPH_WIDTH = 8
 
@@ -54,6 +53,21 @@ export const MATRIX_GLYPH_WIDTH = 8
  * accumulates a persistent row at the viewport edge.
  */
 export const AMBIENT_WRAP_GUTTER = 24
+
+/**
+ * Vertical containment for non-precipitation weather agents. Each agent's
+ * velocity target includes a soft spring toward mid-field whose strength
+ * derives from the profile's drift spread: the strongest drifter equilibrates
+ * this fraction of the viewport height away from center, and the uniform
+ * per-agent speed draw becomes a uniform resting-altitude spread across the
+ * central band — instead of piling on an edge (no spring) or collapsing onto
+ * a line at mid-field (fixed spring).
+ */
+export const AMBIENT_VERTICAL_BAND_FRACTION = 0.45
+
+/** Floor for the derived centering spring (1/s), so zero-spread profiles
+ *  still mean-revert. */
+export const AMBIENT_VERTICAL_CENTERING_MIN = 0.008
 
 /**
  * Matrix displacement bounds: pointer/collision offsets may push a stream
@@ -95,8 +109,10 @@ export type WeatherProfile = {
   sizeMax: number
   /** Base hue for the preset's agents. */
   hue: number
-  /** Precipitation recycles to the top after passing the bottom edge instead
-   *  of bouncing; all other agents bounce off every edge. */
+  /** Precipitation falls on a constant downward target and recycles to the
+   *  top after passing the bottom edge; all other agents drift around a
+   *  zero vertical mean (see stepAmbientField) and bounce off every edge —
+   *  the bounce is a backstop for overshoot, never a resting state. */
   recycleBottom: boolean
   /** Storm-only lightning bookkeeping (flash timer + brightness decay). */
   lightning: boolean
@@ -179,15 +195,16 @@ export const WEATHER_PROFILES: Record<WeatherPreset, WeatherProfile> = {
     lightning: false,
   },
   // Fog: large, very low-alpha agents drifting slowly; the blur knob does the
-  // rest at render time.
+  // rest at render time. The sprite lightness is theme-aware (SceneCanvas) —
+  // darker in light mode so the haze reads against the pale gradient.
   fog: {
     fallSpeed: 6,
     fallSpread: 8,
     windScale: 14,
     turbulenceScale: 0.6,
     density: 0.4,
-    alphaMin: 0.05,
-    alphaMax: 0.16,
+    alphaMin: 0.06,
+    alphaMax: 0.18,
     sizeMin: 2.5,
     sizeMax: 5,
     hue: 220,
@@ -446,11 +463,13 @@ function applyPointerForces(
  * Edge handling: horizontal movement WRAPS through a small offscreen gutter
  * (AMBIENT_WRAP_GUTTER) — agents exiting one side re-enter just past the
  * other, so sustained wind distributes instead of piling up at an edge.
- * Vertical behavior is unchanged: the bottom edge recycles precipitation
- * profiles back to the top and bounces for everything else; the top edge
- * bounces. Matrix streams are viewport-bound by construction (positions
- * derive from wrapped column scrolls), so only their pointer-displacement
- * offsets are decayed (and clamped, below).
+ * Vertical behavior: the bottom edge recycles precipitation profiles back to
+ * the top and bounces for everything else; the top edge bounces. The bounce
+ * only absorbs overshoot — non-precipitation agents drift around a zero
+ * vertical mean, so they never rest on an edge. Matrix streams are
+ * viewport-bound by construction (positions derive from wrapped column
+ * scrolls), so only their pointer-displacement offsets are decayed (and
+ * clamped, below).
  */
 function applyBounds(field: AmbientField, i: number, width: number, height: number, recycleBottom: boolean) {
   const wrapWidth = width + AMBIENT_WRAP_GUTTER * 2
@@ -500,8 +519,31 @@ export function stepAmbientField(field: AmbientField, params: AmbientStepParams)
       }
       field.lightningFlash = Math.max(0, field.lightningFlash - dt * 3)
     }
+    const recycles = profile.recycleBottom
+    const midField = params.height / 2
+    // Non-precipitation vertical containment: the spring derives from the
+    // profile's drift spread so the strongest drifter equilibrates at the
+    // edge of the central band (AMBIENT_VERTICAL_BAND_FRACTION) — weaker
+    // drifters rest proportionally closer to mid-field, spreading the
+    // population across the band at any intensity (drift and spring both
+    // scale with intensityMul, so the band width is intensity-independent).
+    const maxDrift = (profile.fallSpread / 2) * intensityMul
+    const centering = Math.max(
+      AMBIENT_VERTICAL_CENTERING_MIN,
+      maxDrift / (AMBIENT_VERTICAL_BAND_FRACTION * params.height),
+    )
     for (let i = 0; i < field.count; i += 1) {
-      const targetVy = field.speed[i] * intensityMul
+      // Precipitation targets a constant downward fall and recycles at the
+      // bottom edge. Non-precipitation agents drift around a ZERO vertical
+      // mean — the per-agent speed draw re-centered on the profile mean, a
+      // phase-decorrelated turbulence wander, and the centering spring — so
+      // the population stays distributed and never settles on an edge (the
+      // bounce in applyBounds is a backstop, never a resting state).
+      const targetVy = recycles
+        ? field.speed[i] * intensityMul
+        : (field.speed[i] - (profile.fallSpeed + profile.fallSpread / 2)) * intensityMul +
+          Math.sin(params.time * 0.7 + field.phase[i] * 1.7) * turbAmp * 0.6 +
+          (midField - field.y[i]) * centering
       const targetVx =
         wind + Math.sin(params.time * 1.3 + field.phase[i]) * turbAmp
       field.vx[i] += (targetVx - field.vx[i]) * velBlend

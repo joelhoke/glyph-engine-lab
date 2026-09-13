@@ -3698,12 +3698,15 @@ function SceneCanvasInternal(
   // Prerendered fog disc: a radial-gradient sprite keyed by quantized
   // (hue, alpha, radius) buckets, drawn scaled to the agent's actual radius
   // (smoothing absorbs the small size difference). Bounded like the brush
-  // caches — cleared on overflow and on every ambient rebuild.
+  // caches — cleared on overflow and on every ambient rebuild. The lightness
+  // is theme-aware: light mode drops to a mid gray-blue so the haze reads
+  // against the pale landing gradient (88% lightness was invisible there).
   const getFogSprite = (hue: number, alpha: number, radius: number) => {
     const qHue = Math.round(hue / 6) * 6
     const qAlpha = Math.max(0.04, Math.round(alpha * 25) / 25)
     const qRadius = Math.max(16, Math.ceil(radius / 24) * 24)
-    const key = `${qHue}:${qAlpha.toFixed(2)}:${qRadius}`
+    const lightness = themeRef.current === 'light' ? 64 : 88
+    const key = `${qHue}:${qAlpha.toFixed(2)}:${qRadius}:${lightness}`
     const cache = fogSpriteCacheRef.current
     const cached = cache.get(key)
     if (cached) return cached
@@ -3714,8 +3717,8 @@ function SceneCanvasInternal(
     canvas.height = size
     const spriteCtx = canvas.getContext('2d')!
     const gradient = spriteCtx.createRadialGradient(qRadius, qRadius, 0, qRadius, qRadius, qRadius)
-    gradient.addColorStop(0, `hsla(${qHue}, 12%, 88%, ${qAlpha})`)
-    gradient.addColorStop(1, `hsla(${qHue}, 12%, 88%, 0)`)
+    gradient.addColorStop(0, `hsla(${qHue}, 12%, ${lightness}%, ${qAlpha})`)
+    gradient.addColorStop(1, `hsla(${qHue}, 12%, ${lightness}%, 0)`)
     spriteCtx.fillStyle = gradient
     spriteCtx.fillRect(0, 0, size, size)
     cache.set(key, canvas)

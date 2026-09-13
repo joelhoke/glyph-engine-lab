@@ -398,6 +398,12 @@ The full conversation loop runs locally against a mock model server:
 
 ### Privacy and data handling
 
+- The landing fetches **live Seattle weather** from Open-Meteo
+  (`engine/liveWeather.ts`): one client-side request per load (30-minute
+  session cache), fixed coordinates, no API key, no cookies, no credentials —
+  the request carries nothing about the visitor. On any failure the
+  Seattle-tuned seasonal mood (fully offline) applies instead. Weather data:
+  Open-Meteo, CC BY 4.0 (<https://open-meteo.com/>).
 - Conversations are **ephemeral by default**: held client-side, never sent to
   GA4, never written to logs. A transcript reaches the server only when the
   visitor explicitly shares it.

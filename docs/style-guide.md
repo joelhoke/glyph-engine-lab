@@ -238,8 +238,11 @@ without exclamation points.
   `↗` marker, internal flows `→`.
 - Numbers: en dashes for ranges (2025–2026), metrics stated plainly
   ("48+ Power BI dashboards").
-- Never describe the seasonal landing atmosphere as live or current
-  weather — it is a "seasonal mood".
+- The landing atmosphere reflects Seattle's current weather (Open-Meteo,
+  `engine/liveWeather.ts`) with a Seattle-tuned seasonal mood as the offline
+  fallback (`engine/seasonalAtmosphere.ts`). Copy may say the landing
+  reflects Seattle's weather; never claim hyperlocal or visitor-local
+  conditions.
 - Approved terms: "glyph field", "case study", "Make it yours" (CTA),
   "confidential case study" (not "secret"/"locked").
 - Alt text is required and meaningful; transcripts/captions ship with all
@@ -254,7 +257,7 @@ without exclamation points.
 - Semantic, visually-hidden content digests keep the site fully readable
   without the canvas; the branded fallback covers no-JS.
 - Reduced motion: static frames everywhere — canvas, ambient effects, Black
-  hole, seasonal atmosphere.
+  hole, landing atmosphere.
 
 ## 8. Maintenance
 

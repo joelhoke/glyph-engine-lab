@@ -6,8 +6,8 @@
  *
  * Weather and Matrix are mutually exclusive by construction: a single `mode`
  * selector decides which effect consumes the ambient budget (`off` consumes
- * none). Vibe defaults to Off; the config is capable of carrying the
- * landing/intro seasonal weather composition, which a later stage wires up.
+ * none). Vibe defaults to Off; the config also carries the landing's weather
+ * composition (live Seattle conditions or the seasonal fallback).
  *
  * Pure functions only — verified by scripts/verify-ambient-config.js.
  */
