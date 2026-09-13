@@ -348,7 +348,7 @@ const pieces = [
     motif: 'stripes',
   },
   {
-    // Mono base (story-03.svg source) — the only snow piece, and the first
+    // Mono base (JH-Logotype.svg source) — the only snow piece, and the first
     // parametric-creature composition. 18 edits: 1 text, 2 size 24→18,
     // 3 colorMode glyph-cycle→rows, 4-6 palette ×3, 7-8 background ×2,
     // 9 motion mode parametric-creature, 10 variant jelly, 11 amount,

@@ -164,7 +164,7 @@ export const VIBE_PRESETS: VibePreset[] = [
       glyphText: 'form follows feeling — ',
       glyphFont: "'Times New Roman', serif",
       glyphColorMode: 'glyph-cycle',
-      glyphSizePt: 24,
+      glyphSizePt: 12,
       motion: { ...MOTION_DEFAULTS },
       ambient: { ...AMBIENT_DEFAULTS },
       dark: {
@@ -178,7 +178,7 @@ export const VIBE_PRESETS: VibePreset[] = [
         glyphPalette: ['#111827', '#4B5563', '#000000'],
       },
     },
-    sourceUrl: '/assets/work/story-03.svg',
+    sourceUrl: '/assets/JH-Logotype.svg',
   },
 ]
 
