@@ -140,6 +140,10 @@ in plaintext.
 2. Click a card → **prototype viewer** (sandboxed iframe + chrome), breadcrumb back.
 3. v1 feedback affordance: mailto with prefilled subject per option (later phase).
 
+Single-prototype stacks skip the intermediate page: the gallery card and the
+unlock redirect both land directly on the viewer, and the viewer's back link
+returns to `/gallery`.
+
 The Gallery (`/gallery`) reuses the same stack/card components for `listed: true`
 stacks — one component family, two contexts.
 

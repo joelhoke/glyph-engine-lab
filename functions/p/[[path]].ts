@@ -1,6 +1,8 @@
 /**
- * GET /p/* — catch-all serving hosted-prototype bundle files from the
- * private PROTOTYPES_BUCKET R2 bucket (docs/prototypes-plan.md).
+ * GET|HEAD /p/* — catch-all serving hosted-prototype bundle files from the
+ * private PROTOTYPES_BUCKET R2 bucket (docs/prototypes-plan.md). HEAD runs
+ * the same logic and returns headers only (bundle apps probe their own
+ * routes with HEAD requests).
  *
  * Path layout: /p/<stack>/<slug>/<file…> maps to the R2 key
  * "<stack>/<slug>/<file…>"; the stack and viewer shells (/p/<stack>,
@@ -49,6 +51,7 @@ const PROTOTYPE_MIME_BY_EXTENSION = new Map([
   ['.js', 'text/javascript; charset=utf-8'],
   ['.mjs', 'text/javascript; charset=utf-8'],
   ['.json', 'application/json'],
+  ['.txt', 'text/x-component'],
   ['.webp', 'image/webp'],
   ['.png', 'image/png'],
   ['.jpg', 'image/jpeg'],
@@ -170,10 +173,16 @@ export const onRequestPost: PagesFunction<PrototypesEnv, 'path'> = async (contex
     secret,
     Date.now(),
   )
+  // A single-prototype stack has no stack page worth landing on — go
+  // straight to the viewer (the gallery card links there too).
+  const location =
+    stack.prototypes.length === 1
+      ? `/p/${stack.slug}/${stack.prototypes[0].slug}/`
+      : `/p/${stack.slug}/`
   return new Response(null, {
     status: 303,
     headers: buildProtectedHeaders({
-      Location: `/p/${stack.slug}/`,
+      Location: location,
       'Set-Cookie': cookie,
     }),
   })
@@ -283,4 +292,15 @@ export const onRequestGet: PagesFunction<PrototypesEnv, 'path'> = async (context
       'Content-Length': String(object.size),
     }),
   })
+}
+
+/**
+ * HEAD twin of the GET handler: bundle apps issue HEAD requests against
+ * their own routes (e.g. navigation warmups), and without a handler those
+ * fall through to the static export and 404 even with a valid cookie. Same
+ * auth and validation, headers only.
+ */
+export const onRequestHead: PagesFunction<PrototypesEnv, 'path'> = async (context) => {
+  const response = await onRequestGet(context)
+  return new Response(null, { status: response.status, headers: response.headers })
 }

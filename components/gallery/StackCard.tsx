@@ -6,12 +6,15 @@ import styles from './gallery.module.css'
  * Gallery index card for a listed stack (docs/prototypes-plan.md — one
  * component family, two contexts: /gallery and /p/<stack>). The thumbnail is
  * the first prototype's thumb, served through the Pages Function catch-all —
- * bundle assets never come from the static export.
+ * bundle assets never come from the static export. A single-prototype stack
+ * has no intermediate page worth visiting, so the card links straight to the
+ * viewer (gated stacks land on the password gate there instead).
  */
 export default function StackCard({ stack }: { stack: PrototypeStack }) {
   const lead = stack.prototypes[0]
+  const href = stack.prototypes.length === 1 && lead ? `/p/${stack.slug}/${lead.slug}` : `/p/${stack.slug}`
   return (
-    <Link href={`/p/${stack.slug}`} className={styles.card}>
+    <Link href={href} className={styles.card}>
       {lead ? (
         <img
           className={styles.cardThumb}

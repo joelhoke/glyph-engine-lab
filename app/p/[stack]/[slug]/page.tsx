@@ -41,12 +41,13 @@ export default function ViewerPage({ params }: ViewerPageProps) {
   const prototype = findPrototype(stack, params.slug)
   if (!prototype) notFound()
 
+  const solo = stack.prototypes.length === 1 && stack.listed
   return (
     <HostedPrototypeViewer
       title={`${prototype.title} — interactive prototype`}
       src={`/p/${stack.slug}/${prototype.slug}/index.html`}
-      backHref={`/p/${stack.slug}`}
-      backLabel="Back to options"
+      backHref={solo ? '/gallery' : `/p/${stack.slug}`}
+      backLabel={solo ? 'Back to gallery' : 'Back to options'}
     />
   )
 }
