@@ -21,6 +21,11 @@ export const HOME_SECTIONS = ['work', 'vibe', 'gallery', 'collaborate', 'about']
 export type HomeSectionId = (typeof HOME_SECTIONS)[number]
 export type HeroSlotId = Exclude<HomeSectionId, 'about'> | 'intro'
 
+export const HOME_NOTEBOOK_PAGE = {
+  src: '/assets/home/notebook-introduction.webp',
+  alt: 'Pink, purple, and blue watercolor with handwritten text: Hi, I’m Joel. Thanks for stopping by!',
+}
+
 export type HomeImage = {
   src: string
   alt: string
@@ -131,8 +136,8 @@ export const HOME_CONTENT: HomeContent = {
     { text: 'Designing thoughtful experiences where people, business, and technology meet.' },
     { text: 'Seven years at Microsoft,', tone: 'accent' },
     { text: 'from employee experience to agentic operations tools.' },
-    { text: 'Now in Seattle,', tone: 'warm' },
-    { text: 'looking for the next interesting problem.' },
+    { text: 'Looking for the next' },
+    { text: 'interesting problem.', tone: 'accent' },
   ],
   // Five hero slots in fan order (left to right): Work, Vibe, Introduction,
   // Collaborate, Gallery. The object destinations render the
@@ -211,11 +216,11 @@ export const HOME_CONTENT: HomeContent = {
     },
     work: {
       heading: 'Work',
-      lede: 'Making complex systems feel human.',
+      lede: 'From a complex problem to a product people rely on.',
       introduction:
-        'Three case studies from seven years at Microsoft — campus operations, employee experience, and global compensation. Senior Product Designer, 2019–2026.',
+        'I spent seven years at Microsoft designing AI-powered tools and employee experiences that make complex work easier. Along the way, my work contributed to Microsoft’s 2026 Digie Award win, and I placed third in its 2022 Global Hackathon.',
       features: workFeatures,
-      action: { label: 'Explore all work', href: '/#work' },
+      action: { label: 'See how I work', href: '/#work' },
     },
     vibe: {
       heading: 'Vibe',

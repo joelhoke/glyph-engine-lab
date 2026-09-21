@@ -3,15 +3,14 @@
 import { useState } from 'react'
 import { useReducedMotion } from './HeroObject'
 import { HeroNotebookModel } from './renderers/HeroThreeObject'
+import { HOME_NOTEBOOK_PAGE } from '../../content/home'
 
 type HomeNotebookProps = {
   /** Cover labeling ("Joel Hoke" / role line) — used by the CSS fallback
    *  cover when the notebook model can't load. */
   coverTitle: string
   coverBody?: string
-  /** The introduction text (content/home.ts). In model mode it's baked onto
-   *  the 3D page texture and kept in the DOM as a visually-hidden copy; in
-   *  the CSS fallback it's the revealed page. */
+  /** Accessible introduction copy; also the texture fallback if the artwork fails. */
   blurb: string
   /** Hero onscreen and not menu-covered (parallaxEnabled from HomeHero):
    *  parks the model's animation while false. */
@@ -28,7 +27,7 @@ type HomeNotebookProps = {
  * itself opens: the GLTF base plus a composed kraft cover hinged around the
  * spiral edge (components/home/renderers/HeroThreeObject.tsx — the GLTF is a
  * single merged mesh, so the cover is procedural), revealing the
- * introduction baked onto the page. Hover (fine pointer), keyboard focus,
+ * watercolor welcome page. Hover (fine pointer), keyboard focus,
  * or tap (toggle) opens it; reduced motion snaps instantly. The blurb stays
  * in the DOM for assistive tech regardless. Opening never shifts layout;
  * only the notebook's own box takes pointer events. A model failure falls
@@ -78,20 +77,19 @@ export default function HomeNotebook({
           rotationOverride={rotationOverride}
           onUnavailable={() => setModelFailed(true)}
         />
-        {/* The blurb's visual form is the 3D page texture; this copy keeps it
-            in the DOM for assistive tech and text selection. */}
-        <span className="visually-hidden">{blurb}</span>
+        <span className="visually-hidden">{HOME_NOTEBOOK_PAGE.alt} {blurb}</span>
       </div>
     )
   }
 
   // CSS-3D fallback stage (model unavailable): the labeled cover hinges open
-  // over the blurb page — same interaction contract.
+  // over the watercolor page — same interaction contract.
   return (
     <div className={`home-hero-notebook${open ? ' is-open' : ''}`} {...sharedProps}>
       <div className="home-hero-notebook-inner">
         <div className="home-hero-notebook-page">
-          <p className="home-hero-notebook-blurb">{blurb}</p>
+          <img className="home-hero-notebook-art" src={HOME_NOTEBOOK_PAGE.src} alt={HOME_NOTEBOOK_PAGE.alt} />
+          <span className="visually-hidden">{blurb}</span>
         </div>
         <div className="home-hero-notebook-cover" aria-hidden="true">
           <span className="home-hero-notebook-cover-title">{coverTitle}</span>

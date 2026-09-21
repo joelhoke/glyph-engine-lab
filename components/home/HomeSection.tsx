@@ -4,7 +4,8 @@ import { GLOBAL_OPERATIONS_REEL_POSTER } from '../../content/workMedia'
 
 import { useEffect, useRef, useState } from 'react'
 import type { HomeSectionContent, HomeSectionId } from '../../content/home'
-import { COLLABORATE_AI_GUIDE, COLLABORATE_CONTACT } from '../../content/collaborate'
+import { COLLABORATE_AI_GUIDE, COLLABORATE_CONTACT, COLLABORATE_SHOW_STARTERS, CONVERSATION_STARTERS } from '../../content/collaborate'
+import { isGuideLimitReached } from '../collaborate/guideConversation'
 import { HeroThreeObject } from './renderers/HeroThreeObject'
 import type { ScreenContent, ScreenPlaybackControls, ScreenPlaybackState } from './renderers/screenContent'
 import { useReducedMotion } from './HeroObject'
@@ -37,9 +38,12 @@ export default function HomeSection({ id, section, enabled, galleryProjects, gui
   const reducedMotion = useReducedMotion()
   const onPhoneKey = usePhoneKeypad(guide)
   const [unavailable, setUnavailable] = useState(false)
+  const [iphoneUnavailable, setIphoneUnavailable] = useState(false)
   const [reelPaused, setReelPaused] = useState(false)
   const [reelState, setReelState] = useState<ScreenPlaybackState>('loading')
   const reelControls = useRef<ScreenPlaybackControls | null>(null)
+  const phoneRef = useRef<HTMLDivElement>(null)
+  const startersDisabled = !guide.state || guide.state.status === 'pending' || isGuideLimitReached(guide.state)
   const toggleReel = () => {
     const pause = reelState === 'playing'
     if (pause) reelControls.current?.pause()
@@ -80,6 +84,11 @@ export default function HomeSection({ id, section, enabled, galleryProjects, gui
           {near && !unavailable && <button type="button" className="home-work-playback-target"
             onClick={toggleReel}
             aria-label={reelState === 'playing' ? 'Pause highlight reel' : 'Play highlight reel'} />}
+          <div className="home-work-iphone" role="img" aria-label="Employee experience dashboard on an iPhone">
+            {near && !iphoneUnavailable
+              ? <HeroThreeObject {...modelProps} variant="iphone" onUnavailable={() => setIphoneUnavailable(true)} />
+              : <img src="/assets/work/employee-experience-dashboard.webp" alt="" loading="lazy" width={744} height={1624} />}
+          </div>
         </div>
         <figcaption className="home-object-caption">
           <span>Microsoft Global Operations · RealComm highlights</span>
@@ -91,6 +100,7 @@ export default function HomeSection({ id, section, enabled, galleryProjects, gui
         {heading}
         <p className="home-section-lede">{section.lede}</p>
         <p className="home-section-intro">{section.introduction}</p>
+        {section.paragraphs?.map(paragraph => <p key={paragraph} className="home-section-intro">{paragraph}</p>)}
         {action}
       </div>
     </div>}
@@ -126,9 +136,17 @@ export default function HomeSection({ id, section, enabled, galleryProjects, gui
         <p className="home-section-intro">{COLLABORATE_AI_GUIDE
           ? 'Ask about my work, how I think, or where I could help. Start right here on the phone, or give the conversation a little more room.'
           : section.introduction}</p>
+        {COLLABORATE_AI_GUIDE && COLLABORATE_SHOW_STARTERS && <div className="home-conversation-starters" role="group" aria-label="Start a conversation on the phone">
+          {CONVERSATION_STARTERS.map(starter => <button key={starter.id} type="button"
+            className="home-section-action" disabled={startersDisabled} aria-controls="home-collaborate-phone"
+            onClick={() => {
+              guide.onStartStarter(starter.id)
+              if (mobile) phoneRef.current?.scrollIntoView({ behavior: reducedMotion ? 'instant' : 'smooth', block: 'start' })
+            }}>{starter.label}</button>)}
+        </div>}
         <a className="home-direct-contact" href={COLLABORATE_CONTACT.mailtoUrl}>Or say hello to me directly</a>
       </div>
-      <div className="home-collaborate-phone">
+      <div id="home-collaborate-phone" ref={phoneRef} className="home-collaborate-phone">
         {near && !unavailable ? <HeroThreeObject {...modelProps} variant="collaborate" rotationOverride={PHONE_SECTION_POSES[mobile ? 'mobile' : 'desktop']}
           screenOverlay={COLLABORATE_AI_GUIDE ? <HomePhoneChat guide={guide} /> : undefined}
           onPhoneKey={COLLABORATE_AI_GUIDE ? onPhoneKey : undefined} /> :

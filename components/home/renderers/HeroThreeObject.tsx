@@ -16,6 +16,7 @@ import { createPhoneHinge } from './phoneHinge'
 import { phoneModelRegionAtUv, type PhoneModelKey, type PhoneModelKeyRegion } from './phoneModelKeys'
 import { createPhoneKeyFeedback, type PhoneKeyFeedback } from './phoneKeyFeedback'
 import { crtPower } from './crtPower'
+import { HOME_NOTEBOOK_PAGE } from '../../../content/home'
 
 /**
  * Hero slot objects (homepage-redesign): one builder per section — a future
@@ -55,7 +56,7 @@ import { crtPower } from './crtPower'
  *   placeholder).
  */
 
-export type HeroThreeVariant = 'work' | 'vibe' | 'gallery' | 'collaborate' | 'notebook'
+export type HeroThreeVariant = 'work' | 'vibe' | 'gallery' | 'collaborate' | 'notebook' | 'iphone'
 
 export type HeroThreeRendererProps = {
   active: boolean
@@ -100,6 +101,7 @@ export const HERO_THREE_BASE_ROTATIONS: Record<HeroThreeVariant, { x: number; y:
   collaborate: { x: 0.471, y: 0.035 },
   gallery: { x: -0.017, y: -1.047 },
   notebook: { x: 0.227, y: 0.052 },
+  iphone: { x: 0.07, y: -0.18 },
 }
 
 type ReadToken = (name: string) => string
@@ -470,9 +472,10 @@ function createNotebookCoverTexture(THREE: ThreeModules['THREE']) {
   return { texture, paint, dispose: () => texture.dispose() }
 }
 
-/** Notebook page texture: the introduction text in Departure Mono on a
- *  warm off-white page — baked once (static, so parking discipline holds). */
-function createNotebookPageTexture(THREE: ThreeModules['THREE'], text: string) {
+/** Authored watercolor page, cropped to the actual paper proportions.
+ *  Await loading so the first parked/reduced-motion frame includes the art.
+ *  Keep the introduction text as a fallback if the image cannot load. */
+async function createNotebookPageTexture(THREE: ThreeModules['THREE'], text: string, aspect: number) {
   const canvas = document.createElement('canvas')
   canvas.width = 512
   canvas.height = 700
@@ -498,7 +501,26 @@ function createNotebookPageTexture(THREE: ThreeModules['THREE'], text: string) {
     }
     if (line) ctx.fillText(line, 46, y)
   }
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image()
+      image.onload = () => resolve(image)
+      image.onerror = reject
+      image.src = HOME_NOTEBOOK_PAGE.src
+    })
+    if (ctx) {
+      canvas.width = 1024
+      canvas.height = Math.round(canvas.width / aspect)
+      const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight)
+      const width = image.naturalWidth * scale
+      const height = image.naturalHeight * scale
+      ctx.drawImage(image, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height)
+    }
+  } catch {
+    // The authored blurb above still makes a useful page when offline.
+  }
   const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
   return { texture, dispose: () => texture.dispose() }
 }
 
@@ -508,7 +530,7 @@ const NOTEBOOK_OPEN_RAD = 2.6
 /** Intro slot: the Notebook GLTF is a single merged mesh (no separable
  *  cover), so the opening is COMPOSED: the GLTF stays the base, a
  *  procedural blue cover hinges around the spiral edge (the left long
- *  edge, +y axis at min x), and the introduction text is baked onto a page
+ *  edge, +y axis at min x), and the watercolor introduction fills a page
  *  plane just proud of the model's top face — revealed when the cover
  *  swings open. */
 async function buildNotebookIntro(
@@ -518,27 +540,29 @@ async function buildNotebookIntro(
   const { THREE, RoundedBoxGeometry } = mods
   const model = await loadGltfModel(mods, `${MODELS_BASE}/notebook/scene.gltf`)
   const wrapper = normalizeModel(THREE, model.object, 1.55)
+  const notebook = new THREE.Group()
+  notebook.add(wrapper)
   const tint = createBlueFinish(THREE, model.object, { roughness: 0.65, metalness: 0.08 })
-  // Single merged mesh with no node transforms — accessor space is model
-  // space. The notebook lies in x/y (thin axis z, face toward +z), spiral
-  // binding along the left edge (min x, running +y).
-  const bbox = new THREE.Box3().setFromObject(model.object)
+  // Keep decorations in normalized parent space. The imported scene has
+  // nested transforms; attaching world-space geometry inside it applies
+  // them twice, letting the original cover poke through the new one.
+  const bbox = new THREE.Box3().setFromObject(wrapper)
   const size = bbox.getSize(new THREE.Vector3())
   const center = bbox.getCenter(new THREE.Vector3())
   const disposables: Array<{ dispose: () => void }> = []
 
-  const pageTexture = createNotebookPageTexture(THREE, options?.blurb ?? '')
-  const coverTexture = createNotebookCoverTexture(THREE)
-  disposables.push(pageTexture, coverTexture)
   const coverW = size.x * 0.96
   const coverH = size.y * 0.97
-  const pageGeometry = new THREE.PlaneGeometry(coverW, coverH)
+  const pageTexture = await createNotebookPageTexture(THREE, options?.blurb ?? '', coverW / coverH)
+  const coverTexture = createNotebookCoverTexture(THREE)
+  disposables.push(pageTexture, coverTexture)
+  const pageGeometry = new THREE.PlaneGeometry(coverW * 0.98, coverH * 0.98)
   const pageMaterial = new THREE.MeshBasicMaterial({ map: pageTexture.texture, toneMapped: false })
   const page = new THREE.Mesh(pageGeometry, pageMaterial)
   page.position.set(center.x, center.y, bbox.max.z + size.z * 0.04)
   disposables.push(pageGeometry, pageMaterial)
   const hinge = new THREE.Group()
-  hinge.position.set(bbox.min.x + size.x * 0.03, center.y, bbox.max.z + size.z * 0.12)
+  hinge.position.set(center.x - coverW / 2, center.y, bbox.max.z + size.z * 0.16)
   const coverGeometry = new RoundedBoxGeometry(coverW, coverH, size.z * 0.12, 2, size.z * 0.05)
   const coverMaterial = new THREE.MeshStandardMaterial({
     map: coverTexture.texture,
@@ -549,13 +573,14 @@ async function buildNotebookIntro(
   cover.position.set(coverW / 2, 0, 0)
   hinge.add(cover)
   disposables.push(coverGeometry, coverMaterial)
-  model.object.add(page, hinge)
+  notebook.add(page, hinge)
 
   return {
-    object: wrapper,
+    object: notebook,
     baseRotation: HERO_THREE_BASE_ROTATIONS.notebook,
     setOpen: (amount) => {
       hinge.rotation.y = -amount * NOTEBOOK_OPEN_RAD
+      page.visible = amount > 0.01
     },
     applyTheme: (readToken) => {
       tint(readToken('--color-hero-blue-light'))
@@ -565,6 +590,55 @@ async function buildNotebookIntro(
       disposables.forEach((d) => d.dispose())
       model.dispose()
     },
+  }
+}
+
+/** Work's secondary object; use the actual rounded screen mesh for the art. */
+async function buildWorkIphone(mods: ThreeModules): Promise<BuiltObject> {
+  const { THREE } = mods
+  const model = await loadGltfModel(mods, `${MODELS_BASE}/iphone/scene.gltf`)
+  let texture: import('three').Texture
+  try {
+    texture = await new THREE.TextureLoader().loadAsync('/assets/work/employee-experience-dashboard.webp')
+  } catch (error) {
+    model.dispose()
+    throw error
+  }
+  texture.colorSpace = THREE.SRGBColorSpace
+  const frameMaterials = new Set<import('three').MeshStandardMaterial>()
+  model.object.traverse(node => {
+    if (!(node instanceof THREE.Mesh)) return
+    const materials = Array.isArray(node.material) ? node.material : [node.material]
+    for (const material of materials) {
+      if (material instanceof THREE.MeshStandardMaterial && /^COLOUR_Black_(Side_Panel|Side_Button)/.test(material.name)) frameMaterials.add(material)
+    }
+    if (!materials.some(material => material.name === 'COLOUR_Black_Screen')) return
+    const geometry = node.geometry
+    geometry.computeBoundingBox()
+    const box = geometry.boundingBox!
+    const positions = geometry.attributes.position
+    const uv = geometry.attributes.uv
+    for (let i = 0; i < positions.count; i++) {
+      uv.setXY(i, (positions.getX(i) - box.min.x) / (box.max.x - box.min.x),
+        (positions.getY(i) - box.min.y) / (box.max.y - box.min.y))
+    }
+    uv.needsUpdate = true
+    materials.forEach(material => {
+      for (const value of Object.values(material)) if (value instanceof THREE.Texture) value.dispose()
+      material.dispose()
+    })
+    node.material = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })
+  })
+  return {
+    object: normalizeModel(THREE, model.object, 2.15),
+    baseRotation: HERO_THREE_BASE_ROTATIONS.iphone,
+    applyTheme: readToken => frameMaterials.forEach(material => {
+      material.color.set(readToken('--color-hero-blue-mid'))
+      material.roughness = 0.42
+      material.metalness = 0.35
+    }),
+    dispose: model.dispose,
   }
 }
 
@@ -609,6 +683,7 @@ const BUILDERS: Record<
   collaborate: buildPhoneCollaborate,
   gallery: buildFrameGallery,
   notebook: buildNotebookIntro,
+  iphone: buildWorkIphone,
 }
 
 export function HeroThreeObject({
@@ -885,8 +960,13 @@ export function HeroThreeObject({
         hostWidth = width
         hostHeight = height
         renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
-        renderer.setSize(width, height, false)
+        // Expand the drawing area around the original viewport. The camera
+        // and pixel scale stay unchanged, while the CRT can tilt past its
+        // former canvas edges without being cut off.
+        const bleed = presentation === 'section' && variant === 'work' ? 0.2 : 0
+        renderer.setSize(width * (1 + bleed * 2), height * (1 + bleed * 2), false)
         camera.aspect = width / height
+        if (bleed) camera.setViewOffset(width, height, -width * bleed, -height * bleed, width * (1 + bleed * 2), height * (1 + bleed * 2))
         camera.updateProjectionMatrix()
         renderOnceRef.current()
       }

@@ -3411,6 +3411,14 @@ export default function PortfolioExperience({ galleryProjects = [] }: { galleryP
                   getState: () => guideStateRef.current,
                   inline: guidePresentation === 'page',
                   onSend: (message) => sendGuideMessage(message, undefined, true),
+                  onStartStarter: (starterId) => {
+                    const starter = getCollaborateStarter(starterId)
+                    if (!starter) return
+                    setGuidePresentation('page')
+                    setGuideOverlayOpen(false)
+                    setGuideUnseenAnswer(false)
+                    sendGuideMessage(starter.prompt, starter.id, true)
+                  },
                   onRetry: () => {
                     const last = guideStateRef.current?.lastAttempt
                     if (last) sendGuideMessage(last, undefined, true)

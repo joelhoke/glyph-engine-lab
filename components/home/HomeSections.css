@@ -36,15 +36,23 @@
 .home-work-stage {
   position: relative;
   aspect-ratio: 1.2;
-  /* Keep the WebGL surface's paint local while the document scrolls. */
+  /* The larger canvas preserves the original CRT scale without cropping. */
   isolation: isolate;
-  contain: paint;
+  overflow: visible;
 }
+.home-work-stage > .home-section-three > canvas {
+  inset: -20%; width: 140%; height: 140%;
+}
+.home-work-iphone {
+  position: absolute; z-index: 2; right: -3%; bottom: -2%;
+  width: 32%; height: 72%; pointer-events: none;
+}
+.home-work-iphone > img { display: block; width: 80%; height: 90%; margin: 5% auto; object-fit: contain; border-radius: 1rem; }
 /* The computer is the control: one native keyboard/touch target covers its
    screen and body without adding visible player chrome. */
 .home-work-playback-target {
-  position: absolute; inset: 0; z-index: 1;
-  width: 100%; height: 100%; padding: 0; border: 0;
+  position: absolute; inset: -20%; z-index: 1;
+  width: 140%; height: 140%; padding: 0; border: 0;
   background: transparent; color: inherit; border-radius: 8px;
 }
 .home-section .home-work-playback-target:focus-visible { outline-offset: -5px; }
@@ -56,6 +64,7 @@
 }
 .home-work-poster { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
 .home-object-caption {
+  position: relative; z-index: 2; margin-top: 1.5rem;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -183,6 +192,9 @@
   align-items: center; gap: 1.5rem;
 }
 .home-direct-contact { display: inline-block; margin-top: 1.5rem; color: var(--color-text-muted); font-size: 0.75rem; text-underline-offset: 4px; }
+.home-conversation-starters { display: flex; flex-direction: column; align-items: flex-start; gap: 0.75rem; margin-top: 1.75rem; }
+.home-section .home-conversation-starters .home-section-action { margin-top: 0; max-width: 100%; text-align: left; font-size: 0.82rem; line-height: 1.5; }
+.home-collaborate-phone { scroll-margin-top: 5rem; }
 .home-collaborate-phone { height: 900px; min-width: 0; position: relative; }
 .home-phone-screen {
   position: absolute; left: 0; top: 0; width: 240px; height: 320px;

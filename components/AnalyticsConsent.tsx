@@ -407,7 +407,7 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
               className="privacy-tabpanel"
             >
               <p className="consent-copy">
-                The homepage hero uses these CC-BY-4.0 3D models — thanks to
+                The homepage uses these licensed 3D models — thanks to
                 their authors for sharing them.
               </p>
               <ul className="credits-list">
@@ -422,7 +422,7 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
                     </a>{' '}
                     ·{' '}
                     <a href={credit.licenseUrl} target="_blank" rel="noopener noreferrer">
-                      CC-BY-4.0
+                      {credit.licenseLabel ?? 'CC-BY-4.0'}
                     </a>{' '}
                     · {credit.usedFor}
                     <div className="credits-modifications">Adapted for this site: {credit.modifications}</div>

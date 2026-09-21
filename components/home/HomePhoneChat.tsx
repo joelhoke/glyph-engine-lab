@@ -12,6 +12,7 @@ export type HomeGuideBridge = {
   getState: () => GuideConversationState | null
   inline: boolean
   onSend: (message: string) => void
+  onStartStarter: (starterId: string) => void
   onRetry: () => void
   onDraftChange: (draft: string) => void
   onExpand: () => void

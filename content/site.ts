@@ -37,6 +37,7 @@ export type ModelCredit = {
   authorUrl: string
   sourceUrl: string
   licenseUrl: string
+  licenseLabel?: string
   /** Where the model appears on the site. */
   usedFor: string
   /** Identify our adaptations alongside the original author attribution. */
@@ -44,11 +45,21 @@ export type ModelCredit = {
 }
 
 /**
- * CC-BY-4.0 3D models used in the homepage hero (public/assets/home/models/;
+ * Licensed 3D models used on the homepage (public/assets/home/models/;
  * each folder keeps its Sketchfab license.txt). Rendered in the Privacy and
  * feedback panel's Credits tab — the license requires naming the author.
  */
 export const MODEL_CREDITS: ModelCredit[] = [
+  {
+    title: 'Apple iPhone 18 Pro Max Black 2026',
+    author: 'extraakash',
+    authorUrl: 'https://sketchfab.com/AakashMansukhani',
+    sourceUrl: 'https://sketchfab.com/3d-models/apple-iphone-18-pro-max-black-2026-8fd804a9b0ea49249de3f1e0450fbc9c',
+    licenseUrl: 'https://sketchfab.com/licenses',
+    licenseLabel: 'Sketchfab Standard',
+    usedFor: 'Work',
+    modifications: 'Blue frame accents, cursor-reactive orientation, and a supplied employee experience dashboard mapped to the original screen geometry.',
+  },
   {
     title: 'CRT Computer Monitor',
     author: 'Dan (fizyman)',
@@ -97,6 +108,6 @@ export const MODEL_CREDITS: ModelCredit[] = [
       'https://sketchfab.com/3d-models/notebook-material-e573304fce364cf299027494fc1afede',
     licenseUrl: 'http://creativecommons.org/licenses/by/4.0/',
     usedFor: 'Introduction',
-    modifications: 'Recolored with an added opening cover and custom page.',
+    modifications: 'Recolored with an added opening cover and a watercolor welcome page supplied by Joel Hoke.',
   },
 ]
