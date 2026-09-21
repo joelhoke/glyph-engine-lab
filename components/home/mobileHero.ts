@@ -49,6 +49,56 @@ export function mobileSwipeStep(dx: number, dy: number): -1 | 0 | 1 {
   return dx < 0 ? 1 : -1
 }
 
+/** Track the original finger across object links. A non-passive touchmove
+ * keeps horizontal gestures ours even when Safari cancels pointer events;
+ * vertical scrolling and multi-finger zoom remain native. */
+export function bindMobileHeroTouch(
+  hero: HTMLElement,
+  callbacks: { start: () => void; drag: () => void; end: (direction: -1 | 0 | 1) => void },
+) {
+  let start: { id: number; x: number; y: number } | null = null
+  const cancel = () => {
+    if (!start) return
+    start = null
+    callbacks.drag()
+    callbacks.end(0)
+  }
+  const down = (event: TouchEvent) => {
+    if (event.touches.length !== 1) { cancel(); return }
+    const point = event.touches[0]
+    start = { id: point.identifier, x: point.clientX, y: point.clientY }
+    callbacks.start()
+  }
+  const move = (event: TouchEvent) => {
+    if (event.touches.length !== 1) { cancel(); return }
+    if (!start) return
+    const point = Array.from(event.touches).find(touch => touch.identifier === start!.id)
+    if (!point) return
+    const dx = point.clientX - start.x, dy = point.clientY - start.y
+    if (Math.hypot(dx, dy) > 10) callbacks.drag()
+    if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.25 && event.cancelable) event.preventDefault()
+  }
+  const up = (event: TouchEvent) => {
+    if (!start) return
+    const point = Array.from(event.changedTouches).find(touch => touch.identifier === start!.id)
+    if (!point) return
+    const direction = mobileSwipeStep(point.clientX - start.x, point.clientY - start.y)
+    start = null
+    if (direction) callbacks.drag()
+    callbacks.end(direction)
+  }
+  hero.addEventListener('touchstart', down, { passive: true })
+  hero.addEventListener('touchmove', move, { passive: false })
+  hero.addEventListener('touchend', up)
+  hero.addEventListener('touchcancel', cancel)
+  return () => {
+    hero.removeEventListener('touchstart', down)
+    hero.removeEventListener('touchmove', move)
+    hero.removeEventListener('touchend', up)
+    hero.removeEventListener('touchcancel', cancel)
+  }
+}
+
 export function nextMobileSlot(current: HeroSlotId | null, step: number): HeroSlotId {
   const index = current === null ? 2 : DOCK_SLOTS.indexOf(current)
   return DOCK_SLOTS[(index + step + DOCK_SLOTS.length) % DOCK_SLOTS.length]

@@ -946,6 +946,8 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
     /* Leave a peek at the introduction below the hero on landing. Content
        can still grow naturally on short screens or with enlarged text. */
     min-height: calc(100svh - 7rem);
+    pointer-events: auto;
+    touch-action: pan-y pinch-zoom;
     padding: calc(5.5rem + env(safe-area-inset-top, 0px)) 0 calc(1rem + env(safe-area-inset-bottom, 0px));
     gap: 0;
     overflow: clip;

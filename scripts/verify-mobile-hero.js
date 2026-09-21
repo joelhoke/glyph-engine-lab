@@ -11,11 +11,56 @@ try {
     '--outDir', out, '--module', 'commonjs', '--target', 'es2020', '--jsx', 'react-jsx',
     '--esModuleInterop', '--skipLibCheck',
   ], { cwd: root, stdio: 'inherit' })
-  const { mobileSwipeStep, nextMobileSlot, mobileDockWeights, mobileDockScale, mobileDockSpacing, mobileCompositionScale, mobileSlotAction, createMobileCarouselClock, MOBILE_INITIAL_SLOT } = require(path.join(out, 'components/home/mobileHero.js'))
+  const { bindMobileHeroTouch, mobileSwipeStep, nextMobileSlot, mobileDockWeights, mobileDockScale, mobileDockSpacing, mobileCompositionScale, mobileSlotAction, createMobileCarouselClock, MOBILE_INITIAL_SLOT } = require(path.join(out, 'components/home/mobileHero.js'))
   const { HOME_CONTENT, HOME_SECTIONS } = require(path.join(out, 'content/home.js'))
   const { parseHomeSection, destinationHref, collaborateHomeRedirect } = require(path.join(out, 'engine/homeNavigation.js'))
   assert.equal(mobileSwipeStep(-60, 4), 1)
   assert.equal(mobileSwipeStep(60, 4), -1)
+  // Touch tracking must survive pointercancel, which mobile browsers can
+  // emit mid-gesture over native links. Only touchcancel abandons a swipe.
+  const surface = new EventTarget()
+  let touchStarts = 0, touchDragged = false
+  const touchEnds = []
+  const unbindTouch = bindMobileHeroTouch(surface, {
+    start: () => { touchStarts++; touchDragged = false },
+    drag: () => { touchDragged = true },
+    end: direction => touchEnds.push(direction),
+  })
+  const finger = (x, y, identifier = 1) => ({ clientX: x, clientY: y, identifier })
+  const touch = (type, points) => {
+    const event = new Event(type, { cancelable: true })
+    Object.assign(event, { touches: type === 'touchend' ? [] : points, changedTouches: points })
+    surface.dispatchEvent(event)
+    return event
+  }
+  touch('touchstart', [finger(150, 100)])
+  assert(touch('touchmove', [finger(100, 104)]).defaultPrevented)
+  surface.dispatchEvent(new Event('pointercancel'))
+  touch('touchend', [finger(80, 104)])
+  assert.deepEqual(touchEnds, [1], 'horizontal touch advances once despite pointer cancellation')
+  assert(touchDragged, 'the following click must be suppressed')
+  touch('touchstart', [finger(80, 100)])
+  touch('touchend', [finger(150, 104)])
+  assert.equal(touchEnds.at(-1), -1)
+  touch('touchstart', [finger(80, 100)])
+  assert(!touch('touchmove', [finger(82, 170)]).defaultPrevented, 'vertical page scrolling stays native')
+  touch('touchend', [finger(82, 180)])
+  assert.equal(touchEnds.at(-1), 0)
+  touch('touchstart', [finger(80, 100)])
+  touch('touchend', [finger(81, 101)])
+  assert(!touchDragged, 'a tap can still activate its object or label')
+  touch('touchstart', [finger(80, 100)])
+  assert(!touch('touchmove', [finger(90, 100), finger(150, 100, 2)]).defaultPrevented, 'pinch zoom stays native')
+  const endCount = touchEnds.length
+  touch('touchend', [finger(200, 100)])
+  assert.equal(touchEnds.length, endCount, 'pinch cannot become a swipe')
+  touch('touchstart', [finger(80, 100)])
+  surface.dispatchEvent(new Event('touchcancel'))
+  assert.equal(touchEnds.at(-1), 0)
+  const startCount = touchStarts
+  unbindTouch()
+  touch('touchstart', [finger(80, 100)])
+  assert.equal(touchStarts, startCount, 'unmount removes the native listeners')
   for (const [x, y] of [[4, 4], [27, 1], [8, 90], [50, 70], [-50, -70]]) {
     assert.equal(mobileSwipeStep(x, y), 0, 'short, vertical and diagonal gestures must not advance')
   }

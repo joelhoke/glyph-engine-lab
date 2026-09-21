@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PointerEvent, MouseEvent, KeyboardEvent } from 'react'
 import type { HeroSlotId } from '../../content/home'
-import { createMobileCarouselClock, MOBILE_INITIAL_SLOT, mobileCompositionScale, mobileSlotAction, mobileSwipeStep, nextMobileSlot } from './mobileHero'
+import { bindMobileHeroTouch, createMobileCarouselClock, MOBILE_INITIAL_SLOT, mobileCompositionScale, mobileSlotAction, mobileSwipeStep, nextMobileSlot } from './mobileHero'
 
 export function useMobileHero(hero: HTMLElement | null, active: boolean) {
   const [mobile, setMobile] = useState(false)
@@ -15,6 +15,18 @@ export function useMobileHero(hero: HTMLElement | null, active: boolean) {
   const [manualRevision, setManualRevision] = useState(0)
   const gesture = useRef<{ id: number; x: number; y: number } | null>(null)
   const dragged = useRef(false)
+  useEffect(() => {
+    if (!hero || !mobile) return
+    return bindMobileHeroTouch(hero, {
+      start: () => { dragged.current = false; setTouching(true) },
+      drag: () => { dragged.current = true },
+      end: direction => {
+        if (direction) setSelected(current => nextMobileSlot(current, direction))
+        setManualRevision(value => value + 1)
+        setTouching(false)
+      },
+    })
+  }, [hero, mobile])
   useEffect(() => {
     if (!hero) return
     const media = matchMedia('(max-width: 767px)')
@@ -97,13 +109,13 @@ export function useMobileHero(hero: HTMLElement | null, active: boolean) {
       return true
     },
     gestureProps: {
-      onPointerDown: (event: PointerEvent<HTMLDivElement>) => {
-        if (!mobile || !event.isPrimary || event.button !== 0) return
+      onPointerDown: (event: PointerEvent<HTMLElement>) => {
+        if (!mobile || event.pointerType === 'touch' || !event.isPrimary || event.button !== 0) return
         dragged.current = false
         setTouching(true)
         gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY }
       },
-      onPointerMove: (event: PointerEvent<HTMLDivElement>) => {
+      onPointerMove: (event: PointerEvent<HTMLElement>) => {
         const start = gesture.current
         if (!start || start.id !== event.pointerId) return
         const dx = event.clientX - start.x, dy = event.clientY - start.y
@@ -112,7 +124,7 @@ export function useMobileHero(hero: HTMLElement | null, active: boolean) {
           event.currentTarget.setPointerCapture(event.pointerId)
         }
       },
-      onPointerUp: (event: PointerEvent<HTMLDivElement>) => {
+      onPointerUp: (event: PointerEvent<HTMLElement>) => {
         const start = gesture.current
         if (!start || start.id !== event.pointerId) return
         const direction = mobileSwipeStep(event.clientX - start.x, event.clientY - start.y)
@@ -120,11 +132,14 @@ export function useMobileHero(hero: HTMLElement | null, active: boolean) {
         gesture.current = null
         setTouching(false)
       },
-      onPointerCancel: () => { gesture.current = null; dragged.current = true; setTouching(false) },
-      onClickCapture: (event: MouseEvent<HTMLDivElement>) => {
+      onPointerCancel: (event: PointerEvent<HTMLElement>) => {
+        if (event.pointerType === 'touch') return
+        gesture.current = null; dragged.current = true; setTouching(false)
+      },
+      onClickCapture: (event: MouseEvent<HTMLElement>) => {
         if (mobile && dragged.current && event.detail !== 0) { event.preventDefault(); event.stopPropagation() }
       },
-      onDragStart: (event: React.DragEvent<HTMLDivElement>) => { if (mobile) event.preventDefault() },
+      onDragStart: (event: React.DragEvent<HTMLElement>) => { if (mobile) event.preventDefault() },
     },
   }
 }

@@ -115,6 +115,7 @@ export default function HomeHero({
   return (
     <section className="home-hero" data-portrait={portrait?.spritePath ? 'sprites' : undefined} aria-label="Introduction" ref={setHeroRefs}
       data-sprite-active={spriteInteracting}
+      {...mobileHero.gestureProps}
       style={{ '--home-sprite-filter': portrait?.tone ? `url("#${toneFilterId}")` : 'none' } as CSSProperties}
       onFocusCapture={(event) => {
         const slot = (event.target as HTMLElement).closest<HTMLElement>('[data-slot]')?.dataset.slot
@@ -127,7 +128,7 @@ export default function HomeHero({
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocusedSlot(null)
       }}>
       {portrait?.tone && <HomeSpriteTone id={toneFilterId} tone={portrait.tone} />}
-      <div className="home-hero-scene" {...mobileHero.gestureProps} onKeyDown={mobileHero.onKeyDown}>
+      <div className="home-hero-scene" onKeyDown={mobileHero.onKeyDown}>
       <div className="home-hero-composition">
       {portrait ? (
         <div className="home-hero-portrait-position">
