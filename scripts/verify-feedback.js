@@ -203,7 +203,7 @@ async function handlerSuite() {
 
   assert(/aria-expanded=\{panelOpen\}/.test(componentSrc), 'FAB has aria-expanded')
   assert(/aria-controls=\{panelId\}/.test(componentSrc), 'FAB has aria-controls')
-  assert(/aria-label="Privacy and feedback"/.test(componentSrc), 'FAB accessible name is "Privacy and feedback"')
+  assert(/aria-label="Privacy, feedback, and credits"/.test(componentSrc), 'FAB accessible name is "Privacy, feedback, and credits"')
   assert(/role="tablist"/.test(componentSrc) && /role="tabpanel"/.test(componentSrc), 'tab semantics present')
   assert(componentSrc.includes("event.key === 'Escape'"), 'Escape closes the panel')
 

@@ -7,6 +7,7 @@ import {
   createAnalyticsClient,
   readConsent,
 } from '../engine/analytics'
+import { MODEL_CREDITS, PORTRAIT_CREDIT } from '../content/site'
 import './AnalyticsConsent.css'
 
 type AnalyticsConsentProps = {
@@ -14,7 +15,9 @@ type AnalyticsConsentProps = {
   onClient: (client: AnalyticsClient) => void
 }
 
-type PanelView = 'privacy' | 'feedback'
+type PanelView = 'privacy' | 'feedback' | 'credits'
+
+const PANEL_VIEWS: PanelView[] = ['privacy', 'feedback', 'credits']
 
 const MESSAGE_MIN = 10
 const MESSAGE_MAX = 2000
@@ -160,12 +163,13 @@ function FeedbackForm() {
 }
 
 /**
- * Privacy and feedback (Stage 5 + feedback). Nothing loads before an explicit
- * decision: the Privacy view offers "Allow analytics" / "No thanks", the
- * decision is stored for 180 days, and a persistent top-right "Privacy and
- * feedback" control reopens the panel. The panel never appears on the
- * protected viewer (it doesn't mount there). The Feedback view is fully
- * independent of analytics consent.
+ * Privacy, feedback, and credits (Stage 5 + feedback + asset attribution).
+ * Nothing loads before an explicit decision: the Privacy view offers
+ * "Allow analytics" / "No thanks", the decision is stored for 180 days, and
+ * a persistent top-right control reopens the panel. The panel never appears
+ * on the protected viewer (it doesn't mount there). The Feedback view is
+ * fully independent of analytics consent. The Credits view lists the CC-BY
+ * 3D models used in the homepage hero (content/site.ts MODEL_CREDITS).
  */
 export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
   const clientRef = useRef<AnalyticsClient | null>(null)
@@ -177,13 +181,16 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const privacyTabRef = useRef<HTMLButtonElement | null>(null)
   const feedbackTabRef = useRef<HTMLButtonElement | null>(null)
+  const creditsTabRef = useRef<HTMLButtonElement | null>(null)
 
   const baseId = useId()
   const panelId = `${baseId}-panel`
   const privacyTabId = `${baseId}-tab-privacy`
   const feedbackTabId = `${baseId}-tab-feedback`
+  const creditsTabId = `${baseId}-tab-credits`
   const privacyPanelId = `${baseId}-panel-privacy`
   const feedbackPanelId = `${baseId}-panel-feedback`
+  const creditsPanelId = `${baseId}-panel-credits`
 
   useEffect(() => {
     const client = createAnalyticsClient({
@@ -206,7 +213,12 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
   // Move focus into the panel when it opens.
   useEffect(() => {
     if (!panelOpen) return
-    const tab = view === 'privacy' ? privacyTabRef.current : feedbackTabRef.current
+    const tab =
+      view === 'privacy'
+        ? privacyTabRef.current
+        : view === 'feedback'
+          ? feedbackTabRef.current
+          : creditsTabRef.current
     tab?.focus()
   }, [panelOpen, view])
 
@@ -246,7 +258,9 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
       const target = event.target as HTMLElement
       if (target.getAttribute('role') !== 'tab') return
       event.preventDefault()
-      const next: PanelView = view === 'privacy' ? 'feedback' : 'privacy'
+      const index = PANEL_VIEWS.indexOf(view)
+      const step = event.key === 'ArrowRight' ? 1 : -1
+      const next = PANEL_VIEWS[(index + step + PANEL_VIEWS.length) % PANEL_VIEWS.length]
       setView(next)
     }
   }
@@ -261,7 +275,7 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
         aria-haspopup="dialog"
         aria-expanded={panelOpen}
         aria-controls={panelId}
-        aria-label="Privacy and feedback"
+        aria-label="Privacy, feedback, and credits"
       >
         ?
       </button>
@@ -272,11 +286,11 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
           className="privacy-panel"
           role="dialog"
           aria-modal="false"
-          aria-label="Privacy and feedback"
+          aria-label="Privacy, feedback, and credits"
           onKeyDown={onPanelKeyDown}
         >
           <div className="privacy-panel-header">
-            <div className="privacy-tabs" role="tablist" aria-label="Privacy and feedback views">
+            <div className="privacy-tabs" role="tablist" aria-label="Privacy, feedback, and credits views">
               <button
                 ref={privacyTabRef}
                 id={privacyTabId}
@@ -303,12 +317,25 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
               >
                 Feedback
               </button>
+              <button
+                ref={creditsTabRef}
+                id={creditsTabId}
+                type="button"
+                role="tab"
+                className="privacy-tab"
+                aria-selected={view === 'credits'}
+                aria-controls={creditsPanelId}
+                tabIndex={view === 'credits' ? 0 : -1}
+                onClick={() => setView('credits')}
+              >
+                Credits
+              </button>
             </div>
             <button
               type="button"
               className="privacy-panel-close"
               onClick={() => closePanel()}
-              aria-label="Close privacy and feedback panel"
+              aria-label="Close panel"
             >
               ×
             </button>
@@ -321,26 +348,23 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
               className="privacy-tabpanel"
             >
               <p className="consent-copy">
-                Uploads are processed entirely in your browser and never leave
-                your device. The landing atmosphere reflects the current
-                weather in Seattle (the designer's home base) via one
-                anonymous request to Open-Meteo — no location or data of yours
-                is involved; offline, it falls back to a seasonal mood.
-                Confidential work is authenticated separately and never
-                tracked. Optional analytics (GA4) count page and feature use
-                only after you allow them. Optional feedback submissions are
-                stored server-side for 180 days with an optional reply email —
-                no other personal data.
+                Optional analytics count page and feature use only after you
+                allow them. “No thanks” also withdraws an earlier choice.
+                Feedback and explicitly shared chats are stored separately
+                and expire after 180 days.
               </p>
               <p className="consent-copy">
-                The AI guide to Joel sends collaborate messages to the server,
-                where approved providers (Cloudflare AI Gateway; OpenAI and
-                DeepSeek hosted routes) generate answers. Guide conversations
-                are ephemeral by default and never sent to analytics. Sharing
-                one is optional and stores the transcript for 180 days with an
-                optional reply email. OpenAI API content isn’t used for
-                training but may be retained up to 30 days for abuse
-                monitoring. Please don’t submit confidential information.
+                Vibe automatically saves qualifying creations, including
+                previews, settings, and eligible uploaded source images.
+                Creations can be reviewed for the public gallery. Only upload
+                material you have permission to share.
+              </p>
+              <p className="consent-copy">
+                AI guide messages go to the server and the configured provider
+                (OpenAI, DeepSeek, or Moonshot/Kimi, sometimes through Cloudflare
+                AI Gateway). Please don’t submit confidential information.
+                See the <a href="/privacy">privacy policy</a> and{' '}
+                <a href="/terms">terms of use</a> for details.
               </p>
               <div className="consent-actions">
                 <button
@@ -373,6 +397,39 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
               className="privacy-tabpanel"
             >
               <FeedbackForm />
+            </div>
+          )}
+          {view === 'credits' && (
+            <div
+              id={creditsPanelId}
+              role="tabpanel"
+              aria-labelledby={creditsTabId}
+              className="privacy-tabpanel"
+            >
+              <p className="consent-copy">
+                The homepage hero uses these CC-BY-4.0 3D models — thanks to
+                their authors for sharing them.
+              </p>
+              <ul className="credits-list">
+                {MODEL_CREDITS.map((credit) => (
+                  <li key={credit.title}>
+                    <a href={credit.sourceUrl} target="_blank" rel="noopener noreferrer">
+                      {credit.title}
+                    </a>{' '}
+                    by{' '}
+                    <a href={credit.authorUrl} target="_blank" rel="noopener noreferrer">
+                      {credit.author}
+                    </a>{' '}
+                    ·{' '}
+                    <a href={credit.licenseUrl} target="_blank" rel="noopener noreferrer">
+                      CC-BY-4.0
+                    </a>{' '}
+                    · {credit.usedFor}
+                    <div className="credits-modifications">Adapted for this site: {credit.modifications}</div>
+                  </li>
+                ))}
+              </ul>
+              <p className="consent-copy">{PORTRAIT_CREDIT}</p>
             </div>
           )}
         </div>

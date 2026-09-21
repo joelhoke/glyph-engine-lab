@@ -1,8 +1,14 @@
 'use client'
 
+import { useEffect, useRef, useState } from 'react'
 import {
   APPROVED_SCENE_DEFAULTS,
   APPROVED_SOURCE_LAYOUT_DEFAULTS,
+  APPROVED_HERO_FAN_DEFAULTS,
+  HERO_FAN_SLOT_KEYS,
+  HERO_FAN_SLOT_LABELS,
+  HeroFanChange,
+  HeroFanConfig,
   INTERACTION_CONTROL_DEFINITIONS,
   SceneConfig,
   SceneConfigKey,
@@ -49,6 +55,13 @@ type TuningPanelProps = {
   qualityTierOverride: QualityTier | null
   onQualityTierOverrideChange: (tier: QualityTier | null) => void
   onCopyConfiguration: () => void
+  /** Hero fan working copy (homepage-redesign): the slot geometry written
+   *  to the hero's CSS custom properties. */
+  heroFan: HeroFanConfig
+  onHeroFanChange: (change: HeroFanChange) => void
+  onResetHeroFan: () => void
+  /** Exports the tuned fan values as a CSS custom-property block. */
+  onCopyHeroFanValues: () => void
   onPlay: () => void
   onPause: () => void
   onReplay: () => void
@@ -78,6 +91,10 @@ export default function TuningPanel({
   qualityTierOverride,
   onQualityTierOverrideChange,
   onCopyConfiguration,
+  heroFan,
+  onHeroFanChange,
+  onResetHeroFan,
+  onCopyHeroFanValues,
   onPlay,
   onPause,
   onReplay,
@@ -88,6 +105,17 @@ export default function TuningPanel({
   effectiveOptionItemDurationMs,
   timingFallbackActive,
 }: TuningPanelProps) {
+  const [minimized, setMinimized] = useState(true)
+  const toggleRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    let saved: string | null = null
+    try { saved = sessionStorage.getItem('jh-tuning-minimized') } catch { /* Storage is optional. */ }
+    setMinimized(saved === null ? matchMedia('(max-width: 767px)').matches : saved === 'true')
+  }, [])
+  const changeMinimized = (value: boolean) => {
+    setMinimized(value)
+    try { sessionStorage.setItem('jh-tuning-minimized', String(value)) } catch { /* Keep the in-memory choice. */ }
+  }
   const sceneDirty = (Object.keys(APPROVED_SCENE_DEFAULTS) as SceneConfigKey[]).some(
     (key) => sceneConfig[key] !== APPROVED_SCENE_DEFAULTS[key],
   )
@@ -100,13 +128,37 @@ export default function TuningPanel({
       (key) => fieldReveal[mode][key] !== FIELD_REVEAL_DEFAULTS[mode][key],
     ),
   )
+  const heroDirty =
+    heroFan.spread !== APPROVED_HERO_FAN_DEFAULTS.spread ||
+    heroFan.top !== APPROVED_HERO_FAN_DEFAULTS.top ||
+    heroFan.portraitTop !== APPROVED_HERO_FAN_DEFAULTS.portraitTop ||
+    heroFan.portraitScale !== APPROVED_HERO_FAN_DEFAULTS.portraitScale ||
+    HERO_FAN_SLOT_KEYS.some(
+      (slot) =>
+        heroFan.angle[slot] !== APPROVED_HERO_FAN_DEFAULTS.angle[slot] ||
+        heroFan.scale[slot] !== APPROVED_HERO_FAN_DEFAULTS.scale[slot] ||
+        heroFan.rotation[slot].x !== APPROVED_HERO_FAN_DEFAULTS.rotation[slot].x ||
+        heroFan.rotation[slot].y !== APPROVED_HERO_FAN_DEFAULTS.rotation[slot].y,
+    )
 
   return (
-    <div className="tuning-panel" aria-label="Tuning panel">
+    <div className="tuning-panel" aria-label="Tuning panel" data-minimized={minimized}
+      onKeyDown={event => {
+        if (event.key === 'Escape' && !minimized) {
+          event.preventDefault()
+          event.stopPropagation()
+          toggleRef.current?.focus()
+          changeMinimized(true)
+        }
+      }}>
       <div className="tuning-panel-header">
         <span>Tuning</span>
+        <button ref={toggleRef} type="button" className="tuning-panel-toggle"
+          aria-expanded={!minimized} aria-controls="tuning-panel-body"
+          aria-label={minimized ? 'Restore debugger' : 'Minimize debugger'}
+          onClick={() => changeMinimized(!minimized)}>{minimized ? 'Open' : 'Minimize'}</button>
       </div>
-
+      <div id="tuning-panel-body" className="tuning-panel-body" hidden={minimized}>
       <section className="tuning-section" aria-labelledby="tuning-playback-heading">
         <h3 id="tuning-playback-heading" className="tuning-section-title">Playback</h3>
         <div className="tuning-button-row">
@@ -196,6 +248,125 @@ export default function TuningPanel({
         <button type="button" className="tuning-reset-button" onClick={onResetSourceLayout}>
           Reset source and layout
         </button>
+      </section>
+
+      <section className="tuning-section" aria-labelledby="tuning-hero-heading">
+        <h3 id="tuning-hero-heading" className="tuning-section-title">Hero</h3>
+        {/* Live fan geometry (homepage-redesign): writes CSS custom
+            properties on the hero element — position elements compose
+            offset × spread, rest angle, and scale; parallax stays on the
+            separate motion elements. Mobile retains its own composition
+            anchors and a smaller resting scale. */}
+        <div className="tuning-controls-grid">
+          <NumericControl
+            id="hero-spread"
+            label="Spacing between elements"
+            value={heroFan.spread}
+            min={0.5}
+            max={1.6}
+            step={0.02}
+            showSlider
+            onChange={(value) => onHeroFanChange({ kind: 'spread', value })}
+          />
+          <NumericControl
+            id="hero-fan-top"
+            label="Vertical placement"
+            value={heroFan.top}
+            min={35}
+            max={70}
+            step={0.5}
+            unit="%"
+            showSlider
+            onChange={(value) => onHeroFanChange({ kind: 'top', value })}
+          />
+          <NumericControl
+            id="hero-portrait-top"
+            label="Portrait vertical placement"
+            value={heroFan.portraitTop}
+            min={-5}
+            max={25}
+            step={0.5}
+            unit="%"
+            showSlider
+            onChange={(value) => onHeroFanChange({ kind: 'portraitTop', value })}
+          />
+          <NumericControl
+            id="hero-portrait-scale"
+            label="Portrait scale"
+            value={heroFan.portraitScale}
+            min={0.7}
+            max={1.3}
+            step={0.01}
+            showSlider
+            onChange={(value) => onHeroFanChange({ kind: 'portraitScale', value })}
+          />
+          {HERO_FAN_SLOT_KEYS.map((slot) => (
+            <NumericControl
+              key={`${slot}-angle`}
+              id={`hero-${slot}-angle`}
+              label={`${HERO_FAN_SLOT_LABELS[slot]} rest angle`}
+              value={heroFan.angle[slot]}
+              min={-30}
+              max={30}
+              step={0.5}
+              unit="°"
+              showSlider
+              onChange={(value) => onHeroFanChange({ kind: 'angle', slot, value })}
+            />
+          ))}
+          {HERO_FAN_SLOT_KEYS.map((slot) => (
+            <NumericControl
+              key={`${slot}-scale`}
+              id={`hero-${slot}-scale`}
+              label={`${HERO_FAN_SLOT_LABELS[slot]} scale`}
+              value={heroFan.scale[slot]}
+              min={0.6}
+              max={1.6}
+              step={0.02}
+              showSlider
+              onChange={(value) => onHeroFanChange({ kind: 'scale', slot, value })}
+            />
+          ))}
+        </div>
+        {/* Per-slot 3D rest orientation (the objects' baseRotation) — two
+            sliders per slot, live without rebuilding. */}
+        {HERO_FAN_SLOT_KEYS.map((slot) => (
+          <div key={`${slot}-rotation`}>
+            <p className="tuning-section-title">{HERO_FAN_SLOT_LABELS[slot]} 3D orientation</p>
+            <div className="tuning-controls-grid">
+              <NumericControl
+                id={`hero-${slot}-tilt-x`}
+                label="Tilt X"
+                value={heroFan.rotation[slot].x}
+                min={-60}
+                max={60}
+                step={1}
+                unit="°"
+                showSlider
+                onChange={(value) => onHeroFanChange({ kind: 'rotation', slot, axis: 'x', value })}
+              />
+              <NumericControl
+                id={`hero-${slot}-turn-y`}
+                label="Turn Y"
+                value={heroFan.rotation[slot].y}
+                min={-360}
+                max={360}
+                step={1}
+                unit="°"
+                showSlider
+                onChange={(value) => onHeroFanChange({ kind: 'rotation', slot, axis: 'y', value })}
+              />
+            </div>
+          </div>
+        ))}
+        <div className="tuning-button-row">
+          <button type="button" className="tuning-reset-button" onClick={onResetHeroFan}>
+            Reset hero
+          </button>
+          <button type="button" className="tuning-reset-button" onClick={onCopyHeroFanValues}>
+            Copy values
+          </button>
+        </div>
       </section>
 
       <section className="tuning-section" aria-labelledby="tuning-reveal-heading">
@@ -381,6 +552,7 @@ export default function TuningPanel({
           <div>Interaction values: {sceneDirty ? 'edited' : 'preset'}</div>
           <div>Source/layout: {sourceLayoutDirty ? 'edited' : 'preset'}</div>
           <div>Field reveal: {revealDirty ? 'edited' : 'preset'}</div>
+          <div>Hero fan: {heroDirty ? 'edited' : 'preset'}</div>
           <div>Target count: {targetCount}</div>
           <div>Total duration: {Math.round(totalDurationMs)} ms</div>
           <div>Effective option stagger: {Math.round(effectiveOptionStaggerMs)} ms</div>
@@ -392,7 +564,7 @@ export default function TuningPanel({
             Copy configuration
           </button>
         </div>
-        {(sceneDirty || sourceLayoutDirty || revealDirty) && (
+        {(sceneDirty || sourceLayoutDirty || revealDirty || heroDirty) && (
           <button
             type="button"
             className="tuning-reset-button"
@@ -400,12 +572,14 @@ export default function TuningPanel({
               onResetSceneConfig()
               onResetSourceLayout()
               onResetFieldReveal()
+              onResetHeroFan()
             }}
           >
             Reset all tuning values
           </button>
         )}
       </section>
+      </div>
     </div>
   )
 }

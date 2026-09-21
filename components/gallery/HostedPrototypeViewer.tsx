@@ -10,7 +10,6 @@ type HostedPrototypeViewerProps = {
   backHref: string
   backLabel: string
   caption?: ReactNode
-  hideMobileFooter?: boolean
   /** Back returns to the previous in-site screen via browser history when one
       exists (restoring its exact view and scroll position); backHref remains
       the fallback for direct visits. */
@@ -24,12 +23,11 @@ export default function HostedPrototypeViewer({
   backHref,
   backLabel,
   caption,
-  hideMobileFooter = false,
   backViaHistory = false,
 }: HostedPrototypeViewerProps) {
   return (
     <div className={styles.shell}>
-      <GalleryHeader showMobileFooter={!hideMobileFooter} />
+      <GalleryHeader />
       <main id="main-content" className={styles.viewerMain}>
         <div className={styles.viewerBar}>
           <h1 className={styles.viewerTitle}>{title}</h1>

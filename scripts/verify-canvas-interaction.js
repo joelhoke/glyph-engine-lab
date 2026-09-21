@@ -341,17 +341,20 @@ async function scenarioLanding(page) {
   await expectImpulse(page, top, 'landing top')
   await expectImpulse(page, bottom, 'landing bottom')
 
-  // UI priority: the primary action buttons never fire canvas impulses, and
-  // they navigate. Wait out the intro reveal first.
-  await page.waitForSelector('.primary-actions:not(.options-hidden):not(.options-inert)', {
-    timeout: 30000,
-  })
-  await expectPointerContract(page, [['.primary-action-button', 'auto']], 'landing')
+  // UI priority: the landing's header chrome never fires canvas impulses,
+  // and it navigates. The old doorway cards are gone (phase 5) — the entry
+  // path is the header menu: trigger (a fully rounded pill) → Work link.
+  // html.theme-ready marks React hydration — clicking earlier hits an
+  // inert SSR button.
+  await page.waitForSelector('html.theme-ready', { timeout: 30000 })
+  await expectPointerContract(page, [['.site-header-menu-button', 'auto']], 'landing')
   const buttonRadius = await page.evaluate(
-    () => getComputedStyle(document.querySelector('.primary-action-button')).borderRadius,
+    () => getComputedStyle(document.querySelector('.site-header-menu-button')).borderRadius,
   )
   check('landing buttons are fully rounded pills', buttonRadius === '999px', buttonRadius)
-  await expectUiClickNoImpulse(page, '.primary-action-button >> text=Work', 'primary action “Work”')
+  await expectUiClickNoImpulse(page, '.site-header-menu-button', 'menu trigger')
+  await page.waitForSelector('#site-menu[open]', { timeout: 10000 })
+  await expectUiClickNoImpulse(page, '.site-menu-link >> text=Work', 'menu link “Work”')
   await page.waitForSelector('.work-experience', { timeout: 15000 })
 }
 
@@ -477,7 +480,10 @@ async function scenarioRippleAndDrag(page) {
 
 async function scenarioCollaborateLanding(page) {
   section('Collaborate landing')
-  await expectUiClickNoImpulse(page, '.experience-nav-button >> text=Collaborate', 'nav “Collaborate”')
+  // Phase 5: the tab row is gone — route through the header menu.
+  await expectUiClickNoImpulse(page, '.site-header-menu-button', 'menu trigger')
+  await page.waitForSelector('#site-menu[open]', { timeout: 10000 })
+  await expectUiClickNoImpulse(page, '.site-menu-link >> text=Collaborate', 'menu link “Collaborate”')
   await page.waitForSelector('.collaborate-experience', { timeout: 15000 })
   const point = await expectExposed(
     page,
@@ -985,7 +991,9 @@ async function scenarioVibePaint(page) {
   await page.mouse.move(1300, 420, { steps: 8 })
   await page.mouse.up()
   await waitFor(async () => (await readPaint(page))?.strokeCount === 1, { label: 'repaint' })
-  await page.click('.experience-nav-button >> text=Work')
+  await page.evaluate(() => {
+    window.location.hash = '#work'
+  })
   await page.waitForSelector('.work-experience', { timeout: 15000 })
   await sleep(400)
   check(
@@ -1012,7 +1020,9 @@ async function scenarioVibePaint(page) {
   }
   // End the cycle on Work (stash again — no confirmation) for the
   // listener-persistence scenario that follows.
-  await page.click('.experience-nav-button >> text=Work')
+  await page.evaluate(() => {
+    window.location.hash = '#work'
+  })
   await page.waitForSelector('.work-experience', { timeout: 15000 })
 }
 
@@ -1061,8 +1071,12 @@ async function scenarioTouch(browser) {
     }
   }
 
-  // Touch drag on exposed canvas drives the touch pointer (no cancellation).
+  // Phase 3 interaction contract: on the homepage ('page' interaction mode)
+  // a touch drag belongs to native scrolling — it must NOT drive the repel
+  // pointer, capture the touch, or fire an impulse. ('canvas' modes keep the
+  // old behavior, covered by the Work drag scenarios below.)
   if (point) {
+    const impulsesBefore = await impulseCount(page)
     const cdp = await context.newCDPSession(page)
     await cdp.send('Input.dispatchTouchEvent', {
       type: 'touchStart',
@@ -1079,9 +1093,14 @@ async function scenarioTouch(browser) {
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
     await cdp.detach()
     check(
-      'touch drag on canvas drives the touch pointer without cancellation',
-      !!during && during.pointerActive && during.pointerType === 'touch',
+      'page mode: a scrolling touch drag never drives the repel pointer',
+      !!during && !during.pointerActive && during.pointerType === 'none',
       JSON.stringify(during),
+    )
+    check(
+      'page mode: a scrolling touch drag fires no impulse',
+      (await impulseCount(page)) === impulsesBefore,
+      `${impulsesBefore} → ${await impulseCount(page)}`,
     )
   }
 

@@ -17,7 +17,7 @@ export default function PrototypeCard({
     <Link href={`/p/${stack.slug}/${prototype.slug}`} className={styles.card}>
       <img
         className={styles.cardThumb}
-        src={`/p/${stack.slug}/${prototype.slug}/${prototype.thumb}`}
+        src={prototype.publicThumbnail ?? `/p/${stack.slug}/${prototype.slug}/${prototype.thumb}`}
         alt=""
         loading="lazy"
       />

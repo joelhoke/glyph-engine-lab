@@ -1,0 +1,8 @@
+.legal-page { min-height: 100svh; background: var(--color-page); color: var(--color-text); }
+.legal-content { width: min(100% - 3rem, 48rem); margin-inline: auto; padding: 8rem 0 5rem; line-height: 1.75; overflow-wrap: anywhere; }
+.legal-content h1 { font-size: clamp(2.5rem, 7vw, 4rem); line-height: 1.1; }
+.legal-content h2 { margin-top: 2.5rem; font-size: 1.5rem; }
+.legal-content p { margin-block: 1rem; }
+.legal-content a { color: var(--color-accent); text-decoration: underline; text-underline-offset: .2em; }
+.legal-links { display: flex; flex-wrap: wrap; gap: 1rem 2rem; margin-top: 3rem; }
+.legal-links a { display: inline-flex; align-items: center; min-height: 44px; }

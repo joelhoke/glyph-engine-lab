@@ -1,0 +1,304 @@
+/* Destination sections share the hero's objects, with room to use them. */
+.home-section { pointer-events: auto; }
+/* Land at the Work content's top so the taller CRT stays fully visible.
+   Subtract the inner wrapper's 3.5rem padding from the 5.5rem clearance. */
+.home-work-layout.home-section-anchor,
+.home-vibe-layout.home-section-anchor,
+.home-gallery-heading.home-section-anchor { scroll-margin-top: calc(2rem + env(safe-area-inset-top, 0px)); }
+.home-section--work,
+.home-section--vibe,
+.home-section--collaborate { padding-block: clamp(2rem, 5vw, 5rem); }
+.home-section-lede {
+  margin: 1.4rem 0 0;
+  font: 500 clamp(1.35rem, 2.8vw, 2.15rem)/1.22 var(--font-display);
+  letter-spacing: -0.015em;
+  color: var(--color-text);
+  max-width: 24ch;
+}
+.home-section-copy { min-width: 0; }
+.home-section-copy--center { text-align: center; }
+.home-section-copy--center .home-section-intro,
+.home-section-copy--center .home-section-lede { margin-inline: auto; }
+.home-section-copy--center .home-section-intro { max-width: 38rem; }
+.home-section button { font: inherit; cursor: pointer; }
+.home-section button:disabled { cursor: default; opacity: 0.38; }
+.home-section :is(button, a, textarea, [tabindex='0']):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 5px;
+}
+.home-section-inner.home-work-layout {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  gap: clamp(2rem, 4vw, 4rem);
+  align-items: center;
+}
+.home-work-object { margin: 0; min-width: 0; }
+.home-work-stage {
+  position: relative;
+  aspect-ratio: 1.2;
+  /* Keep the WebGL surface's paint local while the document scrolls. */
+  isolation: isolate;
+  contain: paint;
+}
+/* The computer is the control: one native keyboard/touch target covers its
+   screen and body without adding visible player chrome. */
+.home-work-playback-target {
+  position: absolute; inset: 0; z-index: 1;
+  width: 100%; height: 100%; padding: 0; border: 0;
+  background: transparent; color: inherit; border-radius: 8px;
+}
+.home-section .home-work-playback-target:focus-visible { outline-offset: -5px; }
+.home-section .home-section-three {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  aspect-ratio: auto;
+}
+.home-work-poster { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
+.home-object-caption {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem 1rem;
+  font-size: 0.63rem;
+  line-height: 1.7;
+  color: var(--color-text-muted);
+}
+.home-object-caption > span { flex-basis: 100%; text-align: center; }
+.home-object-caption :is(a, button) {
+  color: var(--color-accent); background: transparent; border: 0;
+  padding: 0.35rem 0; text-underline-offset: 4px;
+}
+.home-vibe-stage { position: relative; margin: 3rem 0 1.5rem; }
+.home-vibe-previews { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0; }
+.home-vibe-preview {
+  display: block; min-width: 0; text-decoration: none; color: var(--color-text);
+  border-radius: 8px; overflow: hidden;
+  transition: background-color 180ms ease;
+}
+.home-vibe-preview:hover { background: var(--color-surface); }
+.home-vibe-preview-caption {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.6rem;
+  padding: 1rem 0; font-size: 0.7rem;
+}
+.home-vibe-preview--left .home-vibe-preview-caption { padding-right: 1rem; }
+.home-vibe-preview--right .home-vibe-preview-caption { padding-left: 1rem; }
+.home-vibe-preview-caption a { color: var(--color-accent); text-underline-offset: 0.2em; }
+.home-vibe-piece { display: block; position: relative; color: inherit; text-decoration: none; }
+.home-vibe-piece-label {
+  position: absolute; inset: auto 1rem 1rem; width: fit-content; max-width: calc(100% - 2rem);
+  padding: 0.5rem 0.75rem; border-radius: 4px; background: var(--color-surface);
+  color: var(--color-text); font-size: 0.7rem; line-height: 1.5;
+}
+.home-vibe-piece:hover .home-vibe-piece-label,
+.home-vibe-piece:focus-visible .home-vibe-piece-label { text-decoration: underline; text-underline-offset: 0.2em; }
+.home-vibe-preview-art {
+  position: relative; display: block; aspect-ratio: 8 / 5; overflow: hidden;
+  border: 1px solid var(--color-border); border-radius: 8px;
+  background: var(--color-surface);
+}
+/* Each screen's inner edge tucks behind the brush and its splatter. */
+.home-vibe-preview--left .home-vibe-preview-art {
+  clip-path: polygon(0 0, 100% 0, 100% 20%, 94% 50%, 100% 80%, 100% 100%, 0 100%);
+}
+.home-vibe-preview--right .home-vibe-preview-art {
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 80%, 6% 50%, 0 20%);
+}
+.home-vibe-preview-placeholder,
+.home-vibe-preview-empty > span {
+  display: grid; place-items: center; height: 100%; padding: 1rem;
+  color: var(--color-text-muted); font-size: 0.75rem; text-align: center;
+}
+.home-vibe-preview-placeholder { font: 600 3rem var(--font-display); opacity: 0.3; }
+.home-vibe-preview-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.home-vibe-brush {
+  position: absolute; width: 44%; height: 100%; left: 28%; top: -1.5rem;
+  pointer-events: none; z-index: 1;
+}
+.home-section--gallery { padding-block: 3rem 5rem; }
+.home-section-inner.home-gallery-heading {
+  position: relative;
+  display: grid; grid-template-columns: minmax(0, 1fr) 252px max-content;
+  align-items: end; column-gap: 1.5rem; row-gap: 1.75rem;
+  padding-bottom: 0;
+}
+.home-gallery-copy { grid-column: 1; grid-row: 1; min-width: 0; text-align: left; }
+.home-gallery-action { grid-column: 3; grid-row: 1; }
+.home-gallery-heading .home-section-action { white-space: nowrap; }
+.home-gallery-portrait {
+  grid-column: 2; grid-row: 1 / span 2; width: 252px; height: 312px;
+  /* Keep the portrait aligned with the heading without sizing the grid rows.
+     Its lower edge is free to overlap the carousel below. */
+  position: absolute; top: 0; z-index: 1; pointer-events: none;
+}
+.home-gallery-controls {
+  grid-column: 1 / -1; grid-row: 2;
+  display: flex; justify-content: flex-end; align-items: center;
+  gap: 1rem; font-size: 0.7rem; color: var(--color-text-muted);
+}
+.home-gallery-controls > div { display: flex; gap: 0.5rem; }
+.home-gallery-controls button {
+  width: 44px; height: 44px; border: 1px solid var(--color-border); border-radius: 50%;
+  background: var(--color-surface); color: var(--color-accent); font-size: 1.2rem;
+}
+.home-gallery-controls button:hover:enabled { border-color: var(--color-accent); }
+.home-gallery-track {
+  --gallery-gap: clamp(1rem, 2vw, 2rem);
+  display: flex; gap: var(--gallery-gap); overflow-x: auto;
+  overscroll-behavior-x: contain; scroll-snap-type: x mandatory;
+  /* Every card settles one inter-card gap from the edge; the viewport stays full bleed. */
+  scroll-padding-left: var(--gallery-gap);
+  padding: 0.5rem 0 1.5rem var(--gallery-gap);
+  margin: 0; list-style: none; scrollbar-width: thin;
+  scrollbar-color: var(--color-accent) transparent;
+}
+.home-gallery-slide { flex: 0 0 clamp(280px, 40vw, 560px); min-width: 0; scroll-snap-align: start; }
+/* A finite scrollbar would suggest an endpoint that the looping track lacks. */
+.home-gallery-track--loop { scrollbar-width: none; }
+.home-gallery-track--loop::-webkit-scrollbar { display: none; }
+.home-project { display: block; text-decoration: none; color: var(--color-text); }
+.home-project-image {
+  position: relative; display: block; aspect-ratio: 8 / 5; overflow: hidden;
+  border-radius: 8px; border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  /* Clip scaled image layers independently, without clipping carousel bleed. */
+  isolation: isolate; contain: paint;
+}
+.home-project-image img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform 250ms ease; }
+.home-project:hover img { transform: scale(1.025); }
+.home-project-placeholder {
+  position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between;
+  padding: 2rem; background: repeating-linear-gradient(0deg, transparent 0 29px, #8abaff12 29px 30px),
+    linear-gradient(135deg, #142b43, #0c1724); color: #8abaff;
+}
+.home-project-placeholder > span { font-size: 0.65rem; }
+.home-project-placeholder strong { font: 600 clamp(1.8rem, 3vw, 3rem)/1.05 var(--font-display); max-width: 12ch; }
+.home-project-body { display: flex; flex-direction: column; gap: 0.65rem; padding: 1.3rem 0.2rem; }
+.home-project-meta { color: var(--color-text-muted); font-size: 0.62rem; }
+.home-project-title { display: flex; justify-content: space-between; gap: 1rem; font: 600 1.6rem/1.2 var(--font-display); }
+.home-project-summary { color: var(--color-text-muted); font-size: 0.75rem; line-height: 1.7; max-width: 48ch; }
+.home-project-access { margin-top: 0.25rem; font-size: 0.65rem; color: var(--color-accent); }
+.home-section-inner.home-collaborate-layout {
+  display: grid; grid-template-columns: 0.9fr 1.1fr;
+  align-items: center; gap: 1.5rem;
+}
+.home-direct-contact { display: inline-block; margin-top: 1.5rem; color: var(--color-text-muted); font-size: 0.75rem; text-underline-offset: 4px; }
+.home-collaborate-phone { height: 900px; min-width: 0; position: relative; }
+.home-phone-screen {
+  position: absolute; left: 0; top: 0; width: 240px; height: 320px;
+  transform-origin: 0 0; visibility: hidden; z-index: 1;
+  pointer-events: auto; overflow: hidden; border-radius: 5px;
+  background: #ffd9c4; color: #1c120c;
+}
+.home-phone-chat {
+  width: 100%; height: 100%; display: flex; flex-direction: column;
+  background: #ffd9c4; color: #1c120c; font-family: var(--font-display);
+  font-size: 17px; line-height: 1.35; text-align: left; color-scheme: light;
+}
+.home-phone-chat-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 9px 12px 7px; border-bottom: 1px solid #1c120c30; }
+.home-phone-chat-header strong { font-size: 22px; }
+.home-phone-chat-header > div { display: flex; flex-direction: column; }
+.home-phone-chat-header span { font-size: 13px; }
+.home-phone-chat .home-phone-pop-out {
+  display: grid; place-items: center; flex: 0 0 40px; width: 40px; height: 40px;
+  padding: 8px; border: 0; background: transparent;
+}
+.home-phone-chat .home-phone-pop-out:hover { background: #1c120c12; }
+.home-phone-transcript { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 10px 12px; scrollbar-width: thin; }
+.home-phone-chat p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.home-phone-chat button,
+.home-phone-chat a { color: #1c120c; }
+.home-phone-chat button { border: 1px solid #1c120c60; border-radius: 4px; padding: 7px; background: #fff0e5; font-size: 14px; }
+.home-phone-welcome button { margin-top: 10px; text-align: left; width: 100%; }
+.home-phone-turn { margin-bottom: 14px; }
+.home-phone-turn > span { display: block; margin-bottom: 3px; font-weight: 700; font-size: 12px; }
+.home-phone-turn--user { padding: 8px; background: #fff0e5; border-radius: 4px; }
+.home-phone-turn button { margin-top: 6px; }
+.home-phone-status { margin-top: 8px; }
+.home-phone-status button { margin-top: 8px; }
+.home-phone-composer { display: flex; align-items: stretch; gap: 5px; padding: 7px; border-top: 1px solid #1c120c30; }
+.home-phone-composer-input { position: relative; flex: 1; min-width: 0; }
+.home-phone-composer textarea {
+  display: block; flex: 1; min-width: 0; width: 100%; resize: none; height: 51px;
+  border: 1px solid #1c120c70; border-radius: 4px; padding: 5px;
+  color: #1c120c; background: #fff5eb; font: 16px/1.2 var(--font-display);
+}
+/* Paint the empty-field prompt as regular text in the projected screen.
+   This also clears stale native textarea glyphs in composited browsers. */
+.home-phone-composer textarea::placeholder { color: transparent; }
+.home-phone-composer-input[data-empty='true'] textarea { color: transparent; caret-color: #1c120c; }
+.home-phone-input-placeholder {
+  position: absolute; top: 6px; left: 6px; right: 6px;
+  pointer-events: none; color: #604a3c; font: 16px/1.2 var(--font-display);
+}
+.home-phone-composer button { min-width: 44px; height: auto; align-self: stretch; font-size: 22px; }
+.home-phone-standby {
+  position: relative; align-items: center; justify-content: space-between;
+  padding: 15px 10px; background: #071626; color: #8abaff;
+}
+.home-phone-standby::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent 0 3px, #07162630 3px 4px);
+}
+.home-phone-standby-status { font: 11px/1.4 "Departure Mono", monospace; letter-spacing: 0.08em; }
+.home-phone-standby-mark { position: relative; display: block; width: 140px; height: 168px; }
+.home-phone-standby-mark :is(svg, canvas) { position: absolute; inset: 0; width: 100%; height: 100%; }
+.home-phone-standby-mark canvas { image-rendering: pixelated; filter: drop-shadow(0 0 3px #8abaff40); }
+.home-phone-standby button { color: #8abaff; background: #102b45; border-color: #8abaff60; position: relative; z-index: 1; }
+.home-phone-fallback { width: min(100%, 330px); height: 450px; margin: 10rem auto 0; border: 12px solid #528ed1; border-radius: 15px; overflow: hidden; }
+.home-phone-chat :is(button, a, textarea, [tabindex='0']):focus-visible { outline-color: #0c5e7d; outline-offset: 1px; }
+@media (min-width: 768px) and (max-width: 1050px) {
+  .home-section-inner.home-gallery-heading { grid-template-columns: minmax(0, 1fr) 168px max-content; column-gap: 1rem; }
+  .home-gallery-portrait { width: 168px; height: 240px; }
+}
+@media (max-width: 767px) {
+  .home-section-inner.home-work-layout, .home-section-inner.home-collaborate-layout { grid-template-columns: 1fr; gap: 2rem; }
+  .home-work-layout .home-work-object { grid-row: 1; }
+  .home-work-layout .home-section-copy { grid-row: 2; }
+  .home-work-stage { max-width: 520px; margin-inline: auto; }
+  .home-section--work, .home-section--vibe, .home-section--collaborate { padding-block: 1rem; }
+  .home-vibe-layout { display: grid; grid-template-areas: 'brush' 'copy' 'previews' 'action'; }
+  .home-vibe-layout > .home-section-copy { grid-area: copy; }
+  .home-vibe-layout > .home-section-copy--center:last-child { grid-area: action; margin-top: 1.5rem; }
+  .home-vibe-stage { display: contents; }
+  .home-vibe-previews { grid-area: previews; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; margin-top: 1.5rem; }
+  .home-vibe-brush {
+    grid-area: brush;
+    position: relative; top: auto; left: auto; width: 100%; height: 240px;
+    margin: 0;
+  }
+  .home-vibe-preview--left .home-vibe-preview-art,
+  .home-vibe-preview--right .home-vibe-preview-art {
+    clip-path: none;
+  }
+  .home-vibe-preview--left .home-vibe-preview-caption { padding-right: 0; }
+  .home-vibe-preview--right .home-vibe-preview-caption { padding-left: 0; }
+  .home-vibe-preview-caption { padding-block: 0.7rem; font-size: 0.6rem; line-height: 1.5; }
+  .home-vibe-preview-empty > span { font-size: 0.6rem; }
+  .home-section-inner.home-gallery-heading {
+    grid-template-columns: minmax(0, 1fr); gap: 1rem;
+  }
+  .home-gallery-copy { grid-column: 1; grid-row: 2; }
+  .home-gallery-action { grid-column: 1; grid-row: 3; justify-self: start; }
+  .home-gallery-portrait {
+    position: relative; top: auto; grid-column: 1; grid-row: 1;
+    justify-self: start; width: 160px; height: 208px;
+  }
+  .home-gallery-controls { grid-column: 1; grid-row: 4; justify-content: flex-end; }
+  .home-vibe-piece-label { inset: auto 0.5rem 0.5rem; max-width: calc(100% - 1rem); padding: 0.3rem 0.5rem; font-size: 0.6rem; }
+  .home-gallery-slide { flex-basis: min(82vw, 440px); }
+  .home-collaborate-phone { height: 780px; margin: -2rem -1rem 0; }
+  .home-section-three { width: 100%; margin: 0; }
+}
+@media (max-width: 400px) {
+  .home-gallery-portrait { width: 144px; height: 188px; }
+  .home-gallery-heading .home-section-action { white-space: normal; font-size: 0.7rem; padding-inline: 0.75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-project-image img, .home-vibe-preview { transition: none; }
+  .home-project:hover img { transform: none; }
+}
+
+.home-section--about { padding-block: clamp(2rem, 5vw, 5rem); }
+.home-about-layout .home-section-copy { max-width: 44rem; }
+.home-about-layout .home-section-action { margin-top: 2rem; }

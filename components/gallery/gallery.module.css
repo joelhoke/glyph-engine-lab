@@ -15,13 +15,6 @@
   padding-top: calc(4rem + env(safe-area-inset-top, 0px));
 }
 
-/* Phone: the recruiter-link footer bar overlays the bottom edge. */
-@media (max-width: 560px) {
-  .shell {
-    padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
-  }
-}
-
 /* --- Page body -------------------------------------------------------------- */
 
 .main {

@@ -14,7 +14,6 @@ export default function DigieAwardViewerPage() {
       backHref="/#work/microsoft-global-operations"
       backLabel="Back to case study"
       backViaHistory
-      hideMobileFooter
       caption={
         <>
           The 2026 Digie Award, modeled in three.js —{' '}

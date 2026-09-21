@@ -1,3 +1,5 @@
+import { GLOBAL_OPERATIONS_THUMBNAIL } from '../../content/workMedia'
+
 /**
  * Hosted-prototypes manifest (docs/prototypes-plan.md). The single typed
  * source of truth for stacks and their prototypes, imported by the Pages
@@ -26,17 +28,24 @@ export function isValidPrototypeSlug(slug: unknown): slug is string {
 }
 
 /**
- * A file path inside a bundle, segment by segment (`assets/app.js`). Each
- * segment is a lowercase filename; `..` and dotfile segments are rejected
- * outright so a crafted path can never escape the bundle's key prefix.
+ * A file path inside a bundle, segment by segment (`assets/app.js`). Segments
+ * are lowercase filenames; `..` and dotfile segments are rejected outright so
+ * a crafted path can never escape the bundle's key prefix. Static-exported
+ * Next.js apps also emit route-data files named `__next.<route>.txt`, so that
+ * exact final-segment shape gets a narrow exception.
  */
 export const PROTOTYPE_FILE_SEGMENT_PATTERN = /^[a-z0-9][a-z0-9._-]{0,127}$/
+export const PROTOTYPE_NEXT_FLIGHT_SEGMENT_PATTERN = /^__next\.[A-Za-z0-9!$()_.-]+\.txt$/
 
 export function isValidPrototypeFilePath(segments: string[]): boolean {
   if (segments.length === 0 || segments.length > 8) return false
-  return segments.every(
-    (segment) => !segment.includes('..') && PROTOTYPE_FILE_SEGMENT_PATTERN.test(segment),
-  )
+  return segments.every((segment, index) => {
+    if (segment.includes('..') || segment.length > 128) return false
+    return (
+      PROTOTYPE_FILE_SEGMENT_PATTERN.test(segment) ||
+      (index === segments.length - 1 && PROTOTYPE_NEXT_FLIGHT_SEGMENT_PATTERN.test(segment))
+    )
+  })
 }
 
 // --- Data model ----------------------------------------------------------------
@@ -62,6 +71,8 @@ export type PrototypeEntry = {
   /** Thumbnail filename inside the bundle, served at
    *  /p/<stack>/<slug>/<thumb>. */
   thumb: string
+  /** Optional public site artwork shared with work previews. */
+  publicThumbnail?: string
 }
 
 export type PrototypeStack = {
@@ -78,6 +89,31 @@ export type PrototypeStack = {
 
 export const STACKS: PrototypeStack[] = [
   // === SCAFFOLD: scripts/new-prototype.mjs inserts new stacks after this line ===
+  {
+    slug: 'joelops',
+    title: 'Microsoft Global Operations',
+    access: {
+      mode: 'password',
+      // Hash for the shared password (scripts/prototype-password.mjs);
+      // plaintext never enters the repo. Bump tokenVersion to revoke every
+      // outstanding cookie for this stack.
+      passwordHash: 'pbkdf2$100000$F7Rv4T03-0wjgCurbubykfK1ZhNLh4S42kSFJ5jrfVk$ZrWwH_CX82oBs-ZEjck4irRzAmIYccPh53SP-HFjioM',
+      tokenVersion: 1,
+    },
+    listed: true,
+    framing:
+      'A role-based facilities operations dashboard with anonymized campus data, map-based monitoring, and AI-assisted workflows.',
+    prototypes: [
+      {
+        slug: 'demo',
+        title: 'Microsoft Global Operations',
+        summary:
+          'Explore dashboards, work orders, maps, alarms, faults, and Copilot-assisted facilities workflows.',
+        thumb: 'thumb.jpg',
+        publicThumbnail: GLOBAL_OPERATIONS_THUMBNAIL,
+      },
+    ],
+  },
   {
     slug: 'type-lab',
     title: 'Type & motion explorations',

@@ -14,24 +14,21 @@ import { MOTION_DEFAULTS } from '../engine/motionConfig'
 
 /** Short, direct invitation shown on the Vibe surface. */
 export const VIBE_INVITATION =
-  'Welcome to the playground. It’s tuned to my preferences—until you change them, of course. Bend the type, color, and shape, or bring your own. Everything stays in your browser.'
+  'Welcome to the playground. It’s tuned to my preferences—until you change them, of course. Bend the type, color, and shape, or bring your own. Creations are saved to the site and may appear in the gallery.'
 
 /** Label for the single entry point that opens the control dock. */
 export const VIBE_MAKE_IT_YOURS_LABEL = 'Make it yours'
 
 /** Quiet one-line nudge inside the open dock, under the pane header. */
 export const VIBE_DOCK_INVITATION =
-  'Everything here is editable, reversible, and local.'
+  'Make it yours. Undo, experiment, and start again.'
 
 /**
- * Privacy note shown next to the upload control. This must match reality:
- * engine/svgUpload.ts and engine/rasterUpload.ts read the file in-browser,
- * validate it locally, and hand the renderer a data/object URL — no network
- * request is ever made. Do not weaken this copy without checking the
- * validators still behave that way.
+ * Upload disclosure: decoding is local, but qualified sessions and exports
+ * save creations and eligible source images through the creations API.
  */
 export const VIBE_PRIVACY_NOTE =
-  'SVG, PNG, or WebP only — your file is processed entirely in your browser and is never uploaded anywhere.'
+  'SVG, PNG, or WebP only — creations and eligible source images are saved to the site and may appear in the gallery. Only upload material you have permission to share.'
 
 /** Status announced while an uploaded source is being read and validated. */
 export const VIBE_UPLOAD_PENDING_LABEL = 'Reading your image locally…'

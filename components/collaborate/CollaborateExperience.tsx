@@ -35,7 +35,7 @@ export type CollaborateGuideProps = {
   onShare: (replyEmail: string) => void
   onDraftChange: (draft: string) => void
   onNavigateToChat: () => void
-  onNavigateToLanding: () => void
+  onNavigateToHomeSection: () => void
   /** Full-chat header control: pop out (wide) / minimize (narrow). */
   onPopOut?: () => void
   popOutLabel?: string
@@ -105,7 +105,7 @@ export default function CollaborateExperience({
           onRetry={guide.onRetry}
           onDraftChange={guide.onDraftChange}
           onShare={guide.onShare}
-          onBack={guide.onNavigateToLanding}
+          onBack={guide.onNavigateToHomeSection}
           onMinimize={guide.onPopOut}
           minimizeLabel={guide.popOutLabel}
           onSourceNavigate={guide.onSourceNavigate}

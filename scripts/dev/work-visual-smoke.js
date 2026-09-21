@@ -53,10 +53,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 async function enterWork(page) {
   await page.goto(URL, { waitUntil: 'domcontentloaded' })
   await page.addStyleTag({ content: '.tuning-panel,.dev-diagnostics{display:none!important}' })
-  await page.waitForSelector('.primary-actions:not(.options-hidden):not(.options-inert)', {
-    timeout: 30000,
-  })
-  await page.click('.primary-action-button >> text=Work')
+  // Phase 5 entry path: the header menu (the old doorway cards are gone).
+  // html.theme-ready marks React hydration — clicking earlier hits an
+  // inert SSR button.
+  await page.waitForSelector('html.theme-ready', { timeout: 30000 })
+  await page.click('.site-header-menu-button')
+  await page.waitForSelector('#site-menu[open]', { timeout: 10000 })
+  await page.click('.site-menu-link:has-text("Work")')
   await page.waitForSelector('.work-experience', { timeout: 15000 })
   await sleep(1200)
 }
@@ -337,14 +340,15 @@ async function runViewport(browser, name, viewport, mobile, { compactOnly = fals
   check(`${name}: unused delta scrolled content after completion`, state.progress === 1 && state.scrollTop > 1, `progress=${state.progress} scrollTop=${state.scrollTop}`)
   await page.screenshot({ path: path.join(OUT, `${name}-expanded.png`) })
 
-  // --- navigation stays layered above the expanded panel -------------------
+  // The authored width lives in content/work.ts (inlineWidth, emitted as the
+  // --inline-width custom property) — compare the measured ratio against the
+  // authored value rather than a hardcoded one.
   const navHit = await page.evaluate(() => {
-    const buttons = [...document.querySelectorAll('.experience-nav-button')]
-    const button = buttons[Math.floor(buttons.length / 2)]
+    const button = document.querySelector('.site-header-menu-button')
     if (!button) return null
     const r = button.getBoundingClientRect()
     const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
-    return { visible: r.width > 0 && r.height > 0, onTop: !!el && !!el.closest('.experience-nav') }
+    return { visible: r.width > 0 && r.height > 0, onTop: !!el && !!el.closest('.site-header') }
   })
   check(
     `${name}: navigation renders above the expanded card`,
@@ -526,12 +530,20 @@ async function runViewport(browser, name, viewport, mobile, { compactOnly = fals
     const figure = document.querySelector('.work-inline-media--image')
     const content = document.querySelector('.work-experience-content')
     if (!figure || !content) return null
-    return figure.getBoundingClientRect().width / content.getBoundingClientRect().width
+    const authored = parseFloat(getComputedStyle(figure).getPropertyValue('--inline-width')) / 100
+    return {
+      measured: figure.getBoundingClientRect().width / content.getBoundingClientRect().width,
+      authored,
+    }
   })
   if (mobile) {
-    check(`${name}: mobile inline image uses full content width`, imageWidth !== null && imageWidth > 0.95, `ratio=${imageWidth}`)
+    check(`${name}: mobile inline image uses full content width`, imageWidth !== null && imageWidth.measured > 0.95, `ratio=${imageWidth?.measured}`)
   } else {
-    check(`${name}: desktop inline image ≈ 40% of content width`, imageWidth !== null && Math.abs(imageWidth - 0.4) < 0.03, `ratio=${imageWidth}`)
+    check(
+      `${name}: desktop inline image matches its authored inlineWidth`,
+      imageWidth !== null && Math.abs(imageWidth.measured - imageWidth.authored) < 0.03,
+      `measured=${imageWidth?.measured} authored=${imageWidth?.authored}`,
+    )
   }
   await page.screenshot({ path: path.join(OUT, `${name}-images.png`) })
 

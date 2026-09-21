@@ -6,8 +6,8 @@
  *
  * Weather and Matrix are mutually exclusive by construction: a single `mode`
  * selector decides which effect consumes the ambient budget (`off` consumes
- * none). Vibe defaults to Off; the config also carries the landing's weather
- * composition (live Seattle conditions or the seasonal fallback).
+ * none). Vibe defaults to Off; the hero uses the fixed Clear preset's slow
+ * drifting motes over its existing gradient and interactive glyph field.
  *
  * Pure functions only — verified by scripts/verify-ambient-config.js.
  */

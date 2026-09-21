@@ -4,7 +4,7 @@ import { STACKS, findPrototype, findStack } from '../../../../functions/lib/prot
 import HostedPrototypeViewer from '../../../../components/gallery/HostedPrototypeViewer'
 
 type ViewerPageProps = {
-  params: { stack: string; slug: string }
+  params: Promise<{ stack: string; slug: string }>
 }
 
 // Static export: one viewer shell per prototype. Like the stack page, gated
@@ -19,9 +19,10 @@ export function generateStaticParams() {
 
 export const dynamicParams = false
 
-export function generateMetadata({ params }: ViewerPageProps): Metadata {
-  const stack = findStack(params.stack)
-  const prototype = stack ? findPrototype(stack, params.slug) : null
+export async function generateMetadata({ params }: ViewerPageProps): Promise<Metadata> {
+  const resolved = await params
+  const stack = findStack(resolved.stack)
+  const prototype = stack ? findPrototype(stack, resolved.slug) : null
   return {
     title: stack && prototype ? `${prototype.title} — ${stack.title}` : 'Shared prototypes',
     robots: { index: false, follow: false },
@@ -35,18 +36,20 @@ export function generateMetadata({ params }: ViewerPageProps): Metadata {
  * design and the sandbox still blocks top-window navigation, popups, and
  * storage access outside the frame.
  */
-export default function ViewerPage({ params }: ViewerPageProps) {
-  const stack = findStack(params.stack)
+export default async function ViewerPage({ params }: ViewerPageProps) {
+  const resolved = await params
+  const stack = findStack(resolved.stack)
   if (!stack) notFound()
-  const prototype = findPrototype(stack, params.slug)
+  const prototype = findPrototype(stack, resolved.slug)
   if (!prototype) notFound()
 
+  const solo = stack.prototypes.length === 1 && stack.listed
   return (
     <HostedPrototypeViewer
       title={`${prototype.title} — interactive prototype`}
       src={`/p/${stack.slug}/${prototype.slug}/index.html`}
-      backHref={`/p/${stack.slug}`}
-      backLabel="Back to options"
+      backHref={solo ? '/gallery' : `/p/${stack.slug}`}
+      backLabel={solo ? 'Back to gallery' : 'Back to options'}
     />
   )
 }

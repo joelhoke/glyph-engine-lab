@@ -17,3 +17,11 @@ tmp-thumb-capture/
 tmp-seed-creations/
 tmp-proto-build/
 .wrangler/
+
+# Local credentials; templates may be committed without values.
+.env*
+!.env.example
+!.env.*.example
+wrangler.preview.local.toml
+.terminalgraph/
+tmp-work-visual/

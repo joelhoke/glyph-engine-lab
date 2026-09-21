@@ -64,7 +64,7 @@ export function parseExperienceHashTarget(hash: string): ExperienceHashTarget | 
  * Canonicalization guard for the collaborate chat subview: the chat deep link
  * is only meaningful while a conversation exists in memory. A direct load or
  * reload of `#collaborate/chat` (no turns — page memory is session-only)
- * resolves to the bare `#collaborate` landing via history.replaceState in the
+ * resolves to `#home/collaborate` via history.replaceState in the
  * shell; this pure decision keeps that rule testable.
  */
 export function shouldCanonicalizeCollaborateChat(

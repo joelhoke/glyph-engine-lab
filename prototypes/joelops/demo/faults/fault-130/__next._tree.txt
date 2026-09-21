@@ -1,0 +1,2 @@
+:HL["/p/joelops/demo/next-static/static/css/57aa58aa4966245b.css","style"]
+0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"(dashboard)","param":null,"prefetchHints":0,"slots":{"children":{"name":"faults","param":null,"prefetchHints":0,"slots":{"children":{"name":"id","param":{"type":"d","key":"fault-130","siblings":null},"prefetchHints":0,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}}}}}}}},"staleTime":300,"buildId":"joelops"}

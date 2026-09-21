@@ -1,3 +1,5 @@
+import { GLOBAL_OPERATIONS_REEL_POSTER } from './workMedia'
+
 // =============================================================================
 // Work content — single source of truth for the Work experience.
 //
@@ -282,7 +284,7 @@ export const WORK_STORIES: WorkStory[] = [
         height: 1080,
         alt: 'Highlights from Microsoft’s RealComm 2026 keynote — the stage screen shows campus-scale stats and the Live Campus Agent and Aura products built on Building Orchestrator.',
         caption: 'Highlights from Microsoft’s RealComm 2026 keynote presentation, which I supported by developing slide content while collaborating on the strategic story and vision. This work led to Microsoft winning the 2026 Digie award for "Most Intelligent Corporate Headquarters".',
-        poster: '/assets/work/RealComm-Highlights-poster.jpg',
+        poster: GLOBAL_OPERATIONS_REEL_POSTER,
         // TODO: replace with the video's spoken transcript before launch.
         transcript: 'Transcript for this video is being prepared.',
       },

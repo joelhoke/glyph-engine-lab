@@ -1,0 +1,11 @@
+Model Information:
+* title:	Flip Phone
+* source:	https://sketchfab.com/3d-models/flip-phone-7772aca6cc7545dcb47c03b2ceac675f
+* author:	Daniel_litt (https://sketchfab.com/Daniel_litt)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Flip Phone" (https://sketchfab.com/3d-models/flip-phone-7772aca6cc7545dcb47c03b2ceac675f) by Daniel_litt (https://sketchfab.com/Daniel_litt) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

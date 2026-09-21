@@ -1,14 +1,12 @@
 import { COLLABORATE_CONTACT } from './collaborate'
-import { ExperienceSceneKey } from '../engine/types'
 
 /**
- * Site-level identity, recruiter links, and homepage doorway content.
- * Single source for the persistent header (SiteHeader), the homepage
- * identity block, and the doorway cards (DoorwayCard via PrimaryActions).
+ * Site-level identity and recruiter links. Single source for the persistent
+ * header (SiteHeader) and the homepage (content/home.ts consumes
+ * SITE_IDENTITY for the portrait placeholder and introduction).
  *
- * Phase 0 placeholders still owed before launch:
- * - PORTRAIT/AVATAR: the treated monochrome portrait (48px + 200px crops,
- *   WebP + fallback). Both currently point at the monogram.
+/* Phase 0 placeholders still owed before launch:
+ * - AVATAR: the ~48px header avatar still points at the monogram.
  * - RESUME: replace the placeholder public/resume.pdf with the final file.
  * - LINKEDIN: confirm the profile URL below.
  */
@@ -17,11 +15,11 @@ export const SITE_IDENTITY = {
   role: 'Senior Product Designer',
   positioning:
     'Seven years at Microsoft designing the future of work, from employee experience to agentic operations tools.',
-  /** ~200px homepage portrait (placeholder: monogram, treated via CSS). */
-  portraitSrc: '/JHLogo-180.png',
+  /** ~200px homepage portrait (treated cutout WebP). */
+  portraitSrc: '/assets/home/portrait.webp',
   /** ~48px header avatar (placeholder: monogram). */
   avatarSrc: '/JHLogo-180.png',
-  portraitAlt: 'Portrait of Joel Hoke',
+  portraitAlt: 'Joel Hoke smiling with arms outstretched',
 } as const
 
 export const RECRUITER_LINKS = {
@@ -31,67 +29,74 @@ export const RECRUITER_LINKS = {
   email: { url: COLLABORATE_CONTACT.mailtoUrl, label: 'Email' },
 } as const
 
-export type DoorwayPreview = {
-  src: string
-  alt: string
+export const PORTRAIT_CREDIT = 'Portrait sprites from Joel Hoke’s SpriteSamples: AI-generated pencil-sketch head angles and hands, shown in #3B9EC8 blue monotone at rest and fading to matching watercolor sprites during hero interaction.'
+
+export type ModelCredit = {
+  title: string
+  author: string
+  authorUrl: string
+  sourceUrl: string
+  licenseUrl: string
+  /** Where the model appears on the site. */
+  usedFor: string
+  /** Identify our adaptations alongside the original author attribution. */
+  modifications: string
 }
 
-export type DoorwayCardContent = {
-  key: ExperienceSceneKey
-  label: string
-  /** One-line promise: what the visitor gets past the doorway. */
-  promise: string
-  /** Cycling preview frames (first frame is the static/reduced-motion one). */
-  previews: DoorwayPreview[]
-  /** Evidence metadata — the Work card's role + timeframe line. */
-  meta?: string
-}
-
-export const DOORWAY_CARDS: DoorwayCardContent[] = [
+/**
+ * CC-BY-4.0 3D models used in the homepage hero (public/assets/home/models/;
+ * each folder keeps its Sketchfab license.txt). Rendered in the Privacy and
+ * feedback panel's Credits tab — the license requires naming the author.
+ */
+export const MODEL_CREDITS: ModelCredit[] = [
   {
-    key: 'work',
-    label: 'Work',
-    promise: 'Three case studies from campus operations to employee experience.',
-    meta: 'Senior Product Designer · Microsoft · 2019–2026',
-    previews: [
-      {
-        src: '/assets/doorways/work-global-operations.jpg',
-        alt: 'Global Operations — agentic campus operations keynote still',
-      },
-      {
-        src: '/assets/doorways/work-employee-experience.jpg',
-        alt: 'Employee Experience — Viva Connections dashboard',
-      },
-      {
-        src: '/assets/doorways/work-global-compensation.jpg',
-        alt: 'Global Compensation — Total Rewards portal',
-      },
-    ],
+    title: 'CRT Computer Monitor',
+    author: 'Dan (fizyman)',
+    authorUrl: 'https://sketchfab.com/fizyman',
+    sourceUrl:
+      'https://sketchfab.com/3d-models/crt-computer-monitor-f2ff0013f86e4cd0a2aee183a23bdfee',
+    licenseUrl: 'http://creativecommons.org/licenses/by/4.0/',
+    usedFor: 'Work',
+    modifications: 'Recolored with custom logo and highlight-reel screens; textures resized and compressed for the web.',
   },
   {
-    key: 'vibe',
-    label: 'Vibe',
-    promise: 'A live playground for the glyph engine that powers this site.',
-    previews: [
-      {
-        src: '/assets/doorways/vibe-signature.svg',
-        alt: 'The playground in the Signature theme',
-      },
-      {
-        src: '/assets/doorways/vibe-blueprint.svg',
-        alt: 'The playground in the Blueprint theme',
-      },
-    ],
+    title: "Dandys World Brusha's PaintBrush",
+    author: 'NotThatGuy™',
+    authorUrl: 'https://sketchfab.com/Ngboy111111111',
+    sourceUrl:
+      'https://sketchfab.com/3d-models/dandys-world-brushas-paintbrush-19397f41ab1847b8b5391e5896e19d63',
+    licenseUrl: 'http://creativecommons.org/licenses/by/4.0/',
+    usedFor: 'Vibe',
+    modifications: 'Smoothed geometry and recolored paint tip; paired with a separate splatter backdrop.',
   },
   {
-    key: 'collaborate',
-    label: 'Collaborate',
-    promise: 'Ask the AI guide anything — or go straight to Joel’s inbox.',
-    previews: [
-      {
-        src: '/assets/doorways/collaborate-guide.svg',
-        alt: 'A typographic card inviting a question for the guide',
-      },
-    ],
+    title: 'Fancy Picture Frame',
+    author: 'Jamie McFarlane',
+    authorUrl: 'https://sketchfab.com/jamiemcfarlane',
+    sourceUrl:
+      'https://sketchfab.com/3d-models/fancy-picture-frame-b54984abe2394345a81621719bf8bf1a',
+    licenseUrl: 'http://creativecommons.org/licenses/by/4.0/',
+    usedFor: 'Gallery',
+    modifications: 'Recolored.',
+  },
+  {
+    title: 'Flip Phone',
+    author: 'Daniel_litt',
+    authorUrl: 'https://sketchfab.com/Daniel_litt',
+    sourceUrl:
+      'https://sketchfab.com/3d-models/flip-phone-7772aca6cc7545dcb47c03b2ceac675f',
+    licenseUrl: 'http://creativecommons.org/licenses/by/4.0/',
+    usedFor: 'Collaborate',
+    modifications: 'Recolored with an animated hinge, custom invitation and interactive chat screens, clickable original keypad buttons with multi-tap input, illuminated legends, and press feedback, and a pixelated JH standby display.',
+  },
+  {
+    title: 'Notebook_Material',
+    author: 'tinderboxh',
+    authorUrl: 'https://sketchfab.com/tinderboxh',
+    sourceUrl:
+      'https://sketchfab.com/3d-models/notebook-material-e573304fce364cf299027494fc1afede',
+    licenseUrl: 'http://creativecommons.org/licenses/by/4.0/',
+    usedFor: 'Introduction',
+    modifications: 'Recolored with an added opening cover and custom page.',
   },
 ]

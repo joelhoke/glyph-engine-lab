@@ -80,7 +80,7 @@ export default function VibeExperience({
         aria-expanded={controlsOpen}
         aria-controls={controlsId}
       >
-        {VIBE_MAKE_IT_YOURS_LABEL} →
+        {VIBE_MAKE_IT_YOURS_LABEL}
       </button>
     </div>
   )

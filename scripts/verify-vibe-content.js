@@ -8,7 +8,7 @@
  * Checks: presets are complete valid configs (including a complete valid
  * motion config each), copy fields are non-empty, the vibe scene descriptor
  * matches the default composition (which a preset mirrors), the privacy note
- * claims local-only processing, the friendly-error map covers every error
+ * discloses server saves, the friendly-error map covers every error
  * literal the upload validators can produce, 'source-colors' is a known color
  * mode, 'custom' is a known parametric variant, the default playground motion
  * deep-equals MOTION_DEFAULTS (mode off, including the nested custom creature
@@ -271,19 +271,18 @@ assert(
 
 assert(
   VIBE_INVITATION ===
-    'Welcome to the playground. It’s tuned to my preferences—until you change them, of course. Bend the type, color, and shape, or bring your own. Everything stays in your browser.',
+    'Welcome to the playground. It’s tuned to my preferences—until you change them, of course. Bend the type, color, and shape, or bring your own. Creations are saved to the site and may appear in the gallery.',
   'invitation matches the exact authored playground copy',
 )
 
 // --- privacy note ----------------------------------------------------------
 
 assert(
-  /browser/i.test(VIBE_PRIVACY_NOTE) && /never/i.test(VIBE_PRIVACY_NOTE),
-  'privacy note states SVGs are processed in the browser and never uploaded',
+  /saved to the site/i.test(VIBE_PRIVACY_NOTE) && /source images/i.test(VIBE_PRIVACY_NOTE) && /gallery/i.test(VIBE_PRIVACY_NOTE),
+  'privacy note discloses server storage and potential gallery display',
 )
 
-// the privacy claim must match reality: the upload validators must not make
-// network requests — scan their sources for outbound-capable APIs.
+// Decoding and validation remain local; archival saves happen separately.
 const validatorSources = [
   fs.readFileSync(path.join(projectRoot, 'engine', 'svgUpload.ts'), 'utf8'),
   fs.readFileSync(path.join(projectRoot, 'engine', 'rasterUpload.ts'), 'utf8'),
@@ -291,7 +290,7 @@ const validatorSources = [
 for (const source of validatorSources) {
   assert(
     !/\bfetch\s*\(|XMLHttpRequest|sendBeacon|new\s+WebSocket/.test(source),
-    'upload validator source contains no network APIs (privacy note matches reality)',
+    'upload validator source contains no network APIs',
   )
 }
 

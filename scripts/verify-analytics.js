@@ -139,6 +139,35 @@ const protectedClient = createAnalyticsClient({
 protectedClient.grant()
 assert(!protectedClient.isActive(), 'client refuses to activate on protected routes')
 
+// Exercise the browser lifecycle, including withdrawal during script loading.
+const scripts = []
+const commands = []
+const expiredCookies = []
+global.window = { location: { pathname: '/', hostname: 'joelhoke.me' }, gtag: (...args) => commands.push(args) }
+global.document = {
+  createElement: () => ({ remove() { this.removed = true } }),
+  head: { appendChild: (script) => scripts.push(script) },
+  get cookie() { return '_ga=test; _ga_TEST=session; essential=keep' },
+  set cookie(value) { expiredCookies.push(value) },
+}
+const browserClient = createAnalyticsClient({ measurementId: 'G-TEST', storage: memoryStorage() })
+browserClient.grant()
+const staleScript = scripts.at(-1)
+browserClient.deny()
+staleScript.onload()
+assert(!browserClient.isActive() && commands.length === 0, 'withdrawal during loading prevents late activation')
+assert(window['ga-disable-G-TEST'] === true, 'withdrawal disables the provider itself')
+assert(expiredCookies.some(value => value.startsWith('_ga=')) && !expiredCookies.some(value => value.startsWith('essential=')), 'withdrawal clears GA cookies and preserves essential cookies')
+browserClient.grant()
+scripts.at(-1).onload()
+browserClient.track({ name: 'experience_view', params: { experience: 'work' } })
+assert(browserClient.isActive() && commands.filter(args => args[0] === 'event').length === 1, 'explicit regrant resumes tracking')
+browserClient.deny()
+browserClient.track({ name: 'experience_view', params: { experience: 'vibe' } })
+assert(!browserClient.isActive() && commands.filter(args => args[0] === 'event').length === 1, 'withdrawal after loading stops subsequent events without a reload')
+delete global.window
+delete global.document
+
 // --- Structural guarantees in source ---
 
 const analyticsSource = fs.readFileSync(path.join(projectRoot, 'engine', 'analytics.ts'), 'utf8')

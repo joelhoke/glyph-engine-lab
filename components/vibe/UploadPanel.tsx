@@ -152,6 +152,7 @@ export default function UploadPanel({
           </span>
         )}
       </div>
+      <p className="vibe-upload-hint"><a href="/privacy">Privacy</a> · <a href="/terms">Terms of use</a></p>
     </div>
   )
 }

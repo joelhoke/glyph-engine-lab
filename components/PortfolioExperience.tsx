@@ -20,13 +20,23 @@ import { PAINT_DEFAULT_BACKGROUND_COLOR, PAINT_DEFAULT_GLYPH_COLOR } from './vib
 import { useSonification } from './vibe/useSonification'
 import { useClipRecorder } from './vibe/useClipRecorder'
 import { useVibeControlLayout } from './vibe/useVibeControlLayout'
-import PrimaryActions, { ExperienceKey, PRIMARY_ACTION_COUNT } from './PrimaryActions'
+import HomePage from './home/HomePage'
+import type { HomeGalleryProject } from './home/galleryProjects'
 import TuningPanel from './tuning/TuningPanel'
 import AnalyticsConsent from './AnalyticsConsent'
 import { ExperienceMode, ExperienceSceneKey } from '../engine/types'
 import { EXPERIENCE_SCENES, resolveScenePlayground } from '../engine/sceneConfig'
 import { getWorkSlide, getWorkSlideHeroFit, getWorkSlideId, resolveWorkSlideScene, WORK_SLIDES } from '../content/work'
-import { SITE_IDENTITY } from '../content/site'
+import {
+  collaborateHomeRedirect,
+  createHomeHistoryState,
+  parseHomeSection,
+  readHomeHistoryEntry,
+  writeHomeHistoryEntry,
+  createHomeScrollRecorder,
+  SiteDestination,
+} from '../engine/homeNavigation'
+import { HomeSectionId } from '../content/home'
 import {
   COLLABORATE_AI_GUIDE,
   COLLABORATE_CONTACT,
@@ -48,7 +58,6 @@ import {
   COLLABORATE_CHAT_HASH,
   formatExperienceHash,
   parseExperienceHashTarget,
-  shouldCanonicalizeCollaborateChat,
 } from '../engine/experienceHash'
 import {
   GUIDE_COMPANION_MIN_WIDTH_PX,
@@ -81,16 +90,6 @@ import {
 } from '../engine/diagnostics'
 import { QualityTier } from '../engine/qualityTiers'
 import { SceneSourceSelection } from '../engine/animatedSource'
-import {
-  captureSeasonalAtmosphereInput,
-  resolveSeasonalAtmosphere,
-} from '../engine/seasonalAtmosphere'
-import {
-  buildLiveWeatherUrl,
-  LiveConditions,
-  mapLiveConditions,
-} from '../engine/liveWeather'
-import { AmbientConfig } from '../engine/ambientConfig'
 import {
   AMBIENT_SCENE_COUNT,
   AMBIENT_SCENES,
@@ -177,6 +176,11 @@ import {
 import {
   APPROVED_SCENE_DEFAULTS,
   APPROVED_SOURCE_LAYOUT_DEFAULTS,
+  APPROVED_HERO_FAN_DEFAULTS,
+  formatHeroFanCss,
+  heroFanCssProperties,
+  HeroFanChange,
+  HeroFanConfig,
   SceneConfig,
 } from './tuning/tuningConfig'
 import { loadSvgTargets, SourceLayoutConfig } from '../engine/svgTargetSource'
@@ -192,17 +196,17 @@ import {
   portfolioIntroPreset,
   previousPhase,
 } from '../engine/introSequence'
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
-
-function easeOutCubic(t: number): number {
-  return 1 - Math.pow(1 - clamp(t, 0, 1), 3)
-}
+import { MouseEvent as ReactMouseEvent, useEffect, useId, useMemo, useRef, useState } from 'react'
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
-const ACTION_TRANSLATE_PX = 16
+/** Intro-sequence option count (work/vibe/collaborate). Diagnostics only:
+ *  since the homepage-redesign landing replaced the doorway cards, no DOM is
+ *  gated on the sequence — the rAF loop still computes the option progress
+ *  stream for the tuning panel readouts. */
+const PRIMARY_ACTION_COUNT = 3
 
 /** Deep-enough copy for playground configs: the palette array must not be
  *  shared between state and the authored defaults. */
@@ -224,7 +228,6 @@ type SequenceDiagnostics = {
   optionsProgress: number
   optionsVisible: boolean
   optionsReady: boolean
-  optionsMounted: boolean
   optionItemProgress: number[]
   effectiveOptionStaggerMs: number
   effectiveOptionItemDurationMs: number
@@ -245,12 +248,13 @@ type SequenceController = {
 
 const BASE_DOCUMENT_TITLE = 'joel hoke design'
 
-/** Live Seattle weather (engine/liveWeather.ts): per-load fetch with a short
- *  timeout, and a sessionStorage cache so repeat loads within a session
- *  reuse the mapped conditions. */
-const LIVE_WEATHER_CACHE_KEY = 'jh-live-weather'
-const LIVE_WEATHER_CACHE_TTL_MS = 30 * 60 * 1000
-const LIVE_WEATHER_TIMEOUT_MS = 4000
+// Clear keeps the slow drifting motes over the existing gradient and glyph
+// field. It is fixed from the first frame, with no live weather request.
+const DEFAULT_HERO_AMBIENT = {
+  ...buildSceneAmbientConfig('clear'),
+  interactionStrength: 0.6,
+  backdropOpacity: 0,
+}
 
 // On-demand tab experiences. ssr:false is safe here: the static export always
 // prerenders the landing (hash routing resolves client-side), and the
@@ -269,7 +273,7 @@ type UploadedSourceState = {
   filename: string
 }
 
-export default function PortfolioExperience() {
+export default function PortfolioExperience({ galleryProjects = [] }: { galleryProjects?: HomeGalleryProject[] }) {
   // System light/dark theme (feature/light-dark): 'dark' on the first paint,
   // the real preference after hydration, live updates on OS changes. Drives
   // the canvas colors and the CSS is handled by globals.css media queries.
@@ -277,7 +281,6 @@ export default function PortfolioExperience() {
   // Shell state: intro → work ↔ vibe ↔ collaborate. Starts at intro unless a
   // deep-link hash resolves to a mode on mount (handled below).
   const [experience, setExperience] = useState<ExperienceMode>('intro')
-  const [selected, setSelected] = useState<ExperienceKey | null>(null)
   // Stable mirror for the mount-once hash listener, whose closure would
   // otherwise capture the initial mode forever.
   const experienceRef = useRef<ExperienceMode>('intro')
@@ -608,11 +611,9 @@ export default function PortfolioExperience() {
   // canvas morphs to the authored per-topic treatment (null = starter/baseline).
   const [collaborateGuideTopic, setCollaborateGuideTopic] = useState<CollaborateTopic | null>(null)
 
-  // Collaborate subview: the guide landing or the chat. Selecting Collaborate
-  // from another mode always opens the landing; the chat is reachable via
-  // #collaborate/chat (and canonicalized back to the landing when no
-  // conversation exists in memory).
-  const [collaborateView, setCollaborateView] = useState<'landing' | 'chat'>('landing')
+  // Collaborate now lives on Home; only full-screen chat uses this scene.
+  // Empty-session chat deep links resolve to the homepage phone.
+  const [collaborateView, setCollaborateView] = useState<'landing' | 'chat'>('chat')
 
   // Guide conversation session (page-load memory only — NO browser storage).
   // Owned here so it survives landing ↔ chat navigation. Created lazily in an
@@ -639,7 +640,7 @@ export default function PortfolioExperience() {
   }
 
   // Guide presentation: how the conversation appears while the visitor
-  // browses. 'page' = the full chat view (#collaborate/chat); 'companion' =
+  // browses. 'page' = the inline Home phone or full #collaborate/chat view; 'companion' =
   // docked panel alongside Work/Vibe (wide viewports); 'minimized' = resume
   // bar/pill. Page memory only — no storage, no new URLs. The narrow-viewport
   // modal overlay is a flag on top of 'minimized', not a fourth presentation.
@@ -828,12 +829,6 @@ export default function PortfolioExperience() {
   // Sound control (session-only): expansion state only — playback/config live
   // in useSonification. Expanding never starts audio.
   const [soundExpanded, setSoundExpanded] = useState(false)
-
-  // Landing atmosphere: the Seattle-tuned seasonal mood first (computed on
-  // mount from the local date/locale), swapped for live Seattle conditions
-  // when the Open-Meteo fetch resolves — applied at full intensity from the
-  // first landing frame, no ramp.
-  const [landingAmbient, setLandingAmbient] = useState<AmbientConfig | null>(null)
 
   // Vibe-only paint tool state (session-only; never URL-persisted) and the
   // live overlay status reported by the canvas.
@@ -1263,9 +1258,6 @@ export default function PortfolioExperience() {
     evaluateIntroSequence(0, portfolioIntroPreset.timing),
   )
 
-  // Direct DOM ref for full-rate visual updates (not throttled diagnostics).
-  const actionsRef = useRef<HTMLDivElement | null>(null)
-
   // Throttled diagnostic state: drives text readouts only.
   const [diagnostics, setDiagnostics] = useState<SequenceDiagnostics>({
     phase: 'logo-scale',
@@ -1276,7 +1268,6 @@ export default function PortfolioExperience() {
     optionsProgress: 0,
     optionsVisible: false,
     optionsReady: false,
-    optionsMounted: true,
     optionItemProgress: Array(PRIMARY_ACTION_COUNT).fill(0),
     effectiveOptionStaggerMs: portfolioIntroPreset.timing.optionStagger,
     effectiveOptionItemDurationMs: 0,
@@ -1408,11 +1399,11 @@ export default function PortfolioExperience() {
     let raf: number | null = null
     let lastDiagnosticTick = 0
 
-    const updateActionsVisuals = (sequence: IntroSequenceSnapshot) => {
-      const node = actionsRef.current
-      if (!node) return
-
-      const optionsVisible = sequence.optionsVisible
+    // Pure option-progress computation for the diagnostics readouts. The
+    // landing options are no longer gated on the sequence (homepage-redesign
+    // phase 2): the homepage renders and navigates immediately, so nothing
+    // here touches the DOM anymore.
+    const computeOptionMeta = (sequence: IntroSequenceSnapshot) => {
       const optionsReady = sequence.optionsReady
       const timing = timingRef.current
       const { optionsTransitionDuration, optionStagger } = timing
@@ -1441,17 +1432,6 @@ export default function PortfolioExperience() {
             )
       }
 
-      for (let i = 0; i < PRIMARY_ACTION_COUNT; i += 1) {
-        const eased = optionsVisible ? easeOutCubic(itemProgresses[i]) : 0
-        node.style.setProperty(`--option-progress-${i}`, String(eased))
-      }
-
-      const groupHidden = !optionsVisible || itemProgresses.every((p) => p <= 0)
-      node.classList.toggle('options-hidden', groupHidden)
-      node.classList.toggle('options-inert', !optionsReady)
-      node.setAttribute('aria-hidden', String(!optionsVisible))
-      node.toggleAttribute('inert', !optionsReady)
-
       return { itemProgresses, timingFallbackActive }
     }
 
@@ -1464,27 +1444,23 @@ export default function PortfolioExperience() {
       const next = evaluateIntroSequence(elapsed, timing)
       sequenceRef.current = next
 
-      // Full-rate visual update path: apply directly to the DOM/canvas
-      // without React re-render. The logo scale goes to the canvas
-      // imperatively; the option reveals are CSS custom properties. Once the
-      // sequence IS complete and WAS complete last tick its output is static
-      // — skip the push so a re-armed parked loop (return Home) never stomps
-      // a freshly triggered field reveal with the settled scale. The
-      // completing frame itself still pushes the final 1.
+      // Full-rate visual update path: apply directly to the canvas without
+      // React re-render — the logo scale goes to the canvas imperatively.
+      // Once the sequence IS complete and WAS complete last tick its output
+      // is static — skip the push so a re-armed parked loop (return Home)
+      // never stomps a freshly triggered field reveal with the settled
+      // scale. The completing frame itself still pushes the final 1.
       if (!(next.phase === 'complete' && introPrevPhaseRef.current === 'complete')) {
         sceneCanvasRef.current?.setLandingLogoScale(next.logoScale)
       }
       introPrevPhaseRef.current = next.phase
-      const actionMeta = updateActionsVisuals(next)
+      const actionMeta = computeOptionMeta(next)
 
       // Throttle diagnostic React state updates to ~10fps. The completing
       // frame always pushes so the settled state lands before the loop parks.
       if (next.phase === 'complete' || now - lastDiagnosticTick > 100) {
         const optionsProgress = next.optionsVisible ? next.optionsProgress : 0
-        const { itemProgresses, timingFallbackActive } = actionMeta ?? {
-          itemProgresses: Array(PRIMARY_ACTION_COUNT).fill(0),
-          timingFallbackActive: false,
-        }
+        const { itemProgresses, timingFallbackActive } = actionMeta
         const totalDuration = getTotalDuration(timing)
         const { effectiveStaggerMs, itemDurationMs } = getStaggeredItemProgress({
           phaseElapsedMs: next.phaseElapsedMs,
@@ -1503,7 +1479,6 @@ export default function PortfolioExperience() {
           optionsProgress,
           optionsVisible: next.optionsVisible,
           optionsReady: next.optionsReady,
-          optionsMounted: !!actionsRef.current,
           optionItemProgress: itemProgresses,
           effectiveOptionStaggerMs: effectiveStaggerMs,
           effectiveOptionItemDurationMs: itemDurationMs,
@@ -1567,29 +1542,70 @@ export default function PortfolioExperience() {
     return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [])
 
-  // Returning to the landing remounts the PrimaryActions node; re-arm the
-  // (possibly parked) intro loop so its next frame reapplies the settled
-  // options classes to the fresh node, exactly as the always-running loop
-  // did before. Mode switches away refresh the diagnostics' optionsMounted.
+  // Mode switches re-arm the (possibly parked) intro loop so its next tick
+  // refreshes the diagnostics readouts for the tuning panel.
   useEffect(() => {
     restartIntroLoop()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayed])
 
-  const navigateTo = (key: ExperienceSceneKey | null) => {
+  // --- Homepage navigation state (homepage-redesign phase 2) ----------------
+  // Home is NOT an engine scene: it's the root landing (`/`) with in-page
+  // sections at `#home/<section>`. Homepage history entries carry a
+  // namespaced `jhHome` record (engine/homeNavigation.ts) with the entry key
+  // and the visitor's scroll position, so back/forward restores position.
+
+  /** Current homepage history entry key, null off Home. */
+  const homeEntryKeyRef = useRef<string | null>(null)
+  /** Idempotency token for the popstate/hashchange resolver — a traversal
+   *  can fire both events for one location change. */
+  const lastResolvedTokenRef = useRef<string | null>(null)
+  /** Scroll/focus work waiting for Home to be mounted (the transition delays
+   *  `displayed`, so scene → home-section navigation must wait for the swap).
+   *  The nonce re-fires the consuming effect when `displayed` doesn't change. */
+  const pendingHomeScrollRef = useRef<
+    | { kind: 'restore'; scrollY: number }
+    | { kind: 'section'; section: HomeSectionId; smooth: boolean; focus: boolean }
+    | null
+  >(null)
+  const [homeScrollNonce, setHomeScrollNonce] = useState(0)
+  /** Hero element reported up from HomePage: sizes the canvas viewport on
+   *  Home (ResizeObserver) and feeds hero visibility (IntersectionObserver). */
+  const [heroNode, setHeroNode] = useState<HTMLElement | null>(null)
+  const sceneViewportRef = useRef<HTMLDivElement | null>(null)
+  // Hero visibility drives canvas suspension on Home (phase 3): while the
+  // hero is scrolled off screen the frame loop parks entirely. Phase 5 adds
+  // menu-covered suspension as another OR condition on the same prop.
+  const [heroVisible, setHeroVisible] = useState(true)
+  const isHome = displayed === 'intro'
+  // Full-screen menu (phase 5): reported up from SiteHeader so the shell can
+  // suspend the canvas and the hero parallax while the menu covers them
+  // (opening/closing must never disturb canvas composition or scroll).
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  /** Stamp the current history entry with the live scroll position while it
+   *  is a homepage entry (no-op elsewhere). */
+  const recordHomeScrollPosition = () => {
+    const key = homeEntryKeyRef.current
+    if (key === null || typeof window === 'undefined') return
+    writeHomeHistoryEntry({ key, scrollY: window.scrollY })
+  }
+
+  const navigateTo = (key: ExperienceSceneKey | null): void => {
+    if (key === 'collaborate') {
+      handleSiteNavigate({ kind: 'home', section: 'collaborate' })
+      return
+    }
     const doNavigate = () => {
       // Leaving the full chat page via the nav retains the conversation as
-      // the companion (wide) or the minimized resume bar (narrow); entering
-      // Collaborate keeps that chrome too — the landing's resume view
-      // coexists with the docked conversation.
+      // the companion (wide) or the minimized resume bar (narrow).
       const leavingChatPage =
         COLLABORATE_AI_GUIDE && displayed === 'collaborate' && collaborateView === 'chat'
       const hasConversation = (guideStateRef.current?.turns.length ?? 0) > 0
-      if (leavingChatPage && hasConversation && key !== 'collaborate') {
+      if (leavingChatPage && hasConversation) {
         setGuidePresentation(resolveGuideExitPresentation(window.innerWidth))
         setGuideOverlayOpen(false)
       }
-      setSelected(key)
       setExperience(key ?? 'intro')
       // Home (null): the scene-adoption effect skips the intro mode, so the
       // landing's behavior/layout are restored explicitly here — otherwise
@@ -1599,9 +1615,6 @@ export default function PortfolioExperience() {
         setSceneConfig({ ...APPROVED_SCENE_DEFAULTS })
         setSourceLayout({ ...APPROVED_SOURCE_LAYOUT_DEFAULTS })
       }
-      // Selecting Collaborate from Work/Vibe ALWAYS opens the landing, even
-      // when a conversation exists in memory (the landing previews it).
-      if (key === 'collaborate') setCollaborateView('landing')
       // Home strips the hash entirely (pathname + search) instead of
       // introducing a #home sentinel, so `/` stays the canonical landing URL.
       const nextUrl = key
@@ -1614,8 +1627,18 @@ export default function PortfolioExperience() {
         // pushState (not location.hash assignment) so no hashchange event fires;
         // the listener below owns back/forward navigation only. Every state
         // update simply replaces the previous one, so rapid navigation always
-        // resolves to the last selected mode.
-        window.history.pushState(null, '', nextUrl)
+        // resolves to the last selected mode. Final scroll record for the
+        // outgoing homepage entry (the scroll listener keeps it fresh
+        // continuously; this catches the synchronous gap).
+        recordHomeScrollPosition()
+        if (key === null) {
+          const homeState = createHomeHistoryState(0)
+          window.history.pushState(homeState, '', nextUrl)
+          homeEntryKeyRef.current = homeState.jhHome.key
+        } else {
+          window.history.pushState(null, '', nextUrl)
+          homeEntryKeyRef.current = null
+        }
       }
     }
     // Leaving vibe keeps the visitor's paint and undo history for the whole
@@ -1624,21 +1647,178 @@ export default function PortfolioExperience() {
     doNavigate()
   }
 
+  /** Header home mark: back to the landing, explicitly at the top of page. */
+  const handleHomeSelect = () => {
+    const alreadyHome = experienceRef.current === 'intro'
+    navigateTo(null)
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    window.scrollTo({ top: 0, left: 0, behavior: alreadyHome && !reduced ? 'smooth' : 'instant' })
+  }
+
+  /** Full-screen menu navigation (phase 5): the typed destinations from
+   *  SITE_NAVIGATION resolved through the existing navigation coordinator —
+   *  scene links run the full navigation lifecycle (scene adoption, chat
+   *  presentation, hash), home links reuse the landing/section scroll
+   *  machinery. Distinct from the homepage hero cards, which scroll to the
+   *  section previews instead of opening the full experiences. */
+  const handleSiteNavigate = (target: SiteDestination) => {
+    switch (target.kind) {
+      case 'home':
+        if (target.section) {
+          if (target.section === 'collaborate') {
+            setGuidePresentation('page')
+            setGuideOverlayOpen(false)
+            setGuideUnseenAnswer(false)
+          }
+          const hash = `#home/${target.section}`
+          if (typeof window !== 'undefined' && window.location.hash !== hash) {
+            recordHomeScrollPosition()
+            lastResolvedTokenRef.current = null
+            const homeState = createHomeHistoryState(0)
+            window.history.pushState(homeState, '', `/${hash}`)
+            homeEntryKeyRef.current = homeState.jhHome.key
+          }
+          if (experienceRef.current !== 'intro') {
+            setExperience('intro')
+            setSceneConfig({ ...APPROVED_SCENE_DEFAULTS })
+            setSourceLayout({ ...APPROVED_SOURCE_LAYOUT_DEFAULTS })
+          }
+          pendingHomeScrollRef.current = {
+            kind: 'section',
+            section: target.section,
+            smooth: true,
+            focus: true,
+          }
+          setHomeScrollNonce((n) => n + 1)
+          return
+        }
+        handleHomeSelect()
+        return
+      case 'work':
+        if (target.storyId) {
+          const index = WORK_SLIDES.findIndex(
+            (slide) => slide.kind === 'project' && slide.story.id === target.storyId,
+          )
+          if (index >= 0) {
+            navigateTo('work')
+            setWorkSlideIndex(index)
+            const hash = `#work/${target.storyId}`
+            if (window.location.hash !== hash) window.history.replaceState(null, '', hash)
+            return
+          }
+        }
+        navigateTo('work')
+        return
+      case 'scene':
+        navigateTo(target.key)
+        return
+      case 'route':
+        // Plain route links (/gallery) navigate natively — the menu never
+        // intercepts them.
+        return
+    }
+  }
+
+  /** Homepage hero/section links: intercept unmodified primary clicks only —
+   *  modified clicks (cmd/ctrl/middle) stay ordinary anchors. Pushes a fresh
+   *  homepage history entry, then scrolls smoothly (unless reduced motion)
+   *  and focuses the section heading once Home is mounted. */
+  const handleHomeSectionLink = (
+    event: ReactMouseEvent<HTMLAnchorElement>,
+    section: HomeSectionId,
+  ) => {
+    if (event.defaultPrevented || event.button !== 0) return
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    const hash = `#home/${section}`
+    if (window.location.hash !== hash) {
+      recordHomeScrollPosition()
+      const homeState = createHomeHistoryState(0)
+      window.history.pushState(homeState, '', `/${hash}`)
+      homeEntryKeyRef.current = homeState.jhHome.key
+    }
+    pendingHomeScrollRef.current = { kind: 'section', section, smooth: true, focus: true }
+    setHomeScrollNonce((n) => n + 1)
+  }
+
   // Deep links: resolve the initial hash (skipping the intro) and keep the
-  // mode in sync with back/forward navigation. `#work/<storyId>` deep links
+  // mode in sync with back/forward navigation. `#home/<section>` is checked
+  // BEFORE the experience parser (homepage sections, not scenes — 'home' is
+  // not a scene key, so the two never collide). `#work/<storyId>` deep links
   // also select that story's project slide; unknown story ids degrade to the
   // bare work mode (slide untouched). `#collaborate/chat` deep links open the
   // chat subview while a conversation exists in memory; without turns (e.g. a
   // direct load or reload — page memory only) the hash canonicalizes to the
-  // bare `#collaborate` landing via replaceState. An EMPTY hash is the
+  // homepage `#home/collaborate` section via replaceState. An EMPTY hash is the
   // canonical home URL: back/forward onto `/` settles the landing (without
   // replaying the intro) and restores the landing scene defaults. Unrecognized
   // non-empty hashes (e.g. `#main-content` from the skip link) stay untouched.
+  // popstate and hashchange share ONE idempotent resolver (a traversal can
+  // fire both): the token collapses the duplicate. `history.scrollRestoration`
+  // is manual while the root experience is mounted — homepage entries restore
+  // their recorded scroll positions themselves.
   useEffect(() => {
-    const applyHash = () => {
-      const target = parseExperienceHashTarget(window.location.hash)
+    const previousScrollRestoration = window.history.scrollRestoration
+    window.history.scrollRestoration = 'manual'
+
+    const applyHash = (trigger: 'mount' | 'traverse') => {
+      let hash = window.location.hash
+      const redirect = collaborateHomeRedirect(hash, (guideStateRef.current?.turns.length ?? 0) > 0)
+      if (redirect) {
+        window.history.replaceState(window.history.state, '', redirect)
+        hash = redirect
+      }
+      const homeEntry = readHomeHistoryEntry(window.history.state)
+      const token = `${hash}::${homeEntry?.key ?? ''}`
+      if (token === lastResolvedTokenRef.current) return
+      // Fragment-only same-document navigations CLONE the outgoing entry's
+      // history state onto the new entry — recognizable by the unchanged
+      // entry key. Those are fresh homepage entries (scroll to the section /
+      // keep position), not back/forward traversals (restore the recorded
+      // position).
+      const isOwnHomeEntry =
+        homeEntry !== null && homeEntry.key !== homeEntryKeyRef.current
+      const homeSection = parseHomeSection(hash)
+      if (homeSection) {
+        if (homeSection === 'collaborate') {
+          setGuidePresentation('page')
+          setGuideOverlayOpen(false)
+          setGuideUnseenAnswer(false)
+        }
+        lastResolvedTokenRef.current = token
+        // Home section navigation waits until Home is mounted before
+        // scrolling/focusing: settle the landing, then the pending-scroll
+        // effect below consumes the request after the swap.
+        if (experienceRef.current !== 'intro') {
+          setExperience('intro')
+          setSceneConfig({ ...APPROVED_SCENE_DEFAULTS })
+          setSourceLayout({ ...APPROVED_SOURCE_LAYOUT_DEFAULTS })
+        }
+        if (isOwnHomeEntry && homeEntry) {
+          homeEntryKeyRef.current = homeEntry.key
+          // Traversals and reloads restore the entry's recorded position.
+          pendingHomeScrollRef.current = { kind: 'restore', scrollY: homeEntry.scrollY }
+        } else {
+          const fresh = createHomeHistoryState(window.scrollY)
+          writeHomeHistoryEntry(fresh.jhHome)
+          homeEntryKeyRef.current = fresh.jhHome.key
+          // Direct loads land on the section immediately (native fragment
+          // scroll already honors the section's scroll-margin — this is
+          // the fallback).
+          pendingHomeScrollRef.current = {
+            kind: 'section',
+            section: homeSection,
+            smooth: false,
+            focus: false,
+          }
+        }
+        setHomeScrollNonce((n) => n + 1)
+        return
+      }
+      const target = parseExperienceHashTarget(hash)
       if (target) {
-        setSelected(target.key)
+        lastResolvedTokenRef.current = token
+        homeEntryKeyRef.current = null
         setExperience(target.key)
         if (target.key === 'work' && target.storyId) {
           const index = WORK_SLIDES.findIndex(
@@ -1647,37 +1827,183 @@ export default function PortfolioExperience() {
           if (index >= 0) setWorkSlideIndex(index)
         }
         if (target.key === 'collaborate') {
-          const hasTurns = (guideStateRef.current?.turns.length ?? 0) > 0
-          if (shouldCanonicalizeCollaborateChat(target, hasTurns)) {
-            window.history.replaceState(null, '', formatExperienceHash('collaborate'))
-            setCollaborateView('landing')
-          } else {
-            setCollaborateView(target.subview === 'chat' ? 'chat' : 'landing')
-          }
-          // Back/forward into the chat deep link returns the conversation to
-          // the full page; a bare #collaborate keeps the companion/minimized
-          // chrome alongside the landing's resume view.
+          setCollaborateView('chat')
+          // Legacy landing URLs have already resolved to Home above.
           if (target.subview === 'chat') {
             setGuidePresentation('page')
             setGuideOverlayOpen(false)
             setGuideUnseenAnswer(false)
           }
         }
-      } else if (window.location.hash.replace(/^#/, '').trim() === '') {
-        // Home: raw settle (same pattern as the deep-link branch above),
-        // skipped when the landing is already showing so the intro's first
-        // paint never sees a fresh sceneConfig identity mid-sequence.
+      } else if (hash.replace(/^#/, '').trim() === '') {
+        // Home (/): stamp a homepage history entry when none exists (first
+        // load), and restore the recorded position on traversals/reloads.
+        if (isOwnHomeEntry && homeEntry) {
+          homeEntryKeyRef.current = homeEntry.key
+          lastResolvedTokenRef.current = token
+          pendingHomeScrollRef.current = { kind: 'restore', scrollY: homeEntry.scrollY }
+          setHomeScrollNonce((n) => n + 1)
+        } else {
+          const fresh = createHomeHistoryState(window.scrollY)
+          writeHomeHistoryEntry(fresh.jhHome)
+          homeEntryKeyRef.current = fresh.jhHome.key
+        }
+        // Raw settle (same pattern as the deep-link branch above), skipped
+        // when the landing is already showing so the intro's first paint
+        // never sees a fresh sceneConfig identity mid-sequence.
         if (experienceRef.current === 'intro') return
-        setSelected(null)
+        lastResolvedTokenRef.current = token
         setExperience('intro')
         setSceneConfig({ ...APPROVED_SCENE_DEFAULTS })
         setSourceLayout({ ...APPROVED_SOURCE_LAYOUT_DEFAULTS })
       }
     }
-    applyHash()
-    window.addEventListener('hashchange', applyHash)
-    return () => window.removeEventListener('hashchange', applyHash)
+    applyHash('mount')
+    const onTraverse = () => applyHash('traverse')
+    window.addEventListener('hashchange', onTraverse)
+    window.addEventListener('popstate', onTraverse)
+    return () => {
+      window.removeEventListener('hashchange', onTraverse)
+      window.removeEventListener('popstate', onTraverse)
+      window.history.scrollRestoration = previousScrollRestoration
+    }
   }, [])
+
+  // Pending homepage scroll/focus work, consumed once Home is mounted.
+  // Explicit clicks scroll smoothly (unless reduced motion) and focus the
+  // section heading (focus without scroll, then scrollIntoView — the
+  // introduction's scroll-margin-top supplies the header clearance); direct loads
+  // and history restoration scroll immediately and never move focus.
+  useEffect(() => {
+    if (displayed !== 'intro') return
+    const pending = pendingHomeScrollRef.current
+    if (!pending) return
+    pendingHomeScrollRef.current = null
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (pending.kind === 'restore') {
+      window.scrollTo({ top: pending.scrollY, left: 0, behavior: 'instant' })
+      reassertAfterFontsSettle({ kind: 'restore', scrollY: pending.scrollY })
+      return
+    }
+    const sectionEl = document.getElementById(`home/${pending.section}`)
+    if (!sectionEl) return
+    if (pending.focus) {
+      document.getElementById(`home-${pending.section}-heading`)?.focus({ preventScroll: true })
+    }
+    const smooth = pending.smooth && !reduced
+    sectionEl.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant', block: 'start' })
+    // Font-swap drift (phase-2 known issue): the instant scroll lands before
+    // the self-hosted fonts finish, then the swap shifts content a few
+    // hundred px. Re-assert the target once fonts settle — never for
+    // user-initiated smooth scrolls, and never after the visitor scrolls.
+    if (!smooth) {
+      reassertAfterFontsSettle({ kind: 'section', section: pending.section })
+    }
+  }, [displayed, homeScrollNonce])
+
+  /** Re-assert an instant homepage scroll target after the self-hosted
+   *  fonts finish swapping (font-swap drift moved the landing ~200px on
+   *  direct `#home/*` loads). Canceled the moment the visitor scrolls —
+   *  this never fights the user. */
+  const reassertAfterFontsSettle = (
+    target: { kind: 'restore'; scrollY: number } | { kind: 'section'; section: HomeSectionId },
+  ) => {
+    let settled = false
+    let userScrolled = false
+    const markUserScrolled = () => {
+      userScrolled = true
+    }
+    const reassert = () => {
+      if (settled) return
+      settled = true
+      cleanup()
+      if (userScrolled) return
+      if (target.kind === 'restore') {
+        window.scrollTo({ top: target.scrollY, left: 0, behavior: 'instant' })
+        return
+      }
+      document
+        .getElementById(`home/${target.section}`)
+        ?.scrollIntoView({ behavior: 'instant', block: 'start' })
+    }
+    const cleanup = () => {
+      window.removeEventListener('wheel', markUserScrolled)
+      window.removeEventListener('touchmove', markUserScrolled)
+      window.removeEventListener('keydown', markUserScrolled)
+    }
+    window.addEventListener('wheel', markUserScrolled, { passive: true })
+    window.addEventListener('touchmove', markUserScrolled, { passive: true })
+    window.addEventListener('keydown', markUserScrolled)
+    const fontsReady: Promise<unknown> =
+      typeof document !== 'undefined' && document.fonts?.ready
+        ? document.fonts.ready
+        : Promise.resolve()
+    // A hanging font load must never wedge the landing: the re-assert fires
+    // when fonts settle, or after a 1.6s cap, whichever comes first —
+    // unless the visitor scrolled in the meantime, which always wins.
+    const timeout = new Promise((resolve) => window.setTimeout(resolve, 1600))
+    Promise.race([fontsReady, timeout]).then(() => {
+      reassert()
+    })
+  }
+
+  // Homepage scroll positions are recorded into the current history entry
+  // at a bounded rate, with a final write on page exit — so
+  // back/forward onto any homepage entry restores where the visitor was.
+  useEffect(() => {
+    if (displayed !== 'intro') return
+    const recorder = createHomeScrollRecorder(recordHomeScrollPosition)
+    window.addEventListener('scroll', recorder.schedule, { passive: true })
+    window.addEventListener('scrollend', recorder.flush)
+    window.addEventListener('pagehide', recorder.flush)
+    return () => {
+      window.removeEventListener('scroll', recorder.schedule)
+      window.removeEventListener('scrollend', recorder.flush)
+      window.removeEventListener('pagehide', recorder.flush)
+      recorder.flush()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayed])
+
+  // Viewport-bound modes never carry the homepage's document scroll — reset
+  // before the mode settles (the homepage keeps its own positions via the
+  // history entries above).
+  useEffect(() => {
+    if (displayed !== 'intro') window.scrollTo(0, 0)
+  }, [displayed])
+
+  // On Home the canvas viewport is exactly the hero's height (below it the
+  // page is document background); elsewhere it fills the viewport-bound
+  // shell. The height is written to the wrapper imperatively, never rebuilt
+  // per scroll — only real hero resizes (fonts, breakpoints) re-measure.
+  useEffect(() => {
+    const viewport = sceneViewportRef.current
+    if (!viewport) return
+    if (displayed !== 'intro' || !heroNode) {
+      viewport.style.height = ''
+      return
+    }
+    const measure = () => {
+      viewport.style.height = `${Math.round(heroNode.getBoundingClientRect().height)}px`
+    }
+    measure()
+    let observer: ResizeObserver | null = null
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(measure)
+      observer.observe(heroNode)
+    }
+    return () => observer?.disconnect()
+  }, [displayed, heroNode])
+
+  // Hero visibility, plumbed for a later phase (canvas suspension while the
+  // hero is off screen) — surfaced as a data attribute for now.
+  useEffect(() => {
+    if (displayed !== 'intro' || !heroNode) return
+    if (typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(([entry]) => setHeroVisible(entry.isIntersecting))
+    observer.observe(heroNode)
+    return () => observer.disconnect()
+  }, [displayed, heroNode])
 
   // Scene switch: adopt the active scene's behavior and source layout so the
   // canvas morphs to the new descriptor. The SceneCanvas instance itself
@@ -1801,38 +2127,21 @@ export default function PortfolioExperience() {
       // pushState (not location.hash assignment) so no hashchange event fires;
       // the listener above owns back/forward navigation only.
       window.history.pushState(null, '', COLLABORATE_CHAT_HASH)
+      lastResolvedTokenRef.current = null
     }
   }
 
-  const navigateToCollaborateLanding = () => {
-    setCollaborateView('landing')
-    if (
-      typeof window !== 'undefined' &&
-      window.location.hash !== formatExperienceHash('collaborate')
-    ) {
-      window.history.pushState(null, '', formatExperienceHash('collaborate'))
-    }
+  const returnToHomeCollaborate = () => {
+    handleSiteNavigate({ kind: 'home', section: 'collaborate' })
   }
 
   // --- Guide presentation actions (companion / minimized / overlay) ---------
 
-  /** Full-chat header control: "Pop chat out" (wide) / "Minimize chat"
-   *  (narrow). Returns to the collaborate landing — the last place the
-   *  visitor was before the conversation — with the chat docked (wide) or
-   *  minimized (narrow) alongside it. Back from there restores
-   *  #collaborate/chat. */
+  /** Pop out/minimize the full chat over the homepage Collaborate section. */
   const exitGuideChatPage = () => {
+    handleSiteNavigate({ kind: 'home', section: 'collaborate' })
     setGuidePresentation(resolveGuideExitPresentation(window.innerWidth))
     setGuideOverlayOpen(false)
-    setSelected('collaborate')
-    setExperience('collaborate')
-    setCollaborateView('landing')
-    if (
-      typeof window !== 'undefined' &&
-      window.location.hash !== formatExperienceHash('collaborate')
-    ) {
-      window.history.pushState(null, '', formatExperienceHash('collaborate'))
-    }
   }
 
   /** Intentional internal source navigation: a validated `#work/<storyId>`
@@ -1846,7 +2155,6 @@ export default function PortfolioExperience() {
       const nextPresentation = resolveGuideExitPresentation(window.innerWidth)
       setGuidePresentation(nextPresentation)
       setGuideOverlayOpen(false)
-      setSelected('work')
       setExperience('work')
       setWorkSlideIndex(target.slideIndex)
       // Same-story re-click while Work is already settled: the slide-change
@@ -1875,11 +2183,15 @@ export default function PortfolioExperience() {
       setGuidePresentation('page')
       setGuideOverlayOpen(false)
       setGuideUnseenAnswer(false)
-      setSelected('collaborate')
       setExperience('collaborate')
       setCollaborateView('chat')
       if (typeof window !== 'undefined' && window.location.hash !== COLLABORATE_CHAT_HASH) {
+        recordHomeScrollPosition()
         window.history.pushState(null, '', COLLABORATE_CHAT_HASH)
+        homeEntryKeyRef.current = null
+        // A browser Back to the original section must resolve again even
+        // if it was the last hash processed before this programmatic push.
+        lastResolvedTokenRef.current = null
       }
     }
     if (displayed === 'vibe') {
@@ -1934,7 +2246,7 @@ export default function PortfolioExperience() {
   /** Optimistically append the visitor message, navigate to the chat, and
    *  send the full transcript. A starter id also applies its canvas glyph
    *  treatment (existing behavior). */
-  const sendGuideMessage = (raw: string, starterId?: string) => {
+  const sendGuideMessage = (raw: string, starterId?: string, stayInline = false) => {
     const current = guideStateRef.current
     if (!current) return
     const begun = beginTurn(current, raw, guideDepsRef.current)
@@ -1943,7 +2255,7 @@ export default function PortfolioExperience() {
     if (starterId) setCollaborateStarterId(starterId)
     // Sending from the docked companion or the narrow overlay keeps the
     // visitor where they are; only a page-context send opens the chat view.
-    if (guidePresentation === 'page') navigateToCollaborateChat()
+    if (guidePresentation === 'page' && !stayInline) navigateToCollaborateChat()
     void completeGuideTurn(begun.state)
   }
 
@@ -2001,6 +2313,18 @@ export default function PortfolioExperience() {
   const retryGuideMessage = () => {
     const lastAttempt = guideStateRef.current?.lastAttempt
     if (lastAttempt) sendGuideMessage(lastAttempt)
+  }
+
+  const popOutHomeGuide = () => {
+    setGuideUnseenAnswer(false)
+    if (window.innerWidth >= GUIDE_COMPANION_MIN_WIDTH_PX) {
+      guideResumeFocusRef.current = true
+      setGuidePresentation('companion')
+      setGuideOverlayOpen(false)
+    } else {
+      setGuidePresentation('minimized')
+      setGuideOverlayOpen(true)
+    }
   }
 
   /** Confirmed "start new conversation": clears turns, heading, draft,
@@ -2083,18 +2407,6 @@ export default function PortfolioExperience() {
     }
   }
 
-  const resetActionsVisuals = () => {
-    const node = actionsRef.current
-    if (!node) return
-    for (let i = 0; i < PRIMARY_ACTION_COUNT; i += 1) {
-      node.style.setProperty(`--option-progress-${i}`, '0')
-    }
-    node.classList.add('options-hidden')
-    node.classList.add('options-inert')
-    node.setAttribute('aria-hidden', 'true')
-    node.setAttribute('inert', '')
-  }
-
   const replay = () => {
     const ctrl = controllerRef.current
     ctrl.paused = false
@@ -2105,7 +2417,6 @@ export default function PortfolioExperience() {
     // Force the scale-in to restart immediately: the canvas snaps the glyph
     // population to the logo center before the next RAF.
     sceneCanvasRef.current?.setLandingLogoScale(0)
-    resetActionsVisuals()
     setDiagnostics((prev) => ({
       ...prev,
       phase: 'logo-scale',
@@ -2134,26 +2445,6 @@ export default function PortfolioExperience() {
     sequenceRef.current = next
 
     sceneCanvasRef.current?.setLandingLogoScale(next.logoScale)
-
-    const actionsNode = actionsRef.current
-    if (actionsNode) {
-      const itemProgresses = getPrimaryActionProgresses(
-        next,
-        PRIMARY_ACTION_COUNT,
-        timing,
-      )
-      for (let i = 0; i < PRIMARY_ACTION_COUNT; i += 1) {
-        actionsNode.style.setProperty(
-          `--option-progress-${i}`,
-          String(easeOutCubic(next.optionsVisible ? itemProgresses[i] : 0)),
-        )
-      }
-      const groupHidden = !next.optionsVisible || itemProgresses.every((p) => p <= 0)
-      actionsNode.classList.toggle('options-hidden', groupHidden)
-      actionsNode.classList.toggle('options-inert', !next.optionsReady)
-      actionsNode.setAttribute('aria-hidden', String(!next.optionsVisible))
-      actionsNode.toggleAttribute('inert', !next.optionsReady)
-    }
 
     setDiagnostics((prev) => ({
       ...prev,
@@ -2201,6 +2492,78 @@ export default function PortfolioExperience() {
   const resetSourceLayout = () => {
     setSourceLayout({ ...APPROVED_SOURCE_LAYOUT_DEFAULTS })
   }
+
+  // Hero fan tuning (homepage-redesign): a session working copy of the
+  // shipped fan geometry (tuningConfig.ts APPROVED_HERO_FAN_DEFAULTS), same
+  // convention as sceneConfig/sourceLayout. The effect below writes the CSS
+  // custom properties inline on the hero element — no React re-render of the
+  // canvas, and the transform composition (position element) never fights
+  // the parallax (motion element).
+  const [heroFan, setHeroFan] = useState<HeroFanConfig>(() => ({
+    spread: APPROVED_HERO_FAN_DEFAULTS.spread,
+    top: APPROVED_HERO_FAN_DEFAULTS.top,
+    angle: { ...APPROVED_HERO_FAN_DEFAULTS.angle },
+    scale: { ...APPROVED_HERO_FAN_DEFAULTS.scale },
+    rotation: { ...APPROVED_HERO_FAN_DEFAULTS.rotation },
+    portraitTop: APPROVED_HERO_FAN_DEFAULTS.portraitTop,
+    portraitScale: APPROVED_HERO_FAN_DEFAULTS.portraitScale,
+  }))
+
+  const handleHeroFanChange = (change: HeroFanChange) => {
+    setHeroFan((prev) => {
+      switch (change.kind) {
+        case 'spread':
+          return { ...prev, spread: change.value }
+        case 'top':
+          return { ...prev, top: change.value }
+        case 'angle':
+          return { ...prev, angle: { ...prev.angle, [change.slot]: change.value } }
+        case 'scale':
+          return { ...prev, scale: { ...prev.scale, [change.slot]: change.value } }
+        case 'rotation':
+          return {
+            ...prev,
+            rotation: {
+              ...prev.rotation,
+              [change.slot]: { ...prev.rotation[change.slot], [change.axis]: change.value },
+            },
+          }
+        case 'portraitTop':
+          return { ...prev, portraitTop: change.value }
+        case 'portraitScale':
+          return { ...prev, portraitScale: change.value }
+      }
+    })
+  }
+
+  const resetHeroFan = () => {
+    setHeroFan({
+      spread: APPROVED_HERO_FAN_DEFAULTS.spread,
+      top: APPROVED_HERO_FAN_DEFAULTS.top,
+      angle: { ...APPROVED_HERO_FAN_DEFAULTS.angle },
+      scale: { ...APPROVED_HERO_FAN_DEFAULTS.scale },
+      rotation: { ...APPROVED_HERO_FAN_DEFAULTS.rotation },
+      portraitTop: APPROVED_HERO_FAN_DEFAULTS.portraitTop,
+      portraitScale: APPROVED_HERO_FAN_DEFAULTS.portraitScale,
+    })
+  }
+
+  /** "Copy values" — the CSS custom-property block, ready to bake into
+   *  globals.css (the permanence path for tuned geometry). */
+  const copyHeroFanValues = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(formatHeroFanCss(heroFan)).catch(() => {})
+    }
+  }
+
+  useEffect(() => {
+    const hero = heroNode
+    if (!hero) return
+    const props = heroFanCssProperties(heroFan)
+    for (const [key, value] of Object.entries(props)) {
+      hero.style.setProperty(key, value)
+    }
+  }, [heroFan, heroNode])
 
   /** Tuning panel edits the ACTIVE mode's reveal config; every change replays
    *  the reveal (landing via the intro replay, other modes via a fresh
@@ -2585,10 +2948,9 @@ export default function PortfolioExperience() {
   // through the canvas handle via applyVibeSnapshot, then vibe mode with the
   // control dock open. Runs once per page load; any failure falls through to
   // the normal page silently.
-  const mementoRestoreAttemptedRef = useRef(false)
   useEffect(() => {
-    if (mementoRestoreAttemptedRef.current) return
-    mementoRestoreAttemptedRef.current = true
+    // Each effect setup owns its request: Strict Mode can cancel and replay
+    // setup in development without suppressing the successful restore.
     const id = new URLSearchParams(window.location.search).get('memento')
     if (!id) return
     let canceled = false
@@ -2615,7 +2977,6 @@ export default function PortfolioExperience() {
           setPondEnabled(true)
           if (memento.pond.character) setPondCharacter(memento.pond.character)
         }
-        setSelected('vibe')
         setExperience('vibe')
         setVibeControlsOpen(true)
         const vibeHash = formatExperienceHash('vibe')
@@ -2773,89 +3134,6 @@ export default function PortfolioExperience() {
     setUploadPending(false)
   }
 
-  // Landing atmosphere: the Seattle-tuned seasonal mood resolves
-  // synchronously on mount (client-only — the inputs are the local clock and
-  // Intl locale/timezone, both injected into the pure resolver), then live
-  // Seattle conditions (engine/liveWeather.ts) swap in when the fetch lands.
-  // Offline, slow, or malformed responses silently keep the seasonal mood.
-  // The mapped result caches in sessionStorage so repeat loads within a
-  // session skip the refetch.
-  useEffect(() => {
-    const resolved = Intl.DateTimeFormat().resolvedOptions()
-    setLandingAmbient(
-      resolveSeasonalAtmosphere(
-        captureSeasonalAtmosphereInput(new Date(), {
-          locale: resolved.locale,
-          timeZone: resolved.timeZone,
-        }),
-      ),
-    )
-
-    const readCache = (): LiveConditions | null => {
-      try {
-        const raw = window.sessionStorage.getItem(LIVE_WEATHER_CACHE_KEY)
-        if (!raw) return null
-        const cached = JSON.parse(raw)
-        if (typeof cached.at !== 'number' || Date.now() - cached.at > LIVE_WEATHER_CACHE_TTL_MS) {
-          return null
-        }
-        return cached.conditions ?? null
-      } catch {
-        return null
-      }
-    }
-
-    let cancelled = false
-    const controller = new AbortController()
-    const applyLive = (conditions: LiveConditions | null) => {
-      if (cancelled || !conditions) return
-      const config = mapLiveConditions(conditions)
-      if (config) setLandingAmbient(config)
-    }
-
-    const cached = readCache()
-    if (cached) {
-      applyLive(cached)
-    } else {
-      const timeout = window.setTimeout(() => controller.abort(), LIVE_WEATHER_TIMEOUT_MS)
-      fetch(buildLiveWeatherUrl(), { signal: controller.signal })
-        .then((response) => (response.ok ? response.json() : null))
-        .then((data) => {
-          const current = data?.current
-          if (
-            !current ||
-            typeof current.weather_code !== 'number' ||
-            typeof current.wind_speed_10m !== 'number'
-          ) {
-            return
-          }
-          const conditions: LiveConditions = {
-            weatherCode: current.weather_code,
-            windSpeedMs: current.wind_speed_10m,
-            isDay: current.is_day !== 0,
-          }
-          try {
-            window.sessionStorage.setItem(
-              LIVE_WEATHER_CACHE_KEY,
-              JSON.stringify({ at: Date.now(), conditions }),
-            )
-          } catch {
-            // Private-mode storage failures only cost the next load a refetch.
-          }
-          applyLive(conditions)
-        })
-        .catch(() => {
-          // Offline/slow/blocked: the seasonal mood already applied above.
-        })
-        .finally(() => window.clearTimeout(timeout))
-    }
-
-    return () => {
-      cancelled = true
-      controller.abort()
-    }
-  }, [])
-
   // Leaving vibe settles back to the closed-card presentation; if the
   // invitation card remounts, return keyboard focus to its "Make it yours"
   // CTA.
@@ -2910,11 +3188,8 @@ export default function PortfolioExperience() {
     return { kind: 'builtin' }
   }, [displayed, workDescriptor, collaborateDescriptor, uploadedSource, workSlideIndex, theme])
 
-  // The landing runs on the themed canvas gradient (engine/theme) with the
-  // landing atmosphere (seasonal first, live Seattle conditions when the
-  // fetch lands) adopted as soon as it resolves; the work/collaborate
-  // scenes resolve their themed baselines against the active theme; vibe
-  // keeps its own playground config untouched.
+  // The landing keeps Clear's drifting motes, themed gradient and glyph field. Other
+  // scenes resolve their own themed baselines; Vibe owns its effect choices.
   const scenePlayground = useMemo<PlaygroundConfig>(() => {
     if (displayed === 'work') return resolveScenePlayground(workDescriptor, theme)
     if (displayed === 'collaborate') return resolveScenePlayground(collaborateDescriptor, theme)
@@ -2928,11 +3203,11 @@ export default function PortfolioExperience() {
         // SceneCanvas) — never the ROYGBV image-gradient palette.
         glyphText: 'joelhoke.me.',
         glyphColorMode: 'source-colors',
-        ambient: landingAmbient ?? playgroundConfig.ambient,
+        ambient: DEFAULT_HERO_AMBIENT,
       }
     }
     return playgroundConfig
-  }, [displayed, workDescriptor, collaborateDescriptor, playgroundConfig, landingAmbient, theme])
+  }, [displayed, workDescriptor, collaborateDescriptor, playgroundConfig, theme])
 
   // Vibe surface status: a subtle indicator for the upload lifecycle, kept
   // visible even if the visitor hides the control dock mid-processing.
@@ -2952,7 +3227,8 @@ export default function PortfolioExperience() {
   // modal overlay are mutually exclusive; each requires a live conversation
   // and none appears on the chat page itself.
   const guideConversationActive =
-    COLLABORATE_AI_GUIDE && !!guideState && guideState.turns.length > 0
+    COLLABORATE_AI_GUIDE && !!guideState &&
+    (guideState.turns.length > 0 || guidePresentation !== 'page' || guideOverlayOpen)
   const guideChromeOffPage = guideConversationActive && !collaborateChatActive
   const guideCompanionVisible = guideChromeOffPage && guidePresentation === 'companion'
   const guideOverlayVisible =
@@ -2968,7 +3244,8 @@ export default function PortfolioExperience() {
   const guideTranscriptVisibleRef = useRef(true)
   useEffect(() => {
     guideTranscriptVisibleRef.current =
-      collaborateChatActive || guideCompanionVisible || guideOverlayVisible
+      collaborateChatActive || guideCompanionVisible || guideOverlayVisible ||
+      (isHome && guidePresentation === 'page' && !menuOpen)
   })
 
   // Narrow modal overlay: focus containment, Escape back to the resume bar,
@@ -3025,17 +3302,31 @@ export default function PortfolioExperience() {
       className={`portfolio-shell${guideCompanionVisible ? ' portfolio-shell--guide-companion' : ''}${
         guideMinimizedVisible ? ' portfolio-shell--guide-minimized' : ''
       }${guideOverlayVisible ? ' portfolio-shell--guide-overlay' : ''}`}
+      data-view={displayed}
     >
-      {/* Static branded layer behind the canvas: visible only while the
-          canvas has not painted (no JS / no 2D context). */}
-      <CanvasFallback />
-      <SceneCanvas
+      {/* Canvas viewport: fills the viewport-bound shell on the scene modes;
+          on Home it's measured to the hero's height (effect above) so the
+          canvas sits behind the hero only and the rest of the page is
+          document background. CanvasFallback's artwork is scoped to this
+          wrapper. The SceneCanvas instance keeps a stable React tree position
+          across mode changes — never keyed by mode, never duplicated. */}
+      <div className="scene-viewport" ref={sceneViewportRef}>
+        {/* Static branded layer behind the canvas: visible only while the
+            canvas has not painted (no JS / no 2D context). */}
+        <CanvasFallback />
+        <SceneCanvas
         ref={sceneCanvasRef}
         theme={theme}
         tuningMode={tuningMode}
         sequenceDiagnostics={diagnostics}
         experience={displayed}
         fieldReveal={fieldRevealConfig}
+        // Phase 3: on Home the loop parks while the hero is scrolled off
+        // screen, and touch belongs to native page scrolling (tap fires an
+        // impulse on release); every scene mode keeps the full-canvas
+        // contract. Phase 5 adds menu-covered suspension to the same prop.
+        suspended={isHome && (!heroVisible || menuOpen)}
+        interactionMode={isHome ? 'page' : 'canvas'}
         sceneId={
           displayed === 'work'
             ? `work/${getWorkSlideId(getWorkSlide(workSlideIndex))}`
@@ -3077,15 +3368,16 @@ export default function PortfolioExperience() {
           }
         }}
       />
-      {/* Persistent frame (homepage-redesign phase 1): always rendered — on
-          the landing and inside every section — so home, the section tabs,
-          and the recruiter links are one click away from anywhere. Sits
-          above the canvas (z-index contract in globals.css .site-header). */}
+      </div>
+      {/* Persistent frame (homepage-redesign phase 5): always rendered — on
+          the landing and inside every section — the home mark and the menu
+          are one click away from anywhere. Sits above the canvas (z-index
+          contract in globals.css .site-header); the menu itself renders in
+          the native top layer. */}
       <SiteHeader
-        active={displayed === 'intro' ? null : displayed}
-        onSelect={navigateTo}
-        onHome={() => navigateTo(null)}
-        className={collaborateChatActive ? 'site-header--chat-active' : undefined}
+        active={isHome ? 'home' : displayed}
+        onNavigate={handleSiteNavigate}
+        onMenuOpenChange={setMenuOpen}
       />
       <AnalyticsConsent onClient={(client) => (analyticsClientRef.current = client)} />
       <main
@@ -3099,34 +3391,40 @@ export default function PortfolioExperience() {
           <div
             className={`foreground-content${
               collaborateChatActive ? ' foreground-content-chat' : ''
-            }${displayed === 'intro' ? ' foreground-content--home' : ''}`}
+            }`}
           >
             {displayed === 'intro' ? (
-              <>
-                {/* Visible identity block (homepage-redesign phase 2): the
-                    recruiter's 5-second answer — who, what level, what proof —
-                    rendered as static HTML so it's the LCP candidate, not the
-                    WebGL scene. The h1 is genuinely visible now; the canvas
-                    logotype behind it stays ambient. The portrait placeholder
-                    (monogram) is owed a treated photo from phase 0. */}
-                <header className="home-identity">
-                  <img
-                    className="home-identity-portrait"
-                    src={SITE_IDENTITY.portraitSrc}
-                    alt={SITE_IDENTITY.portraitAlt}
-                    width={200}
-                    height={200}
-                  />
-                  <h1 className="home-identity-name">{SITE_IDENTITY.name}</h1>
-                  <p className="home-identity-role">{SITE_IDENTITY.role}</p>
-                  <p className="home-identity-positioning">{SITE_IDENTITY.positioning}</p>
-                </header>
-                <PrimaryActions
-                  selected={selected}
-                  onSelect={navigateTo}
-                  groupRef={actionsRef}
-                />
-              </>
+              // The homepage (homepage-redesign phases 1–2): hero fan over
+              // the live glyph field, statement, and the four destination
+              // sections. Rendered as static HTML — the LCP candidate, not
+              // the canvas — and available immediately; the intro reveal
+              // runs independently behind it (no options gating).
+              <HomePage
+                onSectionLink={handleHomeSectionLink}
+                heroRef={setHeroNode}
+                heroParallaxEnabled={heroVisible && !menuOpen}
+                heroRotations={heroFan.rotation}
+                galleryProjects={galleryProjects}
+                sectionsEnabled={!menuOpen}
+                guide={{
+                  state: guideState,
+                  getState: () => guideStateRef.current,
+                  inline: guidePresentation === 'page',
+                  onSend: (message) => sendGuideMessage(message, undefined, true),
+                  onRetry: () => {
+                    const last = guideStateRef.current?.lastAttempt
+                    if (last) sendGuideMessage(last, undefined, true)
+                  },
+                  onDraftChange: handleGuideDraftChange,
+                  onExpand: openGuideFullConversation,
+                  onPopOut: popOutHomeGuide,
+                  onReturn: () => {
+                    setGuidePresentation('page')
+                    setGuideOverlayOpen(false)
+                    setGuideUnseenAnswer(false)
+                  },
+                }}
+              />
             ) : displayed === 'work' ? (
               <div className="work-layout">
                 {/* Glyph stage: its measured rect positions the hero (fit per
@@ -3171,7 +3469,7 @@ export default function PortfolioExperience() {
                         onShare: shareGuideConversation,
                         onDraftChange: handleGuideDraftChange,
                         onNavigateToChat: navigateToCollaborateChat,
-                        onNavigateToLanding: navigateToCollaborateLanding,
+                        onNavigateToHomeSection: returnToHomeCollaborate,
                         onPopOut: exitGuideChatPage,
                         popOutLabel: guideWideViewport
                           ? COLLABORATE_GUIDE_POP_OUT_LABEL
@@ -3456,6 +3754,10 @@ export default function PortfolioExperience() {
           qualityTierOverride={qualityTierOverride}
           onQualityTierOverrideChange={setQualityTierOverride}
           onCopyConfiguration={handleCopyConfiguration}
+          heroFan={heroFan}
+          onHeroFanChange={handleHeroFanChange}
+          onResetHeroFan={resetHeroFan}
+          onCopyHeroFanValues={copyHeroFanValues}
           onPlay={play}
           onPause={pause}
           onReplay={replay}

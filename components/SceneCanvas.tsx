@@ -3,6 +3,7 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { prepareWithSegments, layoutNextLine } from '@chenglou/pretext'
 import { createPointerListeners } from '../engine/Pointer'
+import { createFrameLoop, FrameLoop } from '../engine/frameLoop'
 import {
   MeshBgs,
   ParagraphTarget,
@@ -393,6 +394,19 @@ type SceneCanvasProps = {
    *  beginAmbientWipe declines to start one, so the parent can always rely on
    *  the callback to unlock. */
   onAmbientWipeEnd?: () => void
+  /** Suspends the frame loop (homepage-redesign phase 3): no frames are
+   *  scheduled or run while true, the animated provider pauses, and pointer/
+   *  press state clears. Resuming re-arms one frame WITHOUT resetting the
+   *  composition (no scene rebuild, no ripple/state wipe). Default false —
+   *  every existing caller is unchanged. */
+  suspended?: boolean
+  /** Touch behavior contract. 'canvas' (default): the canvas owns touch —
+   *  touch-action:none, pointer capture, drag repel, paint strokes, impulse
+   *  on contact. 'page' (Home): native scroll owns the gesture
+   *  (touch-action: pan-y pinch-zoom); no capture, no preventDefault — a
+   *  touch tap fires an impulse on release only when total movement stayed
+   *  within the tap threshold. Mouse hover/click is unchanged in both. */
+  interactionMode?: 'canvas' | 'page'
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -464,6 +478,8 @@ function SceneCanvasInternal(
     pond,
     pondCharacter = 'source',
     onAmbientWipeEnd,
+    suspended = false,
+    interactionMode = 'canvas',
   }: SceneCanvasProps,
   ref: React.ForwardedRef<SceneCanvasHandle>,
 ) {
@@ -499,11 +515,17 @@ function SceneCanvasInternal(
   const preparedTextRef = useRef<any>(null)
   const totalCharsRef = useRef(0)
   const typewriterStartRef = useRef<number>(0)
-  const animationRef = useRef<number | null>(null)
+  // The frame loop's scheduler (engine/frameLoop.ts) — owns the pending rAF
+  // handle and the parked invariants; installed by the loop effect below.
+  const frameLoopRef = useRef<FrameLoop | null>(null)
   // Re-arms a single frame when the render loop is stopped (reduced-motion
-  // static path, hidden tab). The loop effect below installs the real
-  // implementation; calling it while the loop runs is a no-op.
+  // static path, hidden tab, suspended). The loop effect below installs the
+  // scheduler's implementation; calling it while the loop runs is a no-op.
   const renderOnceRef = useRef<() => void>(() => {})
+  // Live mirrors for the phase-3 props, read inside the frame loop and the
+  // pointer handlers (never from a render closure).
+  const suspendedRef = useRef(suspended)
+  const interactionModeRef = useRef(interactionMode)
   const mouseRRef = useRef(defaultSceneState.mouseR)
   const sceneModeRef = useRef<SceneMode>('svg')
   // Immutable base target field (typed arrays from the one-time rasterization)
@@ -800,6 +822,16 @@ function SceneCanvasInternal(
   const pressRef = useRef({ active: false, pointerId: -1 })
   const dragEaseRef = useRef(0)
   const dragEaseLastNowRef = useRef(0)
+  // 'page' interaction mode (Home): a touch gesture belongs to native
+  // scrolling, so it never drives the repel pointer or capture. A tap is
+  // tracked as down→up with total movement within TAP_MOVEMENT_THRESHOLD_PX;
+  // only then does the release fire an impulse. Scrolls/cancels null it.
+  const touchTapRef = useRef<{
+    pointerId: number
+    startClientX: number
+    startClientY: number
+    moved: boolean
+  } | null>(null)
   // The radius the hover repel and ambient tick actually use: mouseR at rest
   // (byte-identical hover), grown by the drag ease while pressed.
   const effectiveMouseRRef = useRef(mouseR)
@@ -2591,7 +2623,7 @@ function SceneCanvasInternal(
 
     if (selection.kind === 'animated') {
       const provider = ensureAnimatedProvider()
-      provider.setPaused(document.hidden)
+      provider.setPaused(document.hidden || suspendedRef.current)
       provider.resize(W, H)
       patchDiagnostics({
         sourceStatus: 'loading',
@@ -4023,13 +4055,16 @@ function SceneCanvasInternal(
     addListeners()
 
     // Animated sources pause while the tab is hidden (provider contract);
-    // the frame loop's own hidden-guard stops the sampling driver too.
+    // the frame loop's own parked-guard stops the sampling driver too.
+    // Becoming visible re-arms the loop — the loop never reschedules out of
+    // a hidden/suspended frame, so this is the only path back.
     const handleProviderVisibility = () => {
-      animatedProviderRef.current?.setPaused(document.hidden)
+      animatedProviderRef.current?.setPaused(document.hidden || suspendedRef.current)
+      if (!document.hidden) renderOnceRef.current()
     }
     document.addEventListener('visibilitychange', handleProviderVisibility)
 
-    canvas.style.touchAction = 'none'
+    // touchAction is owned by the reactive interactionMode effect below.
     addCanvasPointerListeners(canvas)
 
     return () => {
@@ -4059,14 +4094,10 @@ function SceneCanvasInternal(
     const frame = (now: number) => {
       const ctx = ctxRef.current
       if (!ctx) return
-      // Cheap early-return while the tab is hidden: no sim, no draw, no
-      // diagnostics. The sim is per-frame (springs accumulate no time delta)
-      // and ambient targets derive from the frame clock, so resuming never
-      // flings glyphs.
-      if (document.hidden) {
-        animationRef.current = requestAnimationFrame(frame)
-        return
-      }
+      // Parked frames (suspended / hidden tab) never reach here — the
+      // scheduler bails before calling. The sim is per-frame (springs
+      // accumulate no time delta) and ambient targets derive from the frame
+      // clock, so resuming after a park never flings glyphs.
       const frameStart = performance.now()
       const revealedChars = Math.min(totalCharsRef.current, Math.floor((now - typewriterStartRef.current) / 1000 * TYPEWRITER_CPS))
       ctx.font = fontRef.current
@@ -4206,26 +4237,25 @@ function SceneCanvasInternal(
         lastDiagnosticsPushRef.current = frameStart
         pushDiagnostics()
       }
-      // Reduced motion: one settled frame, then the loop stops. Rebuilds
+      // Scheduling is owned by the frame loop (engine/frameLoop.ts): after
+      // this frame it reschedules only when keepRunning() is true — reduced
+      // motion renders one settled frame, then the loop parks. Rebuilds
       // re-arm a single frame via renderOnceRef; disabling reduced motion
       // restarts the continuous loop the same way.
-      if (reducedMotionRef.current) {
-        animationRef.current = null
-        return
-      }
-      animationRef.current = requestAnimationFrame(frame)
     }
 
-    renderOnceRef.current = () => {
-      if (animationRef.current === null) {
-        animationRef.current = requestAnimationFrame(frame)
-      }
-    }
-
-    animationRef.current = requestAnimationFrame(frame)
+    const loop = createFrameLoop({
+      frame,
+      keepRunning: () => ctxRef.current !== null && !reducedMotionRef.current,
+      isParked: () => suspendedRef.current || document.hidden,
+    })
+    frameLoopRef.current = loop
+    renderOnceRef.current = loop.renderOnce
+    loop.renderOnce()
     return () => {
       renderOnceRef.current = () => {}
-      if (animationRef.current !== null) cancelAnimationFrame(animationRef.current)
+      frameLoopRef.current = null
+      loop.dispose()
     }
   }, [])
 
@@ -4244,6 +4274,9 @@ function SceneCanvasInternal(
 
   const TOUCH_Y_OFFSET = -30
   const FADE_DURATION_MS = 350
+  /** 'page' mode tap recognition: total touch movement beyond this cancels
+   *  the tap (the gesture was a scroll) — no impulse on release. */
+  const TAP_MOVEMENT_THRESHOLD_PX = 8
 
   const getCanvasCssPoint = (event: PointerEvent) => {
     const canvas = canvasRef.current
@@ -4300,19 +4333,33 @@ function SceneCanvasInternal(
   }
 
   const onCanvasPointerMove = (event: PointerEvent) => {
+    const isTouch = event.pointerType === 'touch'
+    // 'page' mode (Home): a moving touch is scrolling the page — only track
+    // the movement threshold for tap recognition; never the repel pointer,
+    // never capture.
+    if (isTouch && interactionModeRef.current === 'page' && !activeStrokeRef.current) {
+      const tap = touchTapRef.current
+      if (!tap || tap.pointerId !== event.pointerId) return
+      if (
+        Math.abs(event.clientX - tap.startClientX) > TAP_MOVEMENT_THRESHOLD_PX ||
+        Math.abs(event.clientY - tap.startClientY) > TAP_MOVEMENT_THRESHOLD_PX
+      ) {
+        tap.moved = true
+      }
+      return
+    }
     const stroke = activeStrokeRef.current
     if (stroke) {
       // Mid-gesture: queue paint points instead of driving the repel pointer.
       if (event.pointerId !== stroke.pointerId) return
       const point = getCanvasCssPoint(event)
-      const y = point.y + (event.pointerType === 'touch' ? TOUCH_Y_OFFSET : 0)
+      const y = point.y + (isTouch ? TOUCH_Y_OFFSET : 0)
       pendingPaintPointsRef.current.push(point.x, y)
       updateBrushRing(point.x, y, true)
       renderOnceRef.current()
       return
     }
     const state = pointerRef.current
-    const isTouch = event.pointerType === 'touch'
     if (isTouch) {
       if (state.touchPointerId !== event.pointerId) return
       updatePointerFromEvent(event, true)
@@ -4330,6 +4377,64 @@ function SceneCanvasInternal(
     }
   }
 
+  // Click/tap droplet: spawn a traveling-wavefront ripple (engine/ripple)
+  // seeded with the pointer's smoothed velocity so a mid-drag press leaves a
+  // directional wake, plus a small instant "plop" kick so the impact reads
+  // immediately. The spring+damp integration settles both on its own. Fully
+  // skipped under reduced motion — no ripple, no plop, and no renderOnce
+  // re-arm, so the static frame stays settled. Fires on pointer DOWN in
+  // 'canvas' mode, on tap RELEASE in 'page' mode — both land here.
+  const fireClickImpulse = (x: number, y: number) => {
+    if (reducedMotionRef.current) return
+    const now = performance.now()
+    const velocity = pointerVelocityRef.current
+    spawnRipple(
+      ripplesRef.current,
+      x,
+      y,
+      now,
+      rippleStrengthRef.current,
+      velocity.vx,
+      velocity.vy,
+      rippleConfigRef.current,
+    )
+    const affected = applyRadialImpulse(
+      particlesRef.current,
+      x,
+      y,
+      clickImpulseRadiusRef.current,
+      clickImpulseForceRef.current * RIPPLE_PLOP_SCALE,
+    )
+    // The ambient pool gets the same plop (typed-array mirror of
+    // engine/impulse.ts), scaled by the shared interaction strength; the
+    // shared ripple store is applied to it in the ambient tick wiring.
+    const ambientField = ambientFieldRef.current
+    if (ambientField) {
+      applyAmbientRadialImpulse(
+        ambientField,
+        x,
+        y,
+        clickImpulseRadiusRef.current,
+        clickImpulseForceRef.current *
+          RIPPLE_PLOP_SCALE *
+          ambientConfigRef.current.interactionStrength,
+      )
+    }
+    // Private Pond: the same tap kicks the swimming body outward from the
+    // click point, in addition to the glyph impulse above.
+    const pond = getPondConfig()
+    const pondBody = pondBodyRef.current
+    if (pond && pondBody) {
+      applyRipple(pondBody, x, y, pond.rippleStrength)
+    }
+    patchDiagnostics({
+      impulseCount: diagnosticsRef.current.impulseCount + 1,
+      lastImpulseAffected: affected,
+      rippleCount: diagnosticsRef.current.rippleCount + 1,
+      activeRipples: ripplesRef.current.count,
+    })
+  }
+
   const onCanvasPointerDown = (event: PointerEvent) => {
     const isTouch = event.pointerType === 'touch'
     const state = pointerRef.current
@@ -4344,6 +4449,20 @@ function SceneCanvasInternal(
         x: point.x,
         y: point.y + (isTouch ? TOUCH_Y_OFFSET : 0),
       })
+      return
+    }
+    // 'page' mode (Home): the touch gesture belongs to native scrolling —
+    // no repel pointer, no capture, no press, no impulse on contact. Track
+    // it as a candidate tap; the release fires the impulse if the gesture
+    // stayed within the movement threshold.
+    if (isTouch && interactionModeRef.current === 'page') {
+      if (touchTapRef.current) return
+      touchTapRef.current = {
+        pointerId: event.pointerId,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        moved: false,
+      }
       return
     }
     if (isTouch) {
@@ -4363,63 +4482,22 @@ function SceneCanvasInternal(
     // the pointer is held. Cleared on up/cancel/leave.
     pressRef.current.active = true
     pressRef.current.pointerId = event.pointerId
-    // Click/tap droplet: spawn a traveling-wavefront ripple (engine/ripple)
-    // seeded with the pointer's smoothed velocity so a mid-drag press leaves
-    // a directional wake, plus a small instant "plop" kick so the impact
-    // reads immediately. The spring+damp integration settles both on its own.
-    // Fully skipped under reduced motion — no ripple, no plop, and no
-    // renderOnce re-arm, so the static frame stays settled.
-    if (reducedMotionRef.current) return
-    const now = performance.now()
-    const velocity = pointerVelocityRef.current
-    spawnRipple(
-      ripplesRef.current,
-      state.x,
-      state.y,
-      now,
-      rippleStrengthRef.current,
-      velocity.vx,
-      velocity.vy,
-      rippleConfigRef.current,
-    )
-    const affected = applyRadialImpulse(
-      particlesRef.current,
-      state.x,
-      state.y,
-      clickImpulseRadiusRef.current,
-      clickImpulseForceRef.current * RIPPLE_PLOP_SCALE,
-    )
-    // The ambient pool gets the same plop (typed-array mirror of
-    // engine/impulse.ts), scaled by the shared interaction strength; the
-    // shared ripple store is applied to it in the ambient tick wiring.
-    const ambientField = ambientFieldRef.current
-    if (ambientField) {
-      applyAmbientRadialImpulse(
-        ambientField,
-        state.x,
-        state.y,
-        clickImpulseRadiusRef.current,
-        clickImpulseForceRef.current *
-          RIPPLE_PLOP_SCALE *
-          ambientConfigRef.current.interactionStrength,
-      )
-    }
-    // Private Pond: the same tap kicks the swimming body outward from the
-    // click point, in addition to the glyph impulse above.
-    const pond = getPondConfig()
-    const pondBody = pondBodyRef.current
-    if (pond && pondBody) {
-      applyRipple(pondBody, state.x, state.y, pond.rippleStrength)
-    }
-    patchDiagnostics({
-      impulseCount: diagnosticsRef.current.impulseCount + 1,
-      lastImpulseAffected: affected,
-      rippleCount: diagnosticsRef.current.rippleCount + 1,
-      activeRipples: ripplesRef.current.count,
-    })
+    fireClickImpulse(state.x, state.y)
   }
 
   const onCanvasPointerUp = (event: PointerEvent) => {
+    // 'page' mode (Home): release fires the impulse only for a tracked tap
+    // whose total movement stayed within the threshold; scrolling gestures
+    // (moved) and cancellations produce no impulse.
+    if (event.pointerType === 'touch' && interactionModeRef.current === 'page') {
+      const tap = touchTapRef.current
+      touchTapRef.current = null
+      if (tap && tap.pointerId === event.pointerId && !tap.moved) {
+        const point = getCanvasCssPoint(event)
+        fireClickImpulse(point.x, point.y + TOUCH_Y_OFFSET)
+      }
+      return
+    }
     releasePress(event.pointerId)
     const stroke = activeStrokeRef.current
     if (stroke && event.pointerId === stroke.pointerId) {
@@ -4443,6 +4521,13 @@ function SceneCanvasInternal(
   }
 
   const onCanvasPointerCancel = (event: PointerEvent) => {
+    // 'page' mode (Home): a canceled touch (scroll takeover, interruption)
+    // never fires an impulse.
+    if (event.pointerType === 'touch' && interactionModeRef.current === 'page') {
+      const tap = touchTapRef.current
+      if (tap && tap.pointerId === event.pointerId) touchTapRef.current = null
+      return
+    }
     releasePress(event.pointerId)
     const stroke = activeStrokeRef.current
     if (stroke && event.pointerId === stroke.pointerId) {
@@ -4475,8 +4560,55 @@ function SceneCanvasInternal(
     }
   }
 
-  const addCanvasPointerListeners = (canvas: HTMLCanvasElement) => {
-    canvas.addEventListener('pointerenter', onCanvasPointerEnter)
+  /** Drop every in-flight interaction without touching the composition:
+   *  press, repel pointer, touch tap candidate, active paint stroke
+   *  (committed as-is), brush ring, and any pointer capture. Used on
+   *  suspension and on interactionMode transitions so neither leaves touch,
+   *  paint, or capture state stuck. */
+  const clearInteractionState = () => {
+    pressRef.current.active = false
+    pressRef.current.pointerId = -1
+    touchTapRef.current = null
+    if (activeStrokeRef.current) endPaintStroke()
+    clearPointer()
+    updateBrushRing(0, 0, false)
+  }
+
+  // Suspension (homepage-redesign phase 3): on suspend, park the scheduler
+  // (cancels the pending frame; the loop never reschedules while parked),
+  // clear interaction state, and pause the animated provider. On resume,
+  // reset the stale timing/velocity samples and re-arm exactly one frame —
+  // WITHOUT resetting the composition (no scene rebuild, no ripple wipe).
+  useEffect(() => {
+    suspendedRef.current = suspended
+    if (suspended) {
+      frameLoopRef.current?.park()
+      clearInteractionState()
+      animatedProviderRef.current?.setPaused(true)
+      return
+    }
+    pointerVelocityRef.current.lastNow = 0
+    dragEaseLastNowRef.current = 0
+    animatedProviderRef.current?.setPaused(document.hidden)
+    renderOnceRef.current()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suspended])
+
+  // Touch behavior contract (homepage-redesign phase 3): the mount-time
+  // touchAction assignment is now reactive — 'canvas' keeps touch-action:none
+  // (painting, drag gestures, pointer capture); 'page' hands the gesture to
+  // native scrolling (pan-y pinch-zoom). Transitions clear interaction state
+  // so no press/capture/stroke survives the switch.
+  useEffect(() => {
+    interactionModeRef.current = interactionMode
+    const canvas = canvasRef.current
+    if (!canvas) return
+    canvas.style.touchAction = interactionMode === 'page' ? 'pan-y pinch-zoom' : 'none'
+    clearInteractionState()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interactionMode])
+
+  const addCanvasPointerListeners = (canvas: HTMLCanvasElement) => {    canvas.addEventListener('pointerenter', onCanvasPointerEnter)
     canvas.addEventListener('pointermove', onCanvasPointerMove)
     canvas.addEventListener('pointerdown', onCanvasPointerDown)
     canvas.addEventListener('pointerup', onCanvasPointerUp)

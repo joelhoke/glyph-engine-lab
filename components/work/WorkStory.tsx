@@ -147,7 +147,6 @@ export default function WorkStoryView({
       {story.access === 'public' && onReadCaseStudy && (
         <button type="button" className="work-story-read" onClick={onReadCaseStudy}>
           Read the case study
-          <span aria-hidden="true"> ↓</span>
         </button>
       )}
 
@@ -156,7 +155,6 @@ export default function WorkStoryView({
            directly under the teaser. */
         <a className="work-story-link" href={`/protected-work?story=${story.protectedId}`}>
           View this confidential case study
-          <span aria-hidden="true"> →</span>
         </a>
       ) : (
         <>
@@ -238,7 +236,7 @@ export default function WorkStoryView({
                       rel="noopener noreferrer"
                     >
                       {attachment.label}
-                      <span aria-hidden="true"> ↗</span>
+                      {/^https?:\/\//.test(attachment.url) && <span aria-hidden="true"> ↗</span>}
                     </a>
                   ))}
                 </section>
@@ -299,7 +297,7 @@ export default function WorkStoryView({
                       onClick={() => trackOutbound(link.url)}
                     >
                       {link.label}
-                      <span aria-hidden="true"> ↗</span>
+                      {/^https?:\/\//.test(link.url) && <span aria-hidden="true"> ↗</span>}
                     </a>
                   </li>
                 ))}
@@ -680,7 +678,7 @@ function LiveInlineViewer({
         aria-label={`Open ${item.caption ?? item.alt} in the full-screen 3D viewer`}
       >
         <span className="work-inline-media-fullscreen" aria-hidden="true">
-          Open full screen ↗
+          Open full screen
         </span>
       </a>
     </figure>

@@ -57,10 +57,13 @@ async function enterWorkSlide(context) {
   const page = await context.newPage()
   page.on('pageerror', (err) => console.log(`[pageerror] ${err.message}`))
   await page.goto(URL, { waitUntil: 'domcontentloaded' })
-  await page.waitForSelector('.primary-actions:not(.options-hidden):not(.options-inert)', {
-    timeout: 30000,
-  })
-  await page.click('.primary-actions button:has-text("Work")')
+  // Phase 5 entry path: the header menu (the old doorway cards are gone).
+  // html.theme-ready marks React hydration — clicking earlier hits an
+  // inert SSR button.
+  await page.waitForSelector('html.theme-ready', { timeout: 30000 })
+  await page.click('.site-header-menu-button')
+  await page.waitForSelector('#site-menu[open]', { timeout: 10000 })
+  await page.click('.site-menu-link:has-text("Work")')
   await page.waitForSelector('.work-experience', { timeout: 15000 })
   await sleep(1200)
   // Slide 1 (a project case study) is overflow-eligible; the intro is not.

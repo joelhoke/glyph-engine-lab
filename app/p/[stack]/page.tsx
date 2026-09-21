@@ -7,7 +7,7 @@ import PrototypeCard from '../../../components/gallery/PrototypeCard'
 import styles from '../../../components/gallery/gallery.module.css'
 
 type StackPageProps = {
-  params: { stack: string }
+  params: Promise<{ stack: string }>
 }
 
 // Static export: every stack in the manifest gets a shell. Gated stacks
@@ -21,8 +21,9 @@ export function generateStaticParams() {
 
 export const dynamicParams = false
 
-export function generateMetadata({ params }: StackPageProps): Metadata {
-  const stack = findStack(params.stack)
+export async function generateMetadata({ params }: StackPageProps): Promise<Metadata> {
+  const resolved = await params
+  const stack = findStack(resolved.stack)
   return {
     title: stack?.title ?? 'Shared prototypes',
     robots: { index: false, follow: false },
@@ -34,8 +35,9 @@ export function generateMetadata({ params }: StackPageProps): Metadata {
  * summary). The route is noindex; gated access control is enforced by the
  * Pages Function in front of this shell, not by the shell itself.
  */
-export default function StackPage({ params }: StackPageProps) {
-  const stack = findStack(params.stack)
+export default async function StackPage({ params }: StackPageProps) {
+  const resolved = await params
+  const stack = findStack(resolved.stack)
   if (!stack) notFound()
 
   return (

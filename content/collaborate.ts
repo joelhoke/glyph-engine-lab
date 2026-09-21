@@ -149,7 +149,7 @@ export const COLLABORATE_GUIDE_SHARE_ERROR =
   'Sharing didn’t go through — try again, or use the email route in the transcript above.'
 
 /** Chat chrome. */
-export const COLLABORATE_GUIDE_BACK_LABEL = 'Back to Collaborate'
+export const COLLABORATE_GUIDE_BACK_LABEL = 'Back to Collaborate section'
 export const COLLABORATE_GUIDE_COMPOSER_LABEL = 'Message Joel’s guide'
 export const COLLABORATE_GUIDE_COMPOSER_PLACEHOLDER = 'Ask about Joel’s work…'
 export const COLLABORATE_GUIDE_SEND_LABEL = 'Send message'
