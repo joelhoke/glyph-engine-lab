@@ -396,6 +396,13 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
 
 /* --- Homepage (components/home/*) ----------------------------------------- */
 
+/* Oversized object canvases may bleed through their local layout boxes,
+   but must not widen the document. Clip at the full-width page edge;
+   vertical flow and the gallery's own horizontal scrollport stay intact. */
+.home-page {
+  overflow-x: clip;
+}
+
 /* Hero: on small screens a compact column (portrait, introduction card, then
    the four destination tiles in a two-column grid) whose height comes from
    its content; ≥768px it becomes the fan composition — a centered portrait
