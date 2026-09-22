@@ -296,10 +296,13 @@ The wrangler CLI remains as a fallback:
 
 ## Collaborate AI guide
 
-The Collaborate page can answer visitor questions with an AI guide built
-strictly from an approved knowledge pack (`functions/lib/collaborateProfile.ts`,
-28 reviewed entries). Everything the guide may say traces back to a pack entry;
-anything outside the pack is abstained and handed off to email.
+The Collaborate page can answer visitor questions with an AI guide built from a
+canonical identity (`knowledge/identity/identity.md`) and an approved knowledge
+pack (`functions/lib/collaborateProfile.ts`, 30 reviewed entries). The identity
+governs perspective and conversational character; factual and viewpoint claims
+trace back to citable pack entries. Anything outside those sources is abstained
+and handed off to email. See `docs/identity-workflow.md` for the review and
+update process.
 
 ### Architecture
 
@@ -322,10 +325,13 @@ anything outside the pack is abstained and handed off to email.
     observability).
   - **OpenAI gpt-5.6-luna** via the Responses API with `store: false` and a
     strict `json_schema` response format, through the gateway.
-- The approved knowledge pack is sent **whole** in the system prompt on every
-  turn — the corpus is small enough that embeddings/Vectorize would add
-  moving parts without buying anything. Revisit retrieval only when the pack
-  grows materially.
+- The build embeds the canonical identity in
+  `functions/lib/generated/collaborateIdentity.ts`; the generated file is
+  checked against the Markdown source and must never be edited directly. The
+  identity and approved knowledge pack are sent **whole** in the system prompt
+  on every turn — the corpus is small enough that embeddings/Vectorize would
+  add moving parts without buying anything. Revisit retrieval only when the
+  pack grows materially.
 - Answers are **non-streaming**: the server validates the complete structured
   output (`validateModelAnswer` — JSON shape, 220-word cap, impersonation and
   commitment gates, source IDs must be active pack entries) before anything is
@@ -430,7 +436,7 @@ The full conversation loop runs locally against a mock model server:
 question sets (`scripts/evals/questions.json`, `scripts/evals/adversarial.json`)
 with hard gates (structured-output validity, voice, commitments, citations,
 abstention quality). Run it **monthly**, and on any model, prompt, profile, or
-price change:
+identity change or price change:
 
 ```
 node scripts/evals/run.js            # offline self-test, no keys needed
