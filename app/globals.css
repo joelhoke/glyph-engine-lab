@@ -31,6 +31,7 @@
   --color-page: #090c12;
   --color-canvas: #090c12;
   --color-surface: #0e1620;
+  --color-section-blue: #101826;
   --color-text: #f7fbff;
   --color-text-muted: #c5d4ea;
   --color-text-faint: #8aa4c5;
@@ -105,6 +106,7 @@
     --color-page: #f4f6f9;
     --color-canvas: #f4f6f9;
     --color-surface: #ffffff;
+    --color-section-blue: #dce7f3;
     --color-text: #101826;
     --color-text-muted: #44536a;
     --color-text-faint: #5c6c82;
@@ -181,6 +183,8 @@
   html.theme-ready .conversation-surface,
   html.theme-ready .site-header,
   html.theme-ready .site-menu,
+  html.theme-ready .home-section--vibe,
+  html.theme-ready .home-section--collaborate,
   html.theme-ready .work-experience,
   html.theme-ready .collaborate-experience,
   html.theme-ready .chat-answer,
@@ -210,6 +214,8 @@
   html.theme-ready .conversation-surface,
   html.theme-ready .site-header,
   html.theme-ready .site-menu,
+  html.theme-ready .home-section--vibe,
+  html.theme-ready .home-section--collaborate,
   html.theme-ready .work-experience,
   html.theme-ready .collaborate-experience,
   html.theme-ready .chat-answer,

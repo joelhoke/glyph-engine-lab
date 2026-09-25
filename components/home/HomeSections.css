@@ -1,5 +1,7 @@
 /* Destination sections share the hero's objects, with room to use them. */
 .home-section { pointer-events: auto; }
+.home-section--vibe,
+.home-section--collaborate { background-color: var(--color-section-blue); }
 /* Land at the Work content's top so the taller CRT stays fully visible.
    Subtract the inner wrapper's 3.5rem padding from the 5.5rem clearance. */
 .home-work-layout.home-section-anchor,

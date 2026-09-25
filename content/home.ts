@@ -224,9 +224,9 @@ export const HOME_CONTENT: HomeContent = {
     },
     vibe: {
       heading: 'Vibe',
-      lede: 'Same canvas. A different you.',
+      lede: 'Create something of your own',
       introduction:
-        'Play with type, color, and motion. Open one of the latest playground creations below, then make it your own.',
+        'Play with type, color, and motion. You can even open one of the latest playground creations and build from there!',
       features: [
         {
           id: 'vibe-playground',

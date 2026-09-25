@@ -67,6 +67,7 @@ dark values.
 | Token | Dark | Light | Use |
 |---|---|---|---|
 | Page/canvas | `#090c12` | `#F4F6F9` | body, canvas base |
+| Blue section surface | `#101826` | `#DCE7F3` | Vibe and Collaborate homepage bands |
 | Panel surface | `#06090e` @ 62–92% over blur | `#FFFFFF` | cards, dock, banner |
 | Elevated surface | `#0e1620` | `#FFFFFF` | skip link, overlays |
 | Text | `#f7fbff` | `#101826` | primary text |
