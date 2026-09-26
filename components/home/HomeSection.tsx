@@ -11,6 +11,7 @@ import type { ScreenContent, ScreenPlaybackControls, ScreenPlaybackState } from 
 import { useReducedMotion } from './HeroObject'
 import { useSectionVisibility } from './useSectionVisibility'
 import HomeGalleryCarousel from './HomeGalleryCarousel'
+import AboutLightStudy from './AboutLightStudy'
 import type { HomeGalleryProject } from './galleryProjects'
 import HomeVibePreviews from './HomeVibePreviews'
 import HomePhoneChat, { HomeGuideBridge } from './HomePhoneChat'
@@ -65,14 +66,8 @@ export default function HomeSection({ id, section, enabled, galleryProjects, gui
     onUnavailable: () => setUnavailable(true) }
 
   return <section ref={ref} aria-labelledby={`home-${id}-heading`} className={`home-section home-section--${id}`}>
-    {id === 'about' && <div className="home-section-inner home-about-layout">
-      <div id="home/about" className="home-section-copy home-section-anchor">
-        {heading}
-        <p className="home-section-lede">{section.lede}</p>
-        <p className="home-section-intro">{section.introduction}</p>
-        {section.paragraphs?.map(paragraph => <p key={paragraph} className="home-section-intro">{paragraph}</p>)}
-        {action}
-      </div>
+    {id === 'about' && <div id="home/about" className="home-about-layout home-section-anchor">
+      <AboutLightStudy near={near} active={active} reducedMotion={reducedMotion} />
     </div>}
     {id === 'work' && <div id={`home/${id}`} className="home-section-inner home-work-layout home-section-anchor">
       <figure className="home-work-object">

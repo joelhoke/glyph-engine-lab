@@ -51,6 +51,15 @@ export type ModelCredit = {
  */
 export const MODEL_CREDITS: ModelCredit[] = [
   {
+    title: 'Edison Light Bulb',
+    author: 'Fishboe',
+    authorUrl: 'https://sketchfab.com/ministephen',
+    sourceUrl: 'https://sketchfab.com/3d-models/edison-light-bulb-aeb0e4832f04463280510e550e2cdbd5',
+    licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
+    usedFor: 'About me',
+    modifications: 'Reoriented with custom glass and lighting, a blue housing and cord, and interactive hanging physics.',
+  },
+  {
     title: 'Apple iPhone 18 Pro Max Black 2026',
     author: 'extraakash',
     authorUrl: 'https://sketchfab.com/AakashMansukhani',
