@@ -249,14 +249,14 @@ export function createLightingScene(container: HTMLElement): LightingScene {
     if (!width || !height) return;
     if (heading) fitToRect(heading, headingPoints, layout.heading, camera, width, height, 'left');
     fitToRect(artwork, artworkPoints, layout.artwork, camera, width, height, 'center');
-    // Desktop hangs between the artwork and copy; phones keep the bulb over
+    // Desktop hangs 64 CSS pixels left of center; phones keep the bulb over
     // the portrait, with the existing grab size and vertical placement.
     const ppm = pixelsPerMetre(camera, height, 0);
     const bulbPixels = layout.mobile ? 72 : 100;
     const scale = bulbPixels / (VIEW.bulbHeight * ppm);
     fixtureGroup.scale.setScalar(scale);
     fixtureGroup.position.set(
-      layout.mobile ? (layout.artwork.left + layout.artwork.width / 2 - width / 2) / ppm : 0,
+      layout.mobile ? (layout.artwork.left + layout.artwork.width / 2 - width / 2) / ppm : -64 / ppm,
       (height / 2 - (layout.artwork.top + layout.artwork.height * 0.3)) / ppm - 0.2 * scale,
       0,
     );

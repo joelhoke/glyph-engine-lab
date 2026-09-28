@@ -125,10 +125,10 @@
       "uri": "textures/initialShadingGroup_baseColor.jpeg"
     },
     {
-      "uri": "textures/initialShadingGroup_metallicRoughness.png"
+      "uri": "textures/initialShadingGroup_metallicRoughness.lossless.webp"
     },
     {
-      "uri": "textures/initialShadingGroup_normal.png"
+      "uri": "textures/initialShadingGroup_normal.lossless.webp"
     }
   ],
   "materials": [

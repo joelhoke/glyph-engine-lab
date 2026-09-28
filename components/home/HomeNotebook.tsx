@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useReducedMotion } from './HeroObject'
 import { HeroNotebookModel } from './renderers/HeroThreeObject'
 import { HOME_NOTEBOOK_PAGE } from '../../content/home'
+import ModelPoster from './ModelPoster'
 
 type HomeNotebookProps = {
   /** Cover labeling ("Joel Hoke" / role line) — used by the CSS fallback
@@ -66,17 +67,19 @@ export default function HomeNotebook({
     onBlur: () => setFocused(false),
   }
 
-  if (!modelFailed) {
+  if (!modelFailed || decorative) {
     return (
       <div className="home-hero-notebook home-hero-notebook--model" {...sharedProps}>
-        <HeroNotebookModel
+        {modelFailed ? <div className="home-hero-three home-hero-three--notebook" data-load-state="unavailable">
+          <ModelPoster variant="notebook" />
+        </div> : <HeroNotebookModel
           active={active}
           reducedMotion={reducedMotion}
           blurb={blurb}
           open={open}
           rotationOverride={rotationOverride}
           onUnavailable={() => setModelFailed(true)}
-        />
+        />}
         <span className="visually-hidden">{HOME_NOTEBOOK_PAGE.alt} {blurb}</span>
       </div>
     )

@@ -40,6 +40,8 @@ export default function HomeSection({ id, section, enabled, galleryProjects, gui
   const onPhoneKey = usePhoneKeypad(guide)
   const [unavailable, setUnavailable] = useState(false)
   const [iphoneUnavailable, setIphoneUnavailable] = useState(false)
+  const [workReady, setWorkReady] = useState(false)
+  const [iphoneReady, setIphoneReady] = useState(false)
   const [reelPaused, setReelPaused] = useState(false)
   const [reelState, setReelState] = useState<ScreenPlaybackState>('loading')
   const reelControls = useRef<ScreenPlaybackControls | null>(null)
@@ -72,17 +74,19 @@ export default function HomeSection({ id, section, enabled, galleryProjects, gui
     {id === 'work' && <div id={`home/${id}`} className="home-section-inner home-work-layout home-section-anchor">
       <figure className="home-work-object">
         <div className="home-work-stage">
-          {near && !unavailable ? <HeroThreeObject {...modelProps} variant="work" screenContent={WORK_REEL}
+          <img className="home-work-poster" data-ready={workReady && !unavailable}
+            src={WORK_REEL.poster} loading="lazy" alt="Microsoft Global Operations highlight reel" width={1920} height={1080} />
+          {near && !unavailable && <HeroThreeObject {...modelProps} variant="work" screenContent={WORK_REEL}
+            onFirstFrame={() => setWorkReady(true)}
             rotationOverride={WORK_ROTATION} playbackPaused={reelPaused}
-            playbackControls={reelControls} onPlaybackState={setReelState} /> :
-            <img className="home-work-poster" src={WORK_REEL.poster} loading="lazy" alt="Microsoft Global Operations highlight reel" width={1920} height={1080} />}
-          {near && !unavailable && <button type="button" className="home-work-playback-target"
+            playbackControls={reelControls} onPlaybackState={setReelState} />}
+          {workReady && !unavailable && <button type="button" className="home-work-playback-target"
             onClick={toggleReel}
             aria-label={reelState === 'playing' ? 'Pause highlight reel' : 'Play highlight reel'} />}
           <div className="home-work-iphone" role="img" aria-label="Employee experience dashboard on an iPhone">
-            {near && !iphoneUnavailable
-              ? <HeroThreeObject {...modelProps} variant="iphone" onUnavailable={() => setIphoneUnavailable(true)} />
-              : <img src="/assets/work/employee-experience-dashboard.webp" alt="" loading="lazy" width={744} height={1624} />}
+            <img data-ready={iphoneReady && !iphoneUnavailable} src="/assets/work/employee-experience-dashboard.webp" alt="" loading="lazy" width={744} height={1624} />
+            {near && !iphoneUnavailable && <HeroThreeObject {...modelProps} variant="iphone"
+              onFirstFrame={() => setIphoneReady(true)} onUnavailable={() => setIphoneUnavailable(true)} />}
           </div>
         </div>
         <figcaption className="home-object-caption">
@@ -109,7 +113,7 @@ export default function HomeSection({ id, section, enabled, galleryProjects, gui
       <div className="home-vibe-stage">
         <HomeVibePreviews near={near} />
         <div className="home-vibe-brush" aria-hidden="true">
-          {near && !unavailable && <HeroThreeObject {...modelProps} variant="vibe" modelScale={0.5} />}
+          <HeroThreeObject {...modelProps} load={near} variant="vibe" modelScale={0.5} />
         </div>
       </div>
       <div className="home-section-copy--center">{action}</div>
@@ -121,7 +125,7 @@ export default function HomeSection({ id, section, enabled, galleryProjects, gui
         <p className="home-section-intro">{section.introduction}</p>
       </div>}
       action={action}
-      portrait={near && !unavailable && <HeroThreeObject {...modelProps} variant="gallery" rotationOverride={PORTRAIT_ROTATION} />}
+      portrait={<HeroThreeObject {...modelProps} load={near} variant="gallery" rotationOverride={PORTRAIT_ROTATION} />}
     />}
 
     {id === 'collaborate' && <div className="home-section-inner home-collaborate-layout">
@@ -142,10 +146,9 @@ export default function HomeSection({ id, section, enabled, galleryProjects, gui
         <a className="home-direct-contact" href={COLLABORATE_CONTACT.mailtoUrl}>Or say hello to me directly</a>
       </div>
       <div id="home-collaborate-phone" ref={phoneRef} className="home-collaborate-phone">
-        {near && !unavailable ? <HeroThreeObject {...modelProps} variant="collaborate" rotationOverride={PHONE_SECTION_POSES[mobile ? 'mobile' : 'desktop']}
+        <HeroThreeObject {...modelProps} load={near} variant="collaborate" rotationOverride={PHONE_SECTION_POSES[mobile ? 'mobile' : 'desktop']}
           screenOverlay={COLLABORATE_AI_GUIDE ? <HomePhoneChat guide={guide} /> : undefined}
-          onPhoneKey={COLLABORATE_AI_GUIDE ? onPhoneKey : undefined} /> :
-          COLLABORATE_AI_GUIDE && <div className="home-phone-fallback"><HomePhoneChat guide={guide} /></div>}
+          onPhoneKey={COLLABORATE_AI_GUIDE ? onPhoneKey : undefined} />
       </div>
     </div>}
   </section>

@@ -125,10 +125,10 @@
       "uri": "textures/wire_176026026_baseColor.jpeg"
     },
     {
-      "uri": "textures/wire_176026026_metallicRoughness.png"
+      "uri": "textures/wire_176026026_metallicRoughness.lossless.webp"
     },
     {
-      "uri": "textures/wire_176026026_normal.png"
+      "uri": "textures/wire_176026026_normal.lossless.webp"
     }
   ],
   "materials": [

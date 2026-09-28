@@ -97,7 +97,7 @@ export default function HomeSpriteHand({ hand, side, active }: {
     observer.observe(anchor)
     setFlexed(false)
     reset()
-    preload()
+    // Optional flex frames start on interaction; the open hand paints first.
     window.addEventListener('pointermove', move, { passive: true })
     window.addEventListener('pointerout', leave)
     window.addEventListener('blur', reset)

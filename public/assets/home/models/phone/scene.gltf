@@ -200,7 +200,7 @@
       "uri": "textures/phone_baseColor.jpeg"
     },
     {
-      "uri": "textures/phone_metallicRoughness.png"
+      "uri": "textures/phone_metallicRoughness.lossless.webp"
     },
     {
       "uri": "textures/phone_normal.png"

@@ -24,7 +24,7 @@ export default function CanvasFallback() {
       />
       <p className="canvas-fallback-title">joel hoke design</p>
       <p className="canvas-fallback-copy">
-        Work · Vibe · Collaborate — enable JavaScript to explore the full experience.
+        Selected work, experiments, and ways to collaborate.
       </p>
     </div>
   )

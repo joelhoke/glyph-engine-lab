@@ -21,8 +21,8 @@ CSS owns the responsive layout in `../HomeSections.css`. Desktop uses the same
 left and body copy right. Mobile stacks artwork, greeting, and body. Measured
 artwork and heading slots are passed to `setLayout()`; `layout.ts` fits the
 geometry to those slots, including perspective and extrusion. Transparent PNG
-padding does not count toward the artwork's visible bounds. Desktop centers the
-bulb between the columns and anchors the entire simulated cord at the section's
+padding does not count toward the artwork's visible bounds. Desktop places the
+bulb 64 CSS pixels left of the section center and anchors the entire simulated cord at the section's
 top edge. Every segment below the ceiling responds to pulling; there is no
 fixed extension or midair joint. Mobile retains the original suspension over
 the portrait. Drag coordinates convert to the fixture's local physics frame.
@@ -42,8 +42,9 @@ The wrapper reads `--about-wall`, `--color-text`, `--color-hero-blue-mid`, and
 site's blue object treatment in both themes. The warm light and real shadows
 still affect the wall and objects.
 
-Bulb brightness follows the system theme: 200% in dark mode and 100% in light
-mode, applied both on initial load and when the theme changes.
+Bulb brightness is 200% on dark-mode desktop, 100% on mobile in either theme,
+and 100% on light-mode desktop. It updates on initial load, theme changes, and
+desktop/mobile breakpoint changes.
 
 `--about-glass` gives the transmissive bulb a subtle blue-grey smoke tint
 (#b5bfcc) in light mode for contrast, retaining its warm clear tint in dark mode.

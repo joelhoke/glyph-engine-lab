@@ -211,16 +211,16 @@
       "uri": "textures/monitor_glass_baseColor.jpg"
     },
     {
-      "uri": "textures/monitor_glass_metallicRoughness.png"
+      "uri": "textures/monitor_glass_metallicRoughness.lossless.webp"
     },
     {
       "uri": "textures/monitor_plastic_baseColor.jpg"
     },
     {
-      "uri": "textures/monitor_plastic_metallicRoughness.png"
+      "uri": "textures/monitor_plastic_metallicRoughness.lossless.webp"
     },
     {
-      "uri": "textures/monitor_plastic_normal.png"
+      "uri": "textures/monitor_plastic_normal.lossless.webp"
     }
   ],
   "materials": [

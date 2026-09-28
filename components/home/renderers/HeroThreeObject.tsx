@@ -1,6 +1,8 @@
 'use client'
 
-import { ReactNode, RefObject, useEffect, useRef } from 'react'
+import { ReactNode, RefObject, useEffect, useRef, useState } from 'react'
+import ModelPoster from '../ModelPoster'
+import { homeModelLoads, modelLoadPriority, type ModelLoadTicket } from '../modelLoadQueue'
 import { createFrameLoop, FrameLoop } from '../../../engine/frameLoop'
 import { HERO_PARALLAX_MIN_VIEWPORT_PX, normalizePointer, stepParallaxValue } from '../useHeroParallax'
 import { loadGltfModel, normalizeModel } from './gltfModel'
@@ -64,6 +66,10 @@ export type HeroThreeRendererProps = {
   /** Report a terminal setup failure (no WebGL, failed chunk/model load) so
    *  the dispatcher can swap in the fallback media. */
   onUnavailable?: () => void
+  /** Signals a rendered frame, rather than a completed model download. */
+  onFirstFrame?: () => void
+  /** Keep HTML content available while a distant section waits for proximity. */
+  load?: boolean
   /** Notebook only: the introduction text baked onto the page texture. */
   blurb?: string
   /** Notebook only: hinged-cover open state (hover/focus/tap from
@@ -691,6 +697,8 @@ export function HeroThreeObject({
   active,
   reducedMotion,
   onUnavailable,
+  onFirstFrame,
+  load = true,
   blurb,
   open = false,
   highlighted = false,
@@ -712,6 +720,15 @@ export function HeroThreeObject({
   const activeRef = useRef(active)
   const reducedMotionRef = useRef(reducedMotion)
   const onUnavailableRef = useRef(onUnavailable)
+  const onFirstFrameRef = useRef(onFirstFrame)
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'unavailable'>('loading')
+  const loadTicket = useRef<ModelLoadTicket | null>(null)
+  const loadPriority = modelLoadPriority(active, highlighted || open, presentation, variant)
+  const priorityRef = useRef(loadPriority)
+  useEffect(() => {
+    priorityRef.current = loadPriority
+    loadTicket.current?.setPriority(loadPriority)
+  }, [loadPriority])
   const onPlaybackStateRef = useRef(onPlaybackState)
   useEffect(() => { onPlaybackStateRef.current = onPlaybackState }, [onPlaybackState])
   const loopRef = useRef<FrameLoop | null>(null)
@@ -770,6 +787,7 @@ export function HeroThreeObject({
   useEffect(() => {
     onUnavailableRef.current = onUnavailable
   }, [onUnavailable])
+  useEffect(() => { onFirstFrameRef.current = onFirstFrame }, [onFirstFrame])
   useEffect(() => {
     openRef.current.target = open ? 1 : 0
     renderOnceRef.current()
@@ -788,17 +806,23 @@ export function HeroThreeObject({
 
   useEffect(() => {
     const host = hostRef.current
-    if (!host) return
+    if (!host || !load) return
     let disposed = false
     let failed = false
+    let firstFrame = false
+    setLoadState('loading')
     let cleanup: (() => void) | null = null
     const fail = () => {
       if (failed || disposed) return
       failed = true
+      cleanup?.()
+      cleanup = null
+      loadTicket.current?.finish()
+      setLoadState('unavailable')
       onUnavailableRef.current?.()
     }
 
-    void (async () => {
+    const initialize = async () => {
       let mods: ThreeModules
       try {
         mods = await loadThree()
@@ -806,6 +830,7 @@ export function HeroThreeObject({
         fail()
         return
       }
+
       if (disposed) return
       const { THREE } = mods
 
@@ -820,6 +845,16 @@ export function HeroThreeObject({
         fail()
         return
       }
+
+      const canvas = renderer.domElement
+      const contextLost = (event: Event) => { event.preventDefault(); fail() }
+      canvas.addEventListener('webglcontextlost', contextLost)
+      const disposeRenderer = () => {
+        canvas.removeEventListener('webglcontextlost', contextLost)
+        renderer.dispose()
+        canvas.remove()
+      }
+      cleanup = disposeRenderer
 
       const readToken: ReadToken = (name) =>
         getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#8abaff'
@@ -838,15 +873,14 @@ export function HeroThreeObject({
           embeddedScreen: presentation === 'section' && variant === 'collaborate',
         })
       } catch {
-        renderer.dispose()
         fail()
         return
       }
-      if (disposed) {
+      if (disposed || failed) {
         built.dispose()
-        renderer.dispose()
         return
       }
+      cleanup = () => { built.dispose(); disposeRenderer() }
       built.object.scale.multiplyScalar(modelScale)
       built.applyTheme(readToken)
       scene.add(built.object)
@@ -859,7 +893,6 @@ export function HeroThreeObject({
       key.position.set(2.5, 3, 4)
       scene.add(key)
 
-      const canvas = renderer.domElement
       canvas.setAttribute('aria-hidden', 'true')
       host.appendChild(canvas)
 
@@ -879,29 +912,40 @@ export function HeroThreeObject({
         target: { x: 0, y: 0 },
       }
       let lastNow = 0
-      let hostWidth = 1, hostHeight = 1
+      let hostWidth = 0, hostHeight = 0
 
       const draw = (deltaMs = 16) => {
-        const base = rotationOverrideRef.current ?? built.baseRotation
-        built.object.rotation.set(
-          base.x + tilt.current.x,
-          base.y + tilt.current.y,
-          0,
-        )
-        built.setOpen?.(openRef.current.current)
-        built.setHighlight?.(highlightRef.current.current)
-        built.keypadFeedback?.step(deltaMs, !interactive())
-        renderer.render(scene, camera)
-        const overlay = overlayRef.current
-        if (overlay && built.screenCorners) {
-          const points = built.screenCorners().map(point => {
-            point.project(camera)
-            return { x: (point.x + 1) * hostWidth / 2, y: (1 - point.y) * hostHeight / 2 }
-          })
-          const matrix = screenProjection(points, 240, 320)
-          overlay.style.visibility = matrix ? 'visible' : 'hidden'
-          if (matrix) overlay.style.transform = `matrix3d(${matrix.join(',')})`
-        }
+        if (disposed || failed || !hostWidth || !hostHeight) return
+        try {
+          const base = rotationOverrideRef.current ?? built.baseRotation
+          built.object.rotation.set(
+            base.x + tilt.current.x,
+            base.y + tilt.current.y,
+            0,
+          )
+          built.setOpen?.(openRef.current.current)
+          built.setHighlight?.(highlightRef.current.current)
+          built.keypadFeedback?.step(deltaMs, !interactive())
+          renderer.render(scene, camera)
+          if (renderer.getContext().isContextLost()) { fail(); return }
+          const overlay = overlayRef.current
+          if (overlay && built.screenCorners) {
+            const points = built.screenCorners().map(point => {
+              point.project(camera)
+              return { x: (point.x + 1) * hostWidth / 2, y: (1 - point.y) * hostHeight / 2 }
+            })
+            const matrix = screenProjection(points, 240, 320)
+            overlay.style.visibility = matrix ? 'visible' : 'hidden'
+            if (matrix) overlay.style.transform = `matrix3d(${matrix.join(',')})`
+          }
+          if (!firstFrame) {
+            firstFrame = true
+            loadTicket.current?.finish()
+            setLoadState('ready')
+            performance.mark(`home:${presentation}:${variant}:first-frame`)
+            onFirstFrameRef.current?.()
+          }
+        } catch { fail() }
       }
 
       const loop = createFrameLoop({
@@ -930,10 +974,11 @@ export function HeroThreeObject({
           highlightRef.current.current !== highlightRef.current.target ||
           built.painter?.needsFrames() === true ||
           built.keypadFeedback?.needsFrames() === true,
-        isParked: () => !activeRef.current,
+        isParked: () => disposed || failed || !activeRef.current,
       })
       loopRef.current = loop
       renderOnceRef.current = () => {
+        if (disposed || failed) return
         // Touch selection still animates the hinge and screen power. Only
         // cursor tilt requires a fine pointer and the desktop breakpoint.
         if (!interactive()) {
@@ -954,11 +999,13 @@ export function HeroThreeObject({
 
       // --- Sizing -------------------------------------------------------------
       const resize = () => {
-        const rect = host.getBoundingClientRect()
-        const width = Math.max(1, Math.round(rect.width))
-        const height = Math.max(1, Math.round(rect.height))
+        // Projection follows the local box, not a rotated/hover-scaled ancestor's
+        // screen bounds. This also keeps the live frame aligned with its poster.
+        const width = host.clientWidth
+        const height = host.clientHeight
         hostWidth = width
         hostHeight = height
+        if (!width || !height || disposed || failed) return
         renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
         // Expand the drawing area around the original viewport. The camera
         // and pixel scale stay unchanged, while the CRT can tilt past its
@@ -973,7 +1020,6 @@ export function HeroThreeObject({
       const resizeObserver =
         typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : null
       resizeObserver?.observe(host)
-      resize()
 
       // --- Theme follow ---------------------------------------------------------
       // Same source as engine/useSystemTheme: the light media query.
@@ -1089,9 +1135,6 @@ export function HeroThreeObject({
       window.addEventListener('resize', onEnvChange)
       fineHoverQuery.addEventListener('change', onEnvChange)
 
-      // First frame: static environments render once and stay parked.
-      renderOnceRef.current()
-
       cleanup = () => {
         painterRef.current = null
         loop.dispose()
@@ -1114,23 +1157,34 @@ export function HeroThreeObject({
         canvas.removeEventListener('pointercancel', clearKeyHover)
         window.removeEventListener('blur', clearKeyHover)
         built.dispose()
-        renderer.dispose()
-        canvas.remove()
+        disposeRenderer()
       }
-    })()
+      // All cleanup is registered before any draw can report readiness/failure.
+      resize()
+      // A hidden/zero-sized host must not monopolize the initialization queue.
+      // Its preview still stays up until a later resize produces a real frame.
+      loadTicket.current?.finish()
+    }
+    const ticket = homeModelLoads.enqueue(priorityRef.current, () => { void initialize().catch(fail) })
+    loadTicket.current = ticket
 
     return () => {
       disposed = true
+      ticket.finish()
+      if (loadTicket.current === ticket) loadTicket.current = null
       cleanup?.()
+      cleanup = null
     }
-  }, [variant, presentation, screenContent, modelScale])
+  }, [variant, presentation, screenContent, modelScale, load])
 
   return (
     <div
       className={`home-hero-three home-hero-three--${variant}${presentation === 'section' ? ' home-section-three' : ''}`}
       ref={hostRef}
+      data-load-state={loadState}
       aria-hidden={screenOverlay ? undefined : true}
     >
+      <ModelPoster variant={presentation === 'hero' ? variant : `${variant}-section`} />
       {screenOverlay && <div className="home-phone-screen" ref={overlayRef}>{screenOverlay}</div>}
     </div>
   )

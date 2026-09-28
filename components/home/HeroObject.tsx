@@ -4,6 +4,8 @@ import { ComponentType, useEffect, useState } from 'react'
 import type { HeroContent } from '../../content/home'
 import HomeMedia from './HomeMedia'
 import { HERO_THREE_RENDERERS } from './renderers/HeroThreeObject'
+import { HOME_HERO_POSTERS } from '../../content/home'
+import ModelPoster from './ModelPoster'
 
 /**
  * Custom hero preview renderers live OUTSIDE the serializable content
@@ -20,6 +22,8 @@ export type HeroRendererProps = {
   /** Report a terminal failure (e.g. no WebGL) so the dispatcher swaps in
    *  the slot's fallback media instead of an empty slot. */
   onUnavailable?: () => void
+  /** Called only after a successfully rendered, correctly sized first frame. */
+  onFirstFrame?: () => void
   /** The slot link's hover/focus state (drives the phone's idle → "Let’s chat"
    *  screen swap); undefined/false for everything else. */
   highlighted?: boolean
@@ -65,9 +69,16 @@ function HeroCustom({
   const [unavailable, setUnavailable] = useState(false)
   useEffect(() => setUnavailable(false), [content.renderer])
   const Renderer = renderers[content.renderer]
+  const variant = content.renderer.startsWith('three:') ? content.renderer.slice(6) : ''
+  const hasPoster = Boolean(HOME_HERO_POSTERS[variant])
   // Missing renderer key or a renderer-reported failure → the fallback path
   // (the slot's fallback image, or the branded placeholder).
-  if (!Renderer || unavailable) {
+  if ((!Renderer || unavailable) && hasPoster) {
+    return <div className="home-hero-custom"><div className={`home-hero-three home-hero-three--${variant}`} data-load-state="unavailable">
+      <ModelPoster variant={variant} />
+    </div></div>
+  }
+  if (!Renderer || (unavailable && !hasPoster)) {
     return <HomeMedia image={content.fallback ?? undefined} label={label} priority />
   }
   return (
@@ -124,6 +135,7 @@ export default function HeroObject({
     case 'custom':
       return (
         <HeroCustom
+          key={content.renderer}
           content={content}
           label={label}
           renderers={renderers}

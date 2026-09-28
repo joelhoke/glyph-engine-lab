@@ -117,6 +117,13 @@ const render = (content, renderers = {}) =>
     html.includes('home-hero-three') && html.includes('home-hero-three--work'),
     'a registered three renderer mounts its host shell under SSR',
   )
+  assert(html.includes('home-model-poster') && html.includes('work-dark.webp') && html.includes('work-light.webp'),
+    'initial server markup includes theme-matched model previews before effects run')
+  assert(html.includes('data-load-state="loading"'), 'the server does not claim a first frame before WebGL runs')
+  assert(!html.includes('<canvas'), 'server previews do not depend on browser canvas support')
+  const missingBuiltIn = render({ kind: 'custom', renderer: 'three:gallery', fallback: null })
+  assert(missingBuiltIn.includes('gallery-dark.webp') && !missingBuiltIn.includes('home-media-placeholder'),
+    'a missing built-in renderer still has its recognizable model preview')
   // A renderer reporting failure swaps to the fallback image path — the
   // dispatcher itself decides, so this is covered by the missing-key case
   // above plus the onUnavailable contract on HeroRendererProps.

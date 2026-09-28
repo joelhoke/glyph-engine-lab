@@ -316,6 +316,11 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   color: var(--color-text-muted);
   margin: 0;
 }
+/* The home portrait and object previews already form its initial composition.
+   Keep the canvas recovery branding from flashing underneath them. The layout's
+   noscript navigation still explains the disabled-JavaScript case. */
+.portfolio-shell[data-view='intro'] .canvas-fallback > * { display: none; }
+.portfolio-shell[data-view='intro'] .canvas-fallback { background: var(--color-page); }
 .portfolio-shell {
   position: relative;
   /* 100vh fallback, then dynamic viewport height so mobile browser-chrome
@@ -614,6 +619,16 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   display: block;
   width: 100%;
   height: 100%;
+}
+.home-model-poster { position: absolute; inset: 0; pointer-events: none; }
+.home-model-poster img { display: block; width: 100%; height: 100%; object-fit: fill; }
+.home-hero-three:has(.home-model-poster) > canvas { opacity: 0; transition: opacity 200ms ease; }
+.home-hero-three .home-model-poster { opacity: 1; transition: opacity 200ms ease; }
+.home-hero-three[data-load-state='ready'] > canvas { opacity: 1; }
+.home-hero-three[data-load-state='ready'] > .home-model-poster { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .home-hero-three:has(.home-model-poster) > canvas,
+  .home-hero-three .home-model-poster { transition: none; }
 }
 @media (max-width: 767px) {
   .home-hero-three {
@@ -943,6 +958,8 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
 @media (max-width: 767px) {
   .home-hero, .home-hero[data-portrait='sprites'] {
     --mobile-composition-scale: 0.42;
+    --dock-work-scale: 1.44;
+    --dock-work-layer: 32;
     --dock-rest-scale: 0.9;
     --dock-rest-spread: 1.15;
     display: flex;
@@ -1067,6 +1084,16 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   .home-hero-mobile-controls a:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 5px;
+  }
+}
+
+/* Match mobileCompositionScale before hydration; the ResizeObserver still
+   handles embedded/narrower containers and browsers without typed division. */
+@supports (transform: scale(calc(1px / 1px))) {
+  @media (max-width: 767px) {
+    .home-hero, .home-hero[data-portrait='sprites'] {
+      --mobile-composition-scale: min(1, calc((100vw - 24px) / 700px));
+    }
   }
 }
 /* Touch uses the same pixel reveal as desktop, with a full-size label link.

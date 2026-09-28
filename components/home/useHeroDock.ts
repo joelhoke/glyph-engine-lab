@@ -25,7 +25,8 @@ export function useHeroDock(hero: HTMLElement | null, active: boolean, focused: 
     let pointer: { x: number; y: number } | null = null
     let selected: HeroSlotId | null = null
     let spacing = desktop.matches ? DOCK_REST_SPACING : MOBILE_DOCK_REST_SPACING, targetSpacing = spacing
-    let weights = dockWeights(null), targetWeights = weights.slice()
+    let weights = desktop.matches ? dockWeights(null) : mobileDockWeights(mobileRef.current)
+    let targetWeights = weights.slice()
     let lastTime = 0
     const enabled = () => active && !document.hidden
     const write = () => {
