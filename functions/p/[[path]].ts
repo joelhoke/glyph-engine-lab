@@ -109,16 +109,54 @@ function gateResponse(stackSlug: string, stackTitle: string, failed = false): Re
       input { font: inherit; padding: 0.65rem 0.8rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.06); color: #f5f7fb; }
       button { font: inherit; padding: 0.65rem; border-radius: 999px; border: 1px solid #8abaff; background: transparent; color: #bcd7ff; cursor: pointer; }
       button:hover { background: rgba(138,186,255,0.12); }
+      button:disabled { opacity: 0.6; cursor: wait; }
     </style>
   </head>
   <body>
     <form method="post" action="/p/${stackSlug}/_unlock">
       <h1>${stackTitle}</h1>
       <p>This prototype is shared privately. Enter the password Joel sent you.</p>
-      ${failed ? '<p class="error">That password didn\u2019t work — try again, or ask Joel for a fresh one.</p>' : ''}
+      <p class="error" role="alert" aria-live="polite"${failed ? '' : ' hidden'}>${failed ? 'That password didn\u2019t work — try again, or ask Joel for a fresh one.' : ''}</p>
       <input type="password" name="password" autocomplete="current-password" required autofocus aria-label="Password" />
       <button type="submit">Unlock</button>
     </form>
+    <script>
+      // Keep a Pages/WAF JSON response from replacing this small form with a
+      // blank JSON document. Native form submission remains the no-JS fallback.
+      const form = document.querySelector('form')
+      const error = form.querySelector('.error')
+      const button = form.querySelector('button[type="submit"]')
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault()
+        button.disabled = true
+        error.hidden = true
+        try {
+          const response = await fetch(form.action, {
+            method: 'POST',
+            body: new FormData(form),
+            credentials: 'same-origin',
+          })
+          if (response.redirected) {
+            window.location.assign(response.url)
+            return
+          }
+          let message = response.status === 429
+            ? 'Too many unlock attempts. Wait a few minutes, then try again.'
+            : 'That password didn\u2019t work — try again, or ask Joel for a fresh one.'
+          if (response.headers.get('content-type')?.includes('application/json')) {
+            const body = await response.json().catch(() => null)
+            if (body && typeof body.error === 'string' && response.status !== 429) message = body.error
+          }
+          error.textContent = message
+          error.hidden = false
+        } catch {
+          error.textContent = 'Could not reach the prototype. Check your connection and try again.'
+          error.hidden = false
+        } finally {
+          button.disabled = false
+        }
+      })
+    </script>
   </body>
 </html>`
   return new Response(html, {

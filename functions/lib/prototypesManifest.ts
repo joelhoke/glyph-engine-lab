@@ -76,6 +76,11 @@ export type PrototypeStack = {
   prototypes: PrototypeEntry[]
 }
 
+// Shared password for the private prototype stacks. Keep only the salted
+// verifier in source; the plaintext is intentionally absent from the repo.
+const UNIVERSAL_PROTOTYPE_PASSWORD_HASH =
+  'pbkdf2$100000$rE8uOUeR6b5LQV-oq_r9PEEMCO9f16sZ90edc7IOiE0$hjXfvJeuTTZV-JnmcVic8rJC1QRdrVs5QgwxFrroe6A'
+
 export const STACKS: PrototypeStack[] = [
   // === SCAFFOLD: scripts/new-prototype.mjs inserts new stacks after this line ===
   {
@@ -109,15 +114,32 @@ export const STACKS: PrototypeStack[] = [
     ],
   },
   {
+    slug: 'joelops',
+    title: 'Microsoft Global Operations',
+    access: {
+      mode: 'password',
+      passwordHash: UNIVERSAL_PROTOTYPE_PASSWORD_HASH,
+      // Password rotation also revokes previously issued access cookies.
+      tokenVersion: 2,
+    },
+    listed: true,
+    prototypes: [
+      {
+        slug: 'demo',
+        title: 'Microsoft Global Operations',
+        summary:
+          'Explore dashboards, work orders, maps, alarms, faults, and Copilot-assisted facilities workflows.',
+        thumb: 'thumb.jpg',
+      },
+    ],
+  },
+  {
     slug: 'golden-age-collectables',
     title: 'Golden Age Collectables',
     access: {
       mode: 'password',
-      // Hash for the shared client password (scripts/prototype-password.mjs);
-      // plaintext never enters the repo. Bump tokenVersion to revoke every
-      // outstanding cookie for this stack.
-      passwordHash: 'pbkdf2$100000$LfVloONEk0yXZwSsAJzWarvzE0hgcNnBg1afZ38eIQM$Z1Xc3boimcIFAXD7qFxTv1_z3HJw0YrdyN_A41OTuGA',
-      tokenVersion: 1,
+      passwordHash: UNIVERSAL_PROTOTYPE_PASSWORD_HASH,
+      tokenVersion: 2,
     },
     listed: true,
     framing:
