@@ -45,7 +45,7 @@ type PagesEventContext<Env, Params extends string = string> = {
   request: Request
   env: Env
   params: Record<Params, string>
-  next: () => Promise<Response>
+  next: (request?: Request) => Promise<Response>
   waitUntil(promise: Promise<unknown>): void
 }
 

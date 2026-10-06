@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /**
- * Deterministic verification for the seasonal landing atmosphere (Stage 3):
- * engine/seasonalAtmosphere.ts.
+ * Deterministic verification for the seasonal landing atmosphere:
+ * engine/seasonalAtmosphere.ts — the Seattle-tuned OFFLINE FALLBACK for the
+ * landing (live conditions come from engine/liveWeather.ts).
  *
  * Checks: same inputs → same output (no randomness, no clock reads), the
  * hemisphere approximation from locale regions and timezone names, the
- * seasonal mapping across representative northern/southern dates, night
- * softening, and that the output is always a valid, already-clamped weather
- * AmbientConfig. Also asserts the module performs no network I/O — it is a
- * deterministic seasonal mood, never a weather service.
+ * Seattle-tuned seasonal mapping across representative northern/southern
+ * dates, night softening, and that the output is always a valid,
+ * already-clamped weather AmbientConfig. Also asserts the module performs no
+ * network I/O — the fallback stays fully offline.
  */
 
 const { execSync } = require('child_process')
@@ -108,8 +109,8 @@ const NORTHERN = { locale: 'en-US', timeZone: 'America/New_York' }
 const SOUTHERN = { locale: 'en-AU', timeZone: 'Australia/Sydney' }
 
 assert(
-  resolveSeasonalAtmosphere({ month: 1, hour: 12, ...NORTHERN }).weather.preset === 'snow',
-  'northern winter noon → snow atmosphere',
+  resolveSeasonalAtmosphere({ month: 1, hour: 12, ...NORTHERN }).weather.preset === 'rain',
+  'northern winter noon → rain atmosphere (Seattle winter)',
 )
 assert(
   resolveSeasonalAtmosphere({ month: 7, hour: 12, ...NORTHERN }).weather.preset === 'clear',
@@ -120,16 +121,16 @@ assert(
   'northern spring noon → rain atmosphere',
 )
 assert(
-  resolveSeasonalAtmosphere({ month: 10, hour: 12, ...NORTHERN }).weather.preset === 'wind',
-  'northern autumn noon → wind atmosphere',
+  resolveSeasonalAtmosphere({ month: 10, hour: 12, ...NORTHERN }).weather.preset === 'rain',
+  'northern autumn noon → rain atmosphere (Seattle autumn)',
 )
 assert(
   resolveSeasonalAtmosphere({ month: 1, hour: 12, ...SOUTHERN }).weather.preset === 'clear',
   'southern summer (January) noon → clear atmosphere',
 )
 assert(
-  resolveSeasonalAtmosphere({ month: 7, hour: 12, ...SOUTHERN }).weather.preset === 'snow',
-  'southern winter (July) noon → snow atmosphere',
+  resolveSeasonalAtmosphere({ month: 7, hour: 12, ...SOUTHERN }).weather.preset === 'rain',
+  'southern winter (July) noon → rain atmosphere',
 )
 
 // --- night softening ----------------------------------------------------------------

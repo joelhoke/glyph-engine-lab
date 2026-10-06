@@ -296,10 +296,13 @@ The wrangler CLI remains as a fallback:
 
 ## Collaborate AI guide
 
-The Collaborate page can answer visitor questions with an AI guide built
-strictly from an approved knowledge pack (`functions/lib/collaborateProfile.ts`,
-28 reviewed entries). Everything the guide may say traces back to a pack entry;
-anything outside the pack is abstained and handed off to email.
+The Collaborate page can answer visitor questions with an AI guide built from a
+canonical identity (`knowledge/identity/identity.md`) and an approved knowledge
+pack (`functions/lib/collaborateProfile.ts`, 30 reviewed entries). The identity
+governs perspective and conversational character; factual and viewpoint claims
+trace back to citable pack entries. Anything outside those sources is abstained
+and handed off to email. See `docs/identity-workflow.md` for the review and
+update process.
 
 ### Architecture
 
@@ -322,10 +325,13 @@ anything outside the pack is abstained and handed off to email.
     observability).
   - **OpenAI gpt-5.6-luna** via the Responses API with `store: false` and a
     strict `json_schema` response format, through the gateway.
-- The approved knowledge pack is sent **whole** in the system prompt on every
-  turn — the corpus is small enough that embeddings/Vectorize would add
-  moving parts without buying anything. Revisit retrieval only when the pack
-  grows materially.
+- The build embeds the canonical identity in
+  `functions/lib/generated/collaborateIdentity.ts`; the generated file is
+  checked against the Markdown source and must never be edited directly. The
+  identity and approved knowledge pack are sent **whole** in the system prompt
+  on every turn — the corpus is small enough that embeddings/Vectorize would
+  add moving parts without buying anything. Revisit retrieval only when the
+  pack grows materially.
 - Answers are **non-streaming**: the server validates the complete structured
   output (`validateModelAnswer` — JSON shape, 220-word cap, impersonation and
   commitment gates, source IDs must be active pack entries) before anything is
@@ -398,6 +404,12 @@ The full conversation loop runs locally against a mock model server:
 
 ### Privacy and data handling
 
+- The landing fetches **live Seattle weather** from Open-Meteo
+  (`engine/liveWeather.ts`): one client-side request per load (30-minute
+  session cache), fixed coordinates, no API key, no cookies, no credentials —
+  the request carries nothing about the visitor. On any failure the
+  Seattle-tuned seasonal mood (fully offline) applies instead. Weather data:
+  Open-Meteo, CC BY 4.0 (<https://open-meteo.com/>).
 - Conversations are **ephemeral by default**: held client-side, never sent to
   GA4, never written to logs. A transcript reaches the server only when the
   visitor explicitly shares it.
@@ -424,7 +436,7 @@ The full conversation loop runs locally against a mock model server:
 question sets (`scripts/evals/questions.json`, `scripts/evals/adversarial.json`)
 with hard gates (structured-output validity, voice, commitments, citations,
 abstention quality). Run it **monthly**, and on any model, prompt, profile, or
-price change:
+identity change or price change:
 
 ```
 node scripts/evals/run.js            # offline self-test, no keys needed
@@ -462,3 +474,93 @@ regression checklist for any model, prompt, profile, or pack change:
 - [x] Preview-tested with hiring managers, collaborators, and at least one
   startup founder.
 - [x] Flip the launch flag in `content/collaborate.ts`.
+
+## September 2026 launch remediation
+
+This section supersedes older instructions above that rely solely on WAF
+limits or dashboard-managed bindings. The project uses `wrangler.toml` as
+its binding source of truth. Current build requires Node 22.13+ (`.nvmrc`
+selects Node 22), Next 16.3.5 and React 19.3.0. `npm run build` deliberately
+uses Webpack to retain the existing configuration.
+
+### Required before deploying this working tree
+
+1. Apply `migrations/0005_request_limits.sql` to **jh-creations**:
+   `npx wrangler d1 execute jh-creations --remote --file migrations/0005_request_limits.sql`.
+   The API and prototype-unlock middleware fails closed with 503 if this
+   table, `CREATIONS_DB`, or `PROTOTYPES_AUTH_SECRET` is missing.
+2. Provision **jh-feedback** and **jh-collaborate** (read-only account
+   inventory on September 21 found only jh-creations). Keep these databases
+   separate as originally designed. Use `npx wrangler d1 create jh-feedback`
+   and `npx wrangler d1 create jh-collaborate`, then add the returned IDs in
+   `[[d1_databases]]` entries in wrangler.toml with bindings `FEEDBACK_DB`
+   and `COLLABORATE_DB`. Do not put placeholder IDs in a live deployment.
+3. Apply only the appropriate schema to each new database:
+   `npx wrangler d1 execute jh-feedback --remote --file migrations/0001_create_feedback.sql`
+   and `npx wrangler d1 execute jh-collaborate --remote --file migrations/0002_create_collaborate_shares.sql`.
+   Avoid applying the whole mixed-purpose migrations directory to all three.
+4. Configure and deploy `workers/collaborate-cleanup` with the real
+   COLLABORATE_DB ID. Feedback currently deletes expired rows on submission;
+   establish a scheduled feedback sweep too if 180-day removal must not
+   depend on another submission. Expiration timestamps alone do not delete
+   data. Verify actual retention operations before launch.
+5. Verify production AI provider secrets and provider-side spend limits.
+   Local preview has no AI provider token, so answer generation is covered
+   with mocked-provider tests, not a paid live call. Moonshot's direct route
+   does not inherit Cloudflare AI Gateway spend limits.
+6. If analytics is desired, supply `NEXT_PUBLIC_GA_MEASUREMENT_ID` at build
+   time and verify consented delivery and withdrawal in a real browser.
+   Without an ID, analytics intentionally remains off. Never put provider
+   API secrets in `NEXT_PUBLIC_*` variables.
+
+These are deployment actions, **not actions performed by the local audit
+remediation**. Review the preview before executing them or pushing.
+
+### Application request limits
+
+The API and `/p/*` middleware now enforces atomic D1 counters per client IP
+and ten-minute window: feedback 5, chat 30, transcript sharing 5, admin
+moderation 10, prototype unlock 5, and creation saves 300 (to accommodate the
+existing two-second autosave cadence). Route variants with a trailing slash
+share their counters. Counters are HMAC identifiers, keyed with the existing
+server-only `PROTOTYPES_AUTH_SECRET`; raw IPs are not stored. Expired entries
+are removed in indexed batches during writes. Missing storage fails closed;
+GET requests do not depend on this limiter.
+
+Actual request bytes are bounded before parsing, including when no
+Content-Length is supplied. Cross-origin mutation requests are rejected.
+Localhost port 3000 is allowed through the development proxy only when the
+backend itself is localhost. WAF protections remain useful for distributed
+abuse and bandwidth attacks; per-IP application counters are not a spend cap.
+
+### Preview and checks
+
+Build with `npm run build`, then:
+
+```sh
+npx wrangler pages dev out --port 8788 --d1 FEEDBACK_DB=local-feedback --d1 COLLABORATE_DB=local-collaborate
+```
+
+Local-only schemas were applied to the preview databases. The ignored
+`wrangler.preview.local.toml` is available for local D1 schema commands;
+Pages dev itself does not support a custom config path, so use the flags
+above. Never copy local database IDs into production configuration.
+
+Review `/`, `/privacy`, `/terms`, and a missing route at
+`http://localhost:8788`. Verify the hero, phone, menus, galleries, and both
+color themes on a real mobile browser after the React/Next update.
+
+Regression coverage: `verify-analytics`, `verify-feedback`,
+`verify-collaborate-api`, `verify-collaborate-share`, `verify-creations-api`,
+`verify-request-protection`, `verify-vibe-content`, `verify-mobile-hero`,
+`verify-gallery-loop`, `verify-home-scroll`, `verify-phone-keypad`, and
+`verify-hero-dock` under `scripts/`.
+
+### Approved production setup — September 21
+
+The request_limits schema is applied to production jh-creations. The dedicated
+jh-feedback and jh-collaborate databases now exist with their individual
+schemas and real IDs in wrangler.toml. The scheduled cleanup configuration
+binds both and sweeps expired feedback as well as shared transcripts.
+Production AI/auth secret names were verified present. Provider-side spend
+caps and consented analytics delivery still require separate verification.

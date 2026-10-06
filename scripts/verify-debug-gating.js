@@ -304,7 +304,11 @@ async function scenarioProduction(page) {
   await page.waitForSelector('button.vibe-sound-transport[aria-label="Pause sound"]', {
     timeout: 8000,
   })
-  await page.click('.experience-nav-button >> text=Work')
+  // Phase 5: the tab row is gone — hash navigation matches the vibe round
+  // trip below and keeps this script focused on sound behavior.
+  await page.evaluate(() => {
+    window.location.hash = '#work'
+  })
   await page.waitForSelector('.work-experience', { timeout: 15000 })
   await page.evaluate(() => {
     window.location.hash = '#vibe'

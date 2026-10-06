@@ -179,15 +179,40 @@ export function createAnalyticsClient(options: {
 
   let active = false
   let gtagReady = false
+  let generation = 0
+  let pendingScript: HTMLScriptElement | null = null
+
+  const disableProvider = (disabled: boolean) => {
+    if (measurementId && typeof window !== 'undefined') {
+      ;(window as any)[`ga-disable-${measurementId}`] = disabled
+    }
+  }
+
+  const clearAnalyticsCookies = () => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return
+    const host = window.location.hostname
+    const domains = ['', ...host.split('.').map((_, index, parts) => `; domain=${parts.slice(index).join('.')}`)]
+    for (const cookie of document.cookie.split(';')) {
+      const name = cookie.split('=')[0].trim()
+      if (!/^_ga(?:_|$)/.test(name)) continue
+      for (const domain of domains) {
+        document.cookie = `${name}=; Max-Age=0; path=/${domain}; SameSite=Lax`
+      }
+    }
+  }
 
   const boot = () => {
     if (active || typeof document === 'undefined') return
     active = true
+    disableProvider(false)
+    const ticket = ++generation
     try {
       const script = document.createElement('script')
+      pendingScript = script
       script.async = true
       script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`
       script.onload = () => {
+        if (!active || ticket !== generation) return
         try {
           const w = window as any
           w.dataLayer = w.dataLayer ?? []
@@ -199,9 +224,15 @@ export function createAnalyticsClient(options: {
           /* silent */
         }
       }
+      script.onerror = () => {
+        if (ticket !== generation) return
+        active = false
+        pendingScript?.remove()
+        pendingScript = null
+      }
       document.head.appendChild(script)
     } catch {
-      /* silent */
+      active = false
     }
   }
 
@@ -213,10 +244,16 @@ export function createAnalyticsClient(options: {
     },
     deny: () => {
       writeConsent(options.storage, 'denied', now())
-      // Nothing to tear down: before consent nothing was ever loaded.
+      active = false
+      gtagReady = false
+      generation += 1
+      disableProvider(true)
+      pendingScript?.remove()
+      pendingScript = null
+      try { clearAnalyticsCookies() } catch { /* Storage may be blocked. */ }
     },
     track: (event: AnalyticsEvent) => {
-      if (!gtagReady || typeof window === 'undefined') return
+      if (!active || !gtagReady || typeof window === 'undefined') return
       try {
         const clean = sanitizeEvent(event)
         ;(window as any).gtag?.('event', clean.name, clean.params)

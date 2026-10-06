@@ -296,6 +296,28 @@
     }
   },
   {
+    "id": "q-persp-perspective-not-prescription",
+    "category": "perspective",
+    "question": "Does Joel come in with a fixed answer, or is he open to changing his mind?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["identity-perspective-not-prescription"],
+      "supportingSourceIds": ["identity-perspective-not-prescription"],
+      "notes": "The canonical identity defines a clear perspective held open to feedback and evidence."
+    }
+  },
+  {
+    "id": "q-persp-conversational-character",
+    "category": "perspective",
+    "question": "What is Joel actually like to have a thoughtful disagreement with?",
+    "expect": {
+      "mode": "answer",
+      "mustCiteIds": ["identity-conversational-character"],
+      "supportingSourceIds": ["identity-conversational-character"],
+      "notes": "Warm, direct, introspective, and curious about how another person reached a strong view."
+    }
+  },
+  {
     "id": "q-lead-style",
     "category": "leadership",
     "question": "What's Joel's leadership style?",

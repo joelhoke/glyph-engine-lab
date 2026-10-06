@@ -35,6 +35,7 @@ const CONTENT_TYPE_BY_EXTENSION = new Map([
   ['.js', 'text/javascript; charset=utf-8'],
   ['.mjs', 'text/javascript; charset=utf-8'],
   ['.json', 'application/json'],
+  ['.txt', 'text/x-component'],
   ['.webp', 'image/webp'],
   ['.png', 'image/png'],
   ['.jpg', 'image/jpeg'],

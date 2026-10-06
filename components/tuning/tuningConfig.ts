@@ -1,5 +1,8 @@
 import { defaultSceneState } from '../../engine/constants'
 import { SourceLayoutConfig } from '../../engine/svgTargetSource'
+import { HERO_THREE_BASE_ROTATIONS } from '../home/renderers/HeroThreeObject'
+
+const radToDeg = (rad: number) => (rad * 180) / Math.PI
 
 export type NumericControlDefinition = {
   label: string
@@ -165,6 +168,98 @@ export const SOURCE_LAYOUT_CONTROL_DEFINITIONS: Record<
   },
 }
 
+// --- Hero fan tuning (homepage-redesign) --------------------------------------
+//
+// The hero's fan geometry lives as CSS custom properties in globals.css
+// (consumed by the slot POSITION elements); the tuning panel edits working
+// copies of the shipped defaults below, and the shell writes the custom
+// properties inline on the hero element. "Copy values" exports the CSS
+// custom-property block for baking tuned values back into globals.css.
+
+export const HERO_FAN_SLOT_KEYS = ['work', 'vibe', 'intro', 'collaborate', 'gallery'] as const
+export type HeroFanSlotKey = (typeof HERO_FAN_SLOT_KEYS)[number]
+
+export const HERO_FAN_SLOT_LABELS: Record<HeroFanSlotKey, string> = {
+  work: 'Work',
+  vibe: 'Vibe',
+  intro: 'Intro',
+  collaborate: 'Collaborate',
+  gallery: 'Gallery',
+}
+
+export type HeroFanConfig = {
+  /** Global horizontal spread — multiplies the per-slot X offsets. */
+  spread: number
+  /** The fan's vertical anchor (the slots' `top`, percent of hero height). */
+  top: number
+  /** Per-slot rest rotation, degrees (the 2D fan card angle). */
+  angle: Record<HeroFanSlotKey, number>
+  /** Per-slot scale multiplier. */
+  scale: Record<HeroFanSlotKey, number>
+  /** Per-slot 3D rest orientation, degrees (the objects' baseRotation). */
+  rotation: Record<HeroFanSlotKey, { x: number; y: number }>
+  /** Portrait backdrop: vertical anchor (percent) and height multiplier. */
+  portraitTop: number
+  portraitScale: number
+}
+
+/** Must match the custom-property defaults declared in globals.css exactly —
+ *  the untuned render is pixel-identical to the shipped geometry. The 3D
+ *  rotations derive from HERO_THREE_BASE_ROTATIONS (the builders' radians
+ *  map) — one source of truth, converted to degrees for the panel. */
+export const APPROVED_HERO_FAN_DEFAULTS: HeroFanConfig = {
+  spread: 1.12,
+  top: 50,
+  angle: { work: -11, vibe: -5.5, intro: 0, collaborate: 5.5, gallery: 11 },
+  scale: { work: 0.88, vibe: 0.86, intro: 1.38, collaborate: 0.92, gallery: 1 },
+  rotation: {
+    work: { x: radToDeg(HERO_THREE_BASE_ROTATIONS.work.x), y: radToDeg(HERO_THREE_BASE_ROTATIONS.work.y) },
+    vibe: { x: radToDeg(HERO_THREE_BASE_ROTATIONS.vibe.x), y: radToDeg(HERO_THREE_BASE_ROTATIONS.vibe.y) },
+    intro: { x: radToDeg(HERO_THREE_BASE_ROTATIONS.notebook.x), y: radToDeg(HERO_THREE_BASE_ROTATIONS.notebook.y) },
+    collaborate: { x: radToDeg(HERO_THREE_BASE_ROTATIONS.collaborate.x), y: radToDeg(HERO_THREE_BASE_ROTATIONS.collaborate.y) },
+    gallery: { x: radToDeg(HERO_THREE_BASE_ROTATIONS.gallery.x), y: radToDeg(HERO_THREE_BASE_ROTATIONS.gallery.y) },
+  },
+  portraitTop: 5,
+  portraitScale: 1,
+}
+
+export type HeroFanChange =
+  | { kind: 'spread'; value: number }
+  | { kind: 'top'; value: number }
+  | { kind: 'angle'; slot: HeroFanSlotKey; value: number }
+  | { kind: 'scale'; slot: HeroFanSlotKey; value: number }
+  | { kind: 'rotation'; slot: HeroFanSlotKey; axis: 'x' | 'y'; value: number }
+  | { kind: 'portraitTop'; value: number }
+  | { kind: 'portraitScale'; value: number }
+
+/** The CSS custom-property map for a fan config (property → value). */
+export function heroFanCssProperties(config: HeroFanConfig): Record<string, string> {
+  const props: Record<string, string> = {
+    '--hero-spread': String(config.spread),
+    '--hero-fan-top': `${config.top}%`,
+    '--hero-portrait-top': `${config.portraitTop}%`,
+    '--hero-portrait-scale': String(config.portraitScale),
+  }
+  for (const slot of HERO_FAN_SLOT_KEYS) {
+    props[`--slot-${slot}-angle`] = `${config.angle[slot]}deg`
+    props[`--slot-${slot}-scale`] = String(config.scale[slot])
+  }
+  return props
+}
+
+/** Clipboard export for the tuned values — the CSS custom-property block
+ *  for globals.css plus the base rotations as a paste-able radians map for
+ *  HERO_THREE_BASE_ROTATIONS in HeroThreeObject.tsx. */
+export function formatHeroFanCss(config: HeroFanConfig): string {
+  const props = heroFanCssProperties(config)
+  const lines = Object.entries(props).map(([key, value]) => `  ${key}: ${value};`)
+  const degToRad = (deg: number) => Number(((deg * Math.PI) / 180).toFixed(3))
+  const rotationLines = HERO_FAN_SLOT_KEYS.map(
+    (slot) =>
+      `  ${slot === 'intro' ? 'notebook' : slot}: { x: ${degToRad(config.rotation[slot].x)}, y: ${degToRad(config.rotation[slot].y)} },`,
+  )
+  return `/* Hero fan geometry (tuned via the tuning panel's Hero section) */\n${lines.join('\n')}\n\n/* Object base rotations — paste into HERO_THREE_BASE_ROTATIONS (components/home/renderers/HeroThreeObject.tsx) */\n{\n${rotationLines.join('\n')}\n}\n`
+}
 function decimalPlaces(value: number): number {
   const match = String(value).match(/\.(\d+)$/)
   return match ? match[1].length : 0

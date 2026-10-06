@@ -66,12 +66,13 @@ async function seedConsentDenied(context) {
 
 async function enterWork(page) {
   await page.goto(URL, { waitUntil: 'domcontentloaded' })
-  await page.waitForSelector('.primary-actions:not(.options-hidden):not(.options-inert)', {
-    timeout: 30000,
-  })
-  // The Work entry point is a pill on main and a doorway card on the
-  // redesign branch — either way it's the first button in the actions group.
-  await page.click('.primary-actions button:has-text("Work")')
+  // Phase 5 entry path: the header menu (the old doorway cards are gone).
+  // html.theme-ready marks React hydration — clicking earlier hits an
+  // inert SSR button.
+  await page.waitForSelector('html.theme-ready', { timeout: 30000 })
+  await page.click('.site-header-menu-button')
+  await page.waitForSelector('#site-menu[open]', { timeout: 10000 })
+  await page.click('.site-menu-link:has-text("Work")')
   await page.waitForSelector('.work-experience', { timeout: 15000 })
   await sleep(1200)
   // Slide 1 (Global Operations) is overflow-eligible; the intro is not.

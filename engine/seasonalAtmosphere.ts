@@ -1,13 +1,16 @@
 /**
- * Seasonal landing atmosphere (Stage 3): a deterministic daily weather mood
- * for the completed-intro landing scene.
+ * Seasonal landing atmosphere: the OFFLINE FALLBACK weather mood for the
+ * completed-intro landing scene, tuned to Seattle's climate (the designer's
+ * home base). The landing prefers live Seattle conditions
+ * (engine/liveWeather.ts, applied by components/PortfolioExperience.tsx);
+ * this resolver covers offline, slow, or malformed responses — and its
+ * Seattle-tuned table means the fallback stays honest to the same city.
  *
  * The atmosphere is derived ONLY from local date/time, the IANA timezone
- * name, and the locale's region (a hemisphere approximation). It is NOT a
- * weather service: nothing here performs network I/O, no IP geolocation is
- * consulted, and the same inputs always produce the same output. Site copy
- * must never describe the result as live or current conditions — it is a
- * seasonal mood, nothing more.
+ * name, and the locale's region (a hemisphere approximation). Nothing here
+ * performs network I/O and the same inputs always produce the same output.
+ * Site copy may describe the landing as reflecting Seattle's weather — live
+ * when the fetch lands, seasonal otherwise.
  *
  * Pure functions only — verified by scripts/verify-seasonal-atmosphere.js.
  */
@@ -103,16 +106,17 @@ type SeasonalWeather = {
   blur: number
 }
 
-/** Quiet, moderate moods — the landing stays calm, never a storm. */
+/** Quiet, moderate Seattle moods — the landing stays calm, never a storm.
+ *  Wet/drizzly fall through spring, dry clear summers, gray rainy winters. */
 const SEASONAL_WEATHER: Record<Season, SeasonalWeather> = {
   spring: { preset: 'rain', intensity: 55, wind: 35, turbulence: 70, blur: 30 },
   summer: { preset: 'clear', intensity: 50, wind: 45, turbulence: 60, blur: 15 },
-  autumn: { preset: 'wind', intensity: 55, wind: 65, turbulence: 80, blur: 20 },
-  winter: { preset: 'snow', intensity: 60, wind: 30, turbulence: 55, blur: 25 },
+  autumn: { preset: 'rain', intensity: 55, wind: 40, turbulence: 65, blur: 30 },
+  winter: { preset: 'rain', intensity: 45, wind: 30, turbulence: 50, blur: 30 },
 }
 
 /** Calmer pointer influence than the playground default: a backdrop, not a toy. */
-const LANDING_INTERACTION_STRENGTH = 0.6
+export const LANDING_INTERACTION_STRENGTH = 0.6
 
 /**
  * Resolve the day's seasonal atmosphere. Deterministic: no randomness, no

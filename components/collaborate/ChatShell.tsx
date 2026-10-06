@@ -40,7 +40,7 @@ type ChatShellProps = {
   onRetry: () => void
   onDraftChange: (draft: string) => void
   onShare: (replyEmail: string) => void
-  /** Page variant only: back to the collaborate landing. */
+  /** Page variant only: back to the homepage Collaborate section. */
   onBack?: () => void
   /** Where the shell is presented: the full chat page, the docked desktop
    *  companion, or the narrow-viewport modal overlay. Defaults to 'page'. */

@@ -1,0 +1,15 @@
+{
+  "repository": "https://github.com/joelhoke/Lightbox",
+  "commit": "0ab08e725b6229aea914ffff82c4429e9d97cad1",
+  "syncedAt": "2026-09-25",
+  "included": "Scene renderer and all supporting runtime modules; original bulb assets and license",
+  "adaptations": [
+    "Next.js imports and asset paths",
+    "Responsive DOM-aligned layout and site theme",
+    "Cabin Bold 3D heading and separate mono body copy",
+    "Section visibility lifecycle",
+    "Full-length ceiling suspension for desktop",
+    "ES2020-compatible glass shader string replacement"
+  ],
+  "excluded": "Standalone editor UI and controls"
+}

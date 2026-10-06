@@ -311,6 +311,63 @@ const PRESETS = ['clear', 'rain', 'storm', 'snow', 'blizzard', 'fog', 'wind']
   )
 }
 
+// (4e-distribution) long-run VERTICAL distribution: no animation type may
+// collapse onto any band — not the bottom edge (the original pile-up, where
+// non-precipitation presets blended every agent toward a constant downward
+// velocity) and not mid-field (over-strong centering spring). Iterates every
+// profile key so future presets are audited automatically.
+{
+  for (const preset of Object.keys(WEATHER_PROFILES)) {
+    const config = ambientWith({ mode: 'weather', weather: { preset } })
+    const field = createAmbientField('weather', 400, 1280, 800, config, createSeededRandom(99))
+    // ~5 minutes at a 30 Hz tick, scene clock advancing.
+    const params = stepParams(config, 1280, 800, 1 / 30)
+    for (let s = 0; s < 9000; s += 1) {
+      params.time = s / 30
+      stepAmbientField(field, params)
+    }
+    const bins = new Array(8).fill(0)
+    let clampedBottom = 0
+    for (let i = 0; i < field.count; i += 1) {
+      const y = Math.min(799.99, Math.max(0, field.y[i]))
+      bins[Math.floor((y / 800) * 8)] += 1
+      if (field.y[i] === 800) clampedBottom += 1
+    }
+    const mean = field.count / 8
+    const maxBin = Math.max(...bins)
+    assert(
+      maxBin <= mean * 2.5,
+      `${preset}: no vertical band dominates after 5 minutes (max bin ${maxBin}, mean ${mean.toFixed(1)}, bands ${bins.join(',')})`,
+    )
+    if (!WEATHER_PROFILES[preset].recycleBottom) {
+      assert(
+        clampedBottom === 0,
+        `${preset}: no agents resting exactly at y=height after long run (got ${clampedBottom})`,
+      )
+    }
+  }
+
+  // Matrix streams are viewport-bound by construction; guard the invariant.
+  const mconfig = ambientWith({ mode: 'matrix' })
+  const mfield = createAmbientField('matrix', 5000, 1280, 800, mconfig, createSeededRandom(97))
+  const mparams = stepParams(mconfig, 1280, 800, 1 / 30)
+  for (let s = 0; s < 9000; s += 1) {
+    mparams.time = s / 30
+    stepAmbientField(mfield, mparams)
+  }
+  const mbins = new Array(8).fill(0)
+  for (let i = 0; i < mfield.count; i += 1) {
+    const y = Math.min(799.99, Math.max(0, mfield.y[i]))
+    mbins[Math.floor((y / 800) * 8)] += 1
+  }
+  const mmean = mfield.count / 8
+  const mmax = Math.max(...mbins)
+  assert(
+    mmax <= mmean * 2.5,
+    `matrix: no vertical band dominates after 5 minutes (max ${mmax}, mean ${mmean.toFixed(1)})`,
+  )
+}
+
 // (4e) normalizeAmbientField repairs stale positions without a rebuild
 {
   const config = ambientWith({ mode: 'weather', weather: { preset: 'wind' } })

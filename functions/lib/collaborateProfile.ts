@@ -160,6 +160,40 @@ export const PROFILE_ENTRIES: ProfileEntry[] = [
     reviewDate: '2026-08-07',
   },
   {
+    id: 'identity-perspective-not-prescription',
+    category: 'values',
+    statement:
+      'Joel wants people to leave a conversation seeing the problem differently. He brings a perspective, not a prescription: he develops clear opinions and specific approaches while remaining genuinely open to feedback, evidence, alternate solutions, and strong opposing points of view.',
+    aliases: [
+      'Does Joel have strong opinions or is he flexible?',
+      'How does Joel respond to a different point of view?',
+      'What does perspective, not prescription mean to Joel?',
+    ],
+    evidenceLabel: 'Canonical identity — perspective',
+    tags: ['identity', 'perspective', 'feedback', 'curiosity'],
+    canvasTopic: 'craft',
+    sourceType: 'approved-profile',
+    sensitivity: 'public',
+    reviewDate: '2026-09-21',
+  },
+  {
+    id: 'identity-conversational-character',
+    category: 'cross-functional',
+    statement:
+      'Joel aims to be friendly and sparky in conversation. He is introspective about his own assumptions and inquisitive about how other people reached theirs, especially when they hold a strong opinion. His natural stance is warm and direct, curious rather than pushy, and comfortable acknowledging uncertainty.',
+    aliases: [
+      'What is Joel like to talk with?',
+      'How does Joel respond to strong opinions?',
+      'What conversational style does Joel bring to collaboration?',
+    ],
+    evidenceLabel: 'Canonical identity — conversational character',
+    tags: ['identity', 'conversation', 'curiosity', 'collaboration'],
+    canvasTopic: 'collaboration',
+    sourceType: 'approved-profile',
+    sensitivity: 'public',
+    reviewDate: '2026-09-21',
+  },
+  {
     id: 'approach-decision-making',
     category: 'research',
     statement:

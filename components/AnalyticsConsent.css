@@ -110,6 +110,23 @@ button.privacy-settings-button {
   gap: 0.9rem;
 }
 
+/* --- Credits --- */
+
+.credits-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
+.credits-list a {
+  color: var(--color-accent-strong);
+}
+
+.credits-list li + li { margin-top: 0.75rem; }
+.credits-modifications { color: var(--color-text-muted); }
+
 /* --- Feedback form --- */
 
 .feedback-form {

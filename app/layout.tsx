@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Cabin } from 'next/font/google'
 import ThemeReady from '../components/ThemeReady'
+import { RECRUITER_LINKS } from '../content/site'
 import './globals.css'
 
 // Cabin 700 for primary display headings (Vibe/Collaborate headings, Work
@@ -95,8 +96,8 @@ export const metadata: Metadata = {
     images: ['/assets/og-1200x630.png'],
   },
   icons: {
-    icon: { url: '/favicon-32x32.png', type: 'image/png', sizes: '28x32' },
-    apple: { url: '/apple-icon-180x180.png', type: 'image/png', sizes: '161x180' },
+    icon: { url: '/favicon-32x32.png', type: 'image/png', sizes: '32x32' },
+    apple: { url: '/apple-icon-180x180.png', type: 'image/png', sizes: '180x180' },
   },
 }
 
@@ -107,6 +108,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Inline first so the branded chrome never flashes unstyled when the
             external stylesheet is slow, blocked, or rejected. */}
         <style dangerouslySetInnerHTML={{ __html: CRITICAL_FALLBACK_CSS }} />
+        {/* Marks recognized mode deep links (`#work/...`, `#vibe`,
+            `#collaborate`) before first paint so the shell can resolve them
+            instantly — back/forward onto a deep link returns to that view
+            instead of flashing the landing and animating away from it. The
+            mode list mirrors EXPERIENCE_SCENE_KEYS in engine/experienceHash. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var h=location.hash.replace(/^#/,'').trim().toLowerCase().split('/')[0];if(h==='work'||h==='vibe'||h==='collaborate'){document.documentElement.setAttribute('data-deep-link','')}}catch(e){}})()`,
+          }}
+        />
         {/* Gates the globals.css theme transitions until after hydration, so
             the first paint never animates — only live system changes fade. */}
         <ThemeReady />
@@ -115,6 +126,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         {children}
         <noscript>
+          {/* No-JS navigation (phase 6): the menu trigger is inert without
+              JavaScript, so prerendered plain links carry every destination
+              — scene hashes resolve through engine/experienceHash. */}
+          <nav className="noscript-nav" aria-label="Site">
+            <a href="/#work">Work</a>
+            <a href="/#vibe">Vibe</a>
+            <a href="/gallery">Gallery</a>
+            <a href={RECRUITER_LINKS.resume.url}>{RECRUITER_LINKS.resume.label}</a>
+            <a href={RECRUITER_LINKS.linkedin.url}>{RECRUITER_LINKS.linkedin.label}</a>
+            <a href={RECRUITER_LINKS.email.url}>{RECRUITER_LINKS.email.label}</a>
+          </nav>
           <p className="noscript-note">
             JavaScript is disabled, so the interactive canvas is offline. The
             work, vibe, and collaborate summaries on this page remain readable

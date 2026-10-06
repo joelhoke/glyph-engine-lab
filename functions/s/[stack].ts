@@ -64,10 +64,16 @@ export const onRequestGet: PagesFunction<LinkEnv, 'stack'> = async (context) => 
   if (!valid) return invalidLinkResponse()
 
   const cookie = await issuePrototypeCookie(stack.slug, tokenVersion, secret, Date.now())
+  // Single-prototype stacks skip the intermediate stack page, same as the
+  // password-unlock redirect in functions/p/[[path]].ts.
+  const location =
+    stack.prototypes.length === 1
+      ? `/p/${stack.slug}/${stack.prototypes[0].slug}/`
+      : `/p/${stack.slug}`
   return new Response(null, {
     status: 303,
     headers: buildProtectedHeaders({
-      Location: `/p/${stack.slug}`,
+      Location: location,
       'Set-Cookie': cookie,
     }),
   })

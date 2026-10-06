@@ -54,7 +54,7 @@ export type VibeToolbarProps = {
   /** Paint popout action: clear the paint overlay (one history transaction). */
   onClearPaint: () => void
   /** Scene canvas handle for the share PNG export. */
-  canvasRef: React.RefObject<SceneCanvasHandle>
+  canvasRef: React.RefObject<SceneCanvasHandle | null>
   /** Dev ?debug=true: reveals debug-only categories (DEBUG_ONLY_CATEGORIES —
    *  e.g. Visual Sonification). Production visitors never see them — the
    *  category is not rendered at all. */

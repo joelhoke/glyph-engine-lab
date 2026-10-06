@@ -53,3 +53,9 @@ Provenance for self-hosted images in `public/assets/work/` used by the case-stud
 - **Provenance:** own footage — highlight reel of Microsoft's RealComm 2026 keynote, supplied by the author (`~/Downloads/RealcommHighlights.mp4`, 1920×1080 H.264/AAC, 65.9s); re-encoded (metadata-stripped, faststart) for web delivery. Replaces the earlier `RealComm-Keynote*` excerpt set.
 - **Retrieval date:** 2026-09-08
 - **Caption:** Highlights from Microsoft's RealComm 2026 keynote presentation, which the author supported with slide content and strategic story — the work that led to Microsoft winning the 2026 Digie award for "Most Intelligent Corporate Headquarters".
+
+## Global Operations shared thumbnail
+
+- **Source:** Microsoft logo over a blurred dashboard, supplied by Joel in this session.
+- **Local path:** `public/assets/work/global-operations-thumbnail.png` (3920 × 2240, original file preserved).
+- **Usage:** Homepage and gallery project cards, Work preview/fallback, and the Global Operations reel poster. Shared URL lives in `content/workMedia.ts`. The original reel frame capture remains archived but is no longer the active poster.
