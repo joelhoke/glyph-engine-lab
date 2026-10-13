@@ -1,0 +1,146 @@
+[
+  {
+    "id": "xbox-2118292977",
+    "title": "ARC Raiders",
+    "source": "Xbox",
+    "image": {
+      "src": "/assets/about/media/xbox-2118292977.webp?v=5bf438c26973",
+      "alt": "ARC Raiders cover",
+      "width": 420,
+      "height": 630
+    },
+    "url": "https://www.xbox.com/en-US/games/store/-/9NDF1F263RZ4"
+  },
+  {
+    "id": "xbox-1728105232",
+    "title": "Assassin's Creed Valhalla",
+    "source": "Xbox",
+    "image": {
+      "src": "/assets/about/media/xbox-1728105232.webp?v=7aa6e44c1d88",
+      "alt": "Assassin's Creed Valhalla cover",
+      "width": 420,
+      "height": 630
+    },
+    "url": "https://www.xbox.com/en-US/games/store/-/9P4NJFH17MRT"
+  },
+  {
+    "id": "xbox-175227487",
+    "title": "Apex Legends™",
+    "source": "Xbox",
+    "image": {
+      "src": "/assets/about/media/xbox-175227487.webp?v=60d9c1b0cc39",
+      "alt": "Apex Legends™ cover",
+      "width": 420,
+      "height": 630
+    },
+    "url": "https://www.xbox.com/en-US/games/store/-/BV9ML45J2Q5V"
+  },
+  {
+    "id": "xbox-2064168993",
+    "title": "Age of Empires II: Definitive Edition",
+    "source": "Xbox",
+    "image": {
+      "src": "/assets/about/media/xbox-2064168993.webp?v=78a89758b07b",
+      "alt": "Age of Empires II: Definitive Edition cover",
+      "width": 420,
+      "height": 630
+    },
+    "url": "https://www.xbox.com/en-US/games/store/-/9NJDD0JGPP2Q"
+  },
+  {
+    "id": "xbox-222473492",
+    "title": "Cyberpunk 2077",
+    "source": "Xbox",
+    "image": {
+      "src": "/assets/about/media/xbox-222473492.webp?v=4ded3c8031b1",
+      "alt": "Cyberpunk 2077 cover",
+      "width": 420,
+      "height": 630
+    },
+    "url": "https://www.xbox.com/en-US/games/store/-/BX3M8L83BBRW"
+  },
+  {
+    "id": "xbox-1792227428",
+    "title": "Indiana Jones and the Great Circle",
+    "source": "Xbox",
+    "image": {
+      "src": "/assets/about/media/xbox-1792227428.webp?v=ccf409b34b4e",
+      "alt": "Indiana Jones and the Great Circle cover",
+      "width": 420,
+      "height": 630
+    },
+    "url": "https://www.xbox.com/en-US/games/store/-/9N8FQ28Z6QX3"
+  },
+  {
+    "id": "xbox-2128602192",
+    "title": "Bluey: The Videogame",
+    "source": "Xbox",
+    "image": {
+      "src": "/assets/about/media/xbox-2128602192.webp?v=37d261b2fd8b",
+      "alt": "Bluey: The Videogame cover",
+      "width": 420,
+      "height": 630
+    },
+    "url": "https://www.xbox.com/en-US/games/store/-/9N2J0FGV30DX"
+  },
+  {
+    "id": "xbox-15959542",
+    "title": "DRAGON BALL FIGHTERZ (Xbox Series X|S)",
+    "source": "Xbox",
+    "image": {
+      "src": "/assets/about/media/xbox-15959542.webp?v=8da68449756f",
+      "alt": "DRAGON BALL FIGHTERZ (Xbox Series X|S) cover",
+      "width": 420,
+      "height": 630
+    },
+    "url": "https://www.xbox.com/en-US/games/store/-/9P1BKCL3NVVG"
+  },
+  {
+    "id": "xbox-1769971395",
+    "title": "Clair Obscur: Expedition 33",
+    "source": "Xbox",
+    "image": {
+      "src": "/assets/about/media/xbox-1769971395.webp?v=57fdac8cc0fe",
+      "alt": "Clair Obscur: Expedition 33 cover",
+      "width": 420,
+      "height": 630
+    },
+    "url": "https://www.xbox.com/en-US/games/store/-/9PPT8K6GQHRZ"
+  },
+  {
+    "id": "xbox-1925965033",
+    "title": "Battlefield™ 6 Open Beta",
+    "source": "Xbox",
+    "image": {
+      "src": "/assets/about/media/xbox-1925965033.webp?v=42a0e240b6a5",
+      "alt": "Battlefield™ 6 Open Beta cover",
+      "width": 420,
+      "height": 630
+    },
+    "url": "https://www.xbox.com/en-US/games/store/-/9N82W416G5KK"
+  },
+  {
+    "id": "xbox-2001700854",
+    "title": "Call of Duty®",
+    "source": "Xbox",
+    "image": {
+      "src": "/assets/about/media/xbox-2001700854.webp?v=4e5320a420bb",
+      "alt": "Call of Duty® cover",
+      "width": 420,
+      "height": 630
+    },
+    "url": "https://www.xbox.com/en-US/games/store/-/9N201KQXS5BM"
+  },
+  {
+    "id": "xbox-1877908426",
+    "title": "Tony Hawk's™ Pro Skater™ 3 + 4",
+    "source": "Xbox",
+    "image": {
+      "src": "/assets/about/media/xbox-1877908426.webp?v=8d16dc48e241",
+      "alt": "Tony Hawk's™ Pro Skater™ 3 + 4 cover",
+      "width": 420,
+      "height": 630
+    },
+    "url": "https://www.xbox.com/en-US/games/store/-/9N1WK33QNSRJ"
+  }
+]

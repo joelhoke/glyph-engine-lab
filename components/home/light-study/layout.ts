@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export type LayoutRect = { left: number; top: number; width: number; height: number };
-export type StudyLayout = { heading: LayoutRect; artwork: LayoutRect; mobile: boolean };
+export type StudyLayout = { heading: LayoutRect; artwork: LayoutRect; mobile: boolean; fixture?: { x: number; y: number } };
 
 export function pixelsPerMetre(camera: THREE.PerspectiveCamera, viewportHeight: number, z: number) {
   return viewportHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * (camera.position.z - z));

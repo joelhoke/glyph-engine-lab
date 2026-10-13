@@ -1,0 +1,22 @@
+[
+  {
+    "title": "McLaren MP4/5 || Formula 1",
+    "author": "dark_igorek",
+    "authorUrl": "https://sketchfab.com/dark_igorek",
+    "sourceUrl": "https://sketchfab.com/3d-models/mclaren-mp45-formula-1-3059d4532ecd48ca8da41e1cac971f22",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "licenseLabel": "CC BY 4.0",
+    "usedFor": "Cars & motorsport",
+    "modifications": "Textures resized to 1024px; centered and framed for a driving scene with dynamic site lighting and animated authored wheel assemblies. Authored geometry and materials retained."
+  },
+  {
+    "title": "SUV Niva — roof rack",
+    "author": "zhe_kan",
+    "authorUrl": "https://sketchfab.com/zhe_kan",
+    "sourceUrl": "https://sketchfab.com/3d-models/suv-niva-90884cd47cbd44d5a2777e53f533df9c",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "licenseLabel": "CC BY 4.0",
+    "usedFor": "4Runner roof rack",
+    "modifications": "Roof basket extracted, resized and fitted to the 4Runner roof rails; lower mounts and a front fairing added. Combined with the separately purchased 4Runner body and personal modifications. Original geometry retained."
+  }
+]

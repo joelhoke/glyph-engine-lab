@@ -77,3 +77,25 @@ test('invalid sticker and rotation values reject the whole project without mutat
   }
   assert.equal(JSON.stringify(source), before);
 });
+
+test('full peel sweeps the entire sticker, keeps its UVs, and reverses without geometry drift', async () => {
+  const { peelPoint } = await import('../../components/home/light-study/sticker');
+  const bounds = { minX: -2, maxX: 2, minY: -1.5, maxY: 1.5 };
+  for (const progress of [0, .25, .5, .75, 1]) {
+    for (let x = -2; x <= 2; x += .2) for (let y = -1.5; y <= 1.5; y += .2) {
+      const p = peelPoint(x, y, bounds, progress);
+      assert.ok([p.x, p.y, p.z].every(Number.isFinite));
+      assert.ok(p.z >= 0);
+      if (progress === 0) assert.deepEqual(p.toArray(), [x, y, 0]);
+      if (progress === 1) assert.ok(p.z > .1, 'Every point has detached from the surface');
+    }
+  }
+  const surface = new StickerSurface(4, 3, bounds);
+  const rest = surface.geometry.attributes.position.array.slice(), uv = surface.geometry.attributes.uv.array.slice();
+  for (let i = 0; i <= 20; i++) surface.updatePeel(i / 20);
+  assert.ok(Array.from(surface.geometry.attributes.normal.array).every(Number.isFinite));
+  for (let i = 20; i >= 0; i--) surface.updatePeel(i / 20);
+  assert.deepEqual(surface.geometry.attributes.position.array, rest);
+  assert.deepEqual(surface.geometry.attributes.uv.array, uv);
+  surface.geometry.dispose();
+});

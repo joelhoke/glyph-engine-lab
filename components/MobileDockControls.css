@@ -1,0 +1,83 @@
+/* Shared homepage/About carousel controls. Scene owners provide placement only. */
+  [data-mobile-dock=true] .home-hero-mobile-arrow {
+    position: absolute;
+    /* Align with the head's midpoint in the scaled 700 × 660 composition. */
+    top: var(--mobile-dock-arrow-top, 29%);
+    transform: translateY(-50%);
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    z-index: 4;
+    padding: 0;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: 50%;
+    background: var(--color-surface-panel-soft);
+    color: var(--color-text);
+    cursor: pointer;
+    pointer-events: auto;
+  }
+  [data-mobile-dock=true] .home-hero-mobile-arrow--previous { left: max(0px, env(safe-area-inset-left, 0px)); }
+  [data-mobile-dock=true] .home-hero-mobile-arrow--next { right: max(0px, env(safe-area-inset-right, 0px)); }
+  [data-mobile-dock=true] .home-hero-mobile-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    z-index: 3;
+    pointer-events: auto;
+    padding-inline: 1rem;
+  }
+  [data-mobile-dock=true] .home-hero-mobile-label { min-height: 48px; }
+  [data-mobile-dock=true] .home-hero-mobile-label :is(a, button) {
+    position: relative;
+    display: block;
+    min-height: 48px;
+    min-width: 180px;
+    color: var(--color-text);
+    text-decoration: none;
+  }
+  [data-mobile-dock=true] .home-hero-mobile-label button { padding: 0; border: 0; background: none; cursor: pointer; font: inherit; }
+  [data-mobile-dock=true] .home-hero-mobile-label .home-hero-label-pixels {
+    display: grid;
+    place-items: center;
+    min-height: 48px;
+    padding: 12px 20px;
+    font-size: 16px;
+  }
+  [data-mobile-dock=true] .home-hero-mobile-label .home-hero-label-pixels::before { pointer-events: none; }
+  [data-mobile-dock=true] .home-hero-label-timer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: var(--color-accent);
+    opacity: 0.5;
+    pointer-events: none;
+    transform: scaleX(0);
+    transform-origin: left center;
+  }
+  [data-mobile-dock=true] .home-hero-mobile-controls :is(a, button):focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 5px;
+  }
+
+/* Touch uses the same pixel reveal as desktop, with a full-size label link.
+   Reduced-motion users retain the shared static label treatment. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-mobile-dock=true] .home-hero-label-timer[data-running='true'] {
+    animation-name: hero-label-countdown;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+  }
+  [data-mobile-dock=true] .home-hero-mobile-label .home-hero-label-pixels { animation: hero-label-reveal 240ms steps(6, end) both; }
+  [data-mobile-dock=true] .home-hero-mobile-label .home-hero-label-pixels::before {
+    display: block;
+    animation: hero-label-pixels 240ms steps(4, end) both;
+  }
+}
+@keyframes hero-label-countdown {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}

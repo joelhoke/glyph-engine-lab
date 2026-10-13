@@ -1,4 +1,6 @@
-import { defaultSceneState } from '../../engine/constants'
+import type { SceneConfig } from '../../engine/sceneDefaults'
+export type { SceneConfig } from '../../engine/sceneDefaults'
+export { APPROVED_SCENE_DEFAULTS, APPROVED_SOURCE_LAYOUT_DEFAULTS } from '../../engine/sceneDefaults'
 import { SourceLayoutConfig } from '../../engine/svgTargetSource'
 import { HERO_THREE_BASE_ROTATIONS } from '../home/renderers/HeroThreeObject'
 
@@ -27,18 +29,6 @@ export type SceneConfigKey =
   | 'clickImpulseRadius'
   | 'clickImpulseForce'
 
-export type SceneConfig = {
-  mouseR: number
-  particleRepel: number
-  weatherRepelMult: number
-  clickImpulseRadius: number
-  clickImpulseForce: number
-  /** Held-pointer multiplier on the hover influence radius (not exposed as a
-   *  tuning control; comes from the per-mode scene descriptor). */
-  dragInfluenceMult: number
-  /** Per-mode droplet ripple amplitude multiplier (descriptor-driven). */
-  rippleStrength: number
-}
 
 export const INTERACTION_CONTROL_DEFINITIONS: Record<
   SceneConfigKey,
@@ -81,26 +71,6 @@ export const INTERACTION_CONTROL_DEFINITIONS: Record<
     step: 0.1,
     showSlider: true,
   },
-}
-
-export const APPROVED_SCENE_DEFAULTS: SceneConfig = {
-  mouseR: defaultSceneState.mouseR,
-  particleRepel: 0.48,
-  weatherRepelMult: 6,
-  clickImpulseRadius: 200,
-  clickImpulseForce: 10,
-  dragInfluenceMult: 1.7,
-  rippleStrength: 1.0,
-}
-
-export const APPROVED_SOURCE_LAYOUT_DEFAULTS: SourceLayoutConfig = {
-  samplingStep: 10,
-  alphaThreshold: 64,
-  margin: 0.08,
-  fit: 'contain',
-  scale: 0,
-  offsetX: 0,
-  offsetY: 0,
 }
 
 export const SOURCE_LAYOUT_CONTROL_DEFINITIONS: Record<

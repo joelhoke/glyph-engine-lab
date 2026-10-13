@@ -43,6 +43,24 @@ export function bendPoint(x: number, y: number, bounds: StickerBounds, settings:
   return target;
 }
 
+/** Full removal: a rolling hinge sweeps the visible diagonal, then lifts clear.
+ * Uses the same cylindrical fold and paper backing as the homepage corner curl. */
+export function peelPoint(x: number, y: number, bounds: StickerBounds, progress: number, target = new THREE.Vector3()) {
+  const p = THREE.MathUtils.clamp(progress, 0, 1);
+  const direction = cornerDirection('bottom-right'), corner = cornerPoint(bounds, 'bottom-right');
+  const span = ((bounds.maxX - bounds.minX) + (bounds.maxY - bounds.minY)) * Math.SQRT1_2;
+  const radius = span * .085;
+  const distance = (x - corner.x) * direction.x + (y - corner.y) * direction.y + p * (span + Math.PI * radius);
+  target.set(x, y, 0);
+  if (distance <= 0) return target;
+  const arc = Math.min(distance, Math.PI * radius), rest = distance - arc, angle = arc / radius;
+  const along = Math.sin(angle) * radius + rest * Math.cos(angle);
+  target.x += (along - distance) * direction.x;
+  target.y += (along - distance) * direction.y;
+  target.z = (1 - Math.cos(angle)) * radius + Math.max(0, p - .8) * span;
+  return target;
+}
+
 export class StickerSurface {
   readonly geometry: THREE.PlaneGeometry;
   private readonly rest: Float32Array;
@@ -63,11 +81,16 @@ export class StickerSurface {
     this.depths = new Float64Array(this.order.length);
   }
   update(settings: StickerSettings, enabled: boolean) {
+    this.deform((x, y, point) => enabled ? bendPoint(x, y, this.bounds, settings, point) : point.set(x, y, 0));
+  }
+  updatePeel(progress: number) {
+    this.deform((x, y, point) => peelPoint(x, y, this.bounds, progress, point));
+  }
+  private deform(bend: (x: number, y: number, point: THREE.Vector3) => THREE.Vector3) {
     const position = this.geometry.attributes.position as THREE.BufferAttribute;
     const point = new THREE.Vector3();
     for (let i = 0; i < position.count; i++) {
-      if (enabled) bendPoint(this.rest[i * 3], this.rest[i * 3 + 1], this.bounds, settings, point);
-      else point.set(this.rest[i * 3], this.rest[i * 3 + 1], 0);
+      bend(this.rest[i * 3], this.rest[i * 3 + 1], point);
       position.setXYZ(i, point.x, point.y, point.z);
     }
     position.needsUpdate = true;

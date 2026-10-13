@@ -1,8 +1,10 @@
 'use client'
 
-import { CSSProperties, Ref, useCallback, useEffect, useId, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
+import { CSSProperties, Ref, useCallback, useId, useRef, useState } from 'react'
 import type { HeroSlot, HeroSlotId, HomePortrait, HomeSectionId } from '../../content/home'
 import { destinationHref } from '../../engine/homeNavigation'
+import DockLabel from '../DockLabel'
 import HeroObject, { HeroRenderers } from './HeroObject'
 import HomeNotebook from './HomeNotebook'
 import HomeSpriteHead from './HomeSpriteHead'
@@ -11,8 +13,10 @@ import HomeSpriteTone from './HomeSpriteTone'
 import { useHeroPresence } from './useHeroPresence'
 import { useHeroDock } from './useHeroDock'
 import { useMobileHero } from './useMobileHero'
-import { MOBILE_CAROUSEL_DELAY_MS } from './mobileHero'
+import { MobileDockArrow, MobileDockLabel } from '../MobileDockControls'
 import { HeroMotionId, HeroMotionNodes, useHeroParallax } from './useHeroParallax'
+
+const HomeDockFibre = dynamic(() => import('./HomeDockFibre'), { ssr: false })
 
 type HomeHeroProps = {
   slots: HeroSlot[]
@@ -96,15 +100,6 @@ export default function HomeHero({
   const highlighted = (id: HeroSlotId) => mobileHero.mobile
     ? mobileHero.selected === id
     : dockHovered ? dockHovered === id : hoveredSlot === id || focusedSlot === id
-  const [dismissedLabel, setDismissedLabel] = useState<HeroSlotId | null>(null)
-  useEffect(() => {
-    setDismissedLabel(null)
-    const dismiss = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setDismissedLabel(labeledSlot)
-    }
-    window.addEventListener('keydown', dismiss)
-    return () => window.removeEventListener('keydown', dismiss)
-  }, [labeledSlot])
 
   useHeroParallax({
     hero: heroNode,
@@ -114,7 +109,7 @@ export default function HomeHero({
 
   return (
     <section className="home-hero" data-portrait={portrait?.spritePath ? 'sprites' : undefined} aria-label="Introduction" ref={setHeroRefs}
-      data-sprite-active={spriteInteracting}
+      data-sprite-active={spriteInteracting} data-mobile-dock={mobileHero.mobile}
       {...mobileHero.gestureProps}
       style={{ '--home-sprite-filter': portrait?.tone ? `url("#${toneFilterId}")` : 'none' } as CSSProperties}
       onFocusCapture={(event) => {
@@ -146,6 +141,8 @@ export default function HomeHero({
       ) : null}
       <div className="home-hero-dock-zone" aria-hidden="true" />
       <ul className="home-hero-slots">
+        {portrait?.hands && <HomeDockFibre hero={heroNode}
+          active={parallaxEnabled && (dockHovered !== null || focusedSlot !== null || (mobileHero.mobile && mobileHero.selected !== null))} />}
         {/* Independent desktop layers keep both hands behind every object,
             while retaining their objects' fan geometry and parallax. */}
         {portrait?.hands && (['left', 'right'] as const).map(side => (
@@ -209,39 +206,20 @@ export default function HomeHero({
               {/* The controls already have descriptive accessible names.
                   This visual label adds discoverability without repeating
                   that name to screen readers or intercepting a click. */}
-              <span className="home-hero-label" aria-hidden="true"
-                data-visible={labeledSlot === slot.id && dismissedLabel !== slot.id}>
-                <span className="home-hero-label-pixels">{slot.label.split(' — ')[0]}</span>
-              </span>
+              <DockLabel visible={labeledSlot === slot.id}>{slot.label.split(' — ')[0]}</DockLabel>
             </div>
           </li>
         ))}
       </ul>
       </div>
-      <button type="button" className="home-hero-mobile-arrow home-hero-mobile-arrow--previous"
-        aria-label="Previous section" onClick={() => mobileHero.step(-1)}>
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m14 6-6 6 6 6" /></svg>
-      </button>
-      <button type="button" className="home-hero-mobile-arrow home-hero-mobile-arrow--next"
-        aria-label="Next section" onClick={() => mobileHero.step(1)}>
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m10 6 6 6-6 6" /></svg>
-      </button>
+      <MobileDockArrow direction={-1} onStep={mobileHero.step} />
+      <MobileDockArrow direction={1} onStep={mobileHero.step} />
       </div>
-      <div className="home-hero-mobile-controls" onKeyDown={mobileHero.onKeyDown}>
-        <div className="home-hero-mobile-label">
-          {selectedSlot?.destination ? <a
-            href={destinationHref({ kind: 'home', section: selectedSlot.destination })}
-            onClick={event => onSectionLink(event, selectedSlot.destination as HomeSectionId)}>
-            <span key={selectedSlot.id} className="home-hero-label-pixels">{selectedSlot.label.split(' — ')[0]}</span>
-            <span key={mobileHero.timerKey} className="home-hero-label-timer" aria-hidden="true"
-              data-running={mobileHero.autoRunning}
-              style={{ animationDuration: `${MOBILE_CAROUSEL_DELAY_MS}ms` }} />
-          </a> : <span>Explore</span>}
-        </div>
-        <span className="visually-hidden" role="status" aria-live={mobileHero.autoRunning ? 'off' : 'polite'} aria-atomic="true">
-          {selectedSlot ? `${selectedSlot.label.split(' — ')[0]}, ${slots.indexOf(selectedSlot) + 1} of ${slots.length}` : ''}
-        </span>
-      </div>
+      <MobileDockLabel id={selectedSlot?.id} label={selectedSlot?.label.split(' — ')[0]}
+        index={selectedSlot ? slots.indexOf(selectedSlot) : 0} count={slots.length}
+        href={selectedSlot?.destination ? destinationHref({ kind: 'home', section: selectedSlot.destination }) : undefined}
+        onActivate={event => { if (selectedSlot?.destination) onSectionLink(event as React.MouseEvent<HTMLAnchorElement>, selectedSlot.destination as HomeSectionId) }}
+        onKeyDown={mobileHero.onKeyDown} timerKey={mobileHero.timerKey} autoRunning={mobileHero.autoRunning} />
     </section>
   )
 }

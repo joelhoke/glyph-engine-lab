@@ -1,10 +1,14 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { createBulbHousing, loadEdisonBulb } from './edison';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createRendering } from './rendering';
+import { setFilamentEmission } from './filament';
+import { createAccentLights } from './accent-lights';
+import { LightColorCycle } from './illumination';
+import { publishPageIllumination } from '../../lighting/pageIllumination';
 import { DEFAULT_SETTINGS, lightColor, updateSettings } from './settings';
 import type { LightingSettings } from './settings';
-import { CONTENT, CORD, GLASS, LIGHTING, VIEW, clamp } from './config';
+import { CONTENT, CORD, LIGHTING, LIGHTING_THEMES, VIEW, clamp, type LightingTheme } from './config';
 import { CordSimulation } from './physics';
 import { ContentLayer } from './content';
 import { createStickerInteraction } from './sticker-interaction';
@@ -19,6 +23,9 @@ import type { StudyLayout } from './layout';
 export interface LightingScene {
   readonly ready: Promise<void>;
   readonly settings: LightingSettings;
+  readonly lightOn: boolean;
+  toggleLight(): void;
+  setColorCycle(colors: readonly string[]): void;
   /** Empty wall-local group. Positive Z brings future content toward the bulb. */
   readonly contentGroup: THREE.Group;
   readonly items: SceneItem[];
@@ -42,7 +49,7 @@ export interface LightingScene {
   /** Pause rendering while the homepage section is out of view. */
   setActive(value: boolean): void;
   setLayout(value: StudyLayout): void;
-  setTheme(wallColor: string, textColor: string, housingColor: string, cordColor: string, glassColor: string): void;
+  setTheme(wallColor: string, textColor: string, housingColor: string, cordColor: string, glassColor: string, theme?: LightingTheme): void;
   dispose(): void;
 }
 
@@ -65,8 +72,9 @@ function disposeObjects(root: THREE.Object3D) {
   textures.forEach((texture) => texture.dispose());
 }
 
-export function createLightingScene(container: HTMLElement): LightingScene {
+export function createLightingScene(container: HTMLElement, options: { desktop?: boolean } = {}): LightingScene {
   let settings = { ...DEFAULT_SETTINGS };
+  let lightOn = !options.desktop;
   let disposed = false;
   let active = true;
   let frame = 0;
@@ -76,6 +84,7 @@ export function createLightingScene(container: HTMLElement): LightingScene {
   let arrangeMode = true;
   let motionEnabled = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const physics = new CordSimulation();
+  const colorCycle = new LightColorCycle();
   const events = new AbortController();
   const filamentMaterials: THREE.MeshStandardMaterial[] = [];
   const glassMaterials: THREE.MeshPhysicalMaterial[] = [];
@@ -105,7 +114,8 @@ export function createLightingScene(container: HTMLElement): LightingScene {
   room.dispose();
   pmrem.dispose();
 
-  scene.add(new THREE.AmbientLight('#ffffff', LIGHTING.ambient));
+  const ambient = new THREE.AmbientLight('#ffffff', LIGHTING.ambient);
+  scene.add(ambient);
   const wallRoot = new THREE.Group();
   wallRoot.name = 'wall';
   const wallMaterial = new THREE.MeshStandardMaterial({
@@ -133,21 +143,14 @@ export function createLightingScene(container: HTMLElement): LightingScene {
 
   const fixtureGroup = new THREE.Group();
   scene.add(fixtureGroup);
+  fixtureGroup.visible = !options.desktop;
   const fixture = new THREE.Group();
   fixture.name = 'hanging-fixture';
   fixture.position.set(physics.end.x, physics.end.y, 0);
   fixtureGroup.add(fixture);
-  const socketMaterial = new THREE.MeshStandardMaterial({
-    color: '#528ed1', roughness: 0.55, metalness: 0.35,
-  });
-  const socket = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.027, VIEW.socketTop - VIEW.socketBottom, 48), socketMaterial);
-  socket.position.y = (VIEW.socketTop + VIEW.socketBottom) / 2 - VIEW.socketTop;
-  socket.castShadow = true;
-  fixture.add(socket);
-  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.0275, 0.0275, 0.006, 48), socketMaterial);
-  collar.position.y = VIEW.socketBottom + 0.003 - VIEW.socketTop;
-  collar.castShadow = true;
-  fixture.add(collar);
+  const housing = createBulbHousing();
+  const socketMaterial = housing.material;
+  fixture.add(housing.object);
   const cableMaterial = new THREE.MeshStandardMaterial({ color: '#083f56', roughness: 0.9 });
   let cable = new THREE.InstancedMesh(new THREE.CylinderGeometry(VIEW.cordRadius, VIEW.cordRadius, 1, 8), cableMaterial, physics.maxSegments);
   cable.name = 'simulated-cord';
@@ -184,6 +187,8 @@ export function createLightingScene(container: HTMLElement): LightingScene {
   light.shadow.normalBias = 0.001;
   fixture.add(light);
 
+  const accents = options.desktop ? createAccentLights(container, scene, camera, invalidate, wallRoot) : null;
+
   function reportError(message: string) {
     container.dispatchEvent(new CustomEvent('lighting-error', { detail: message }));
   }
@@ -196,16 +201,19 @@ export function createLightingScene(container: HTMLElement): LightingScene {
       try {
         const elapsed = lastTime ? (time - lastTime) / 1000 : CORD.timestep;
         lastTime = time;
-        physics.advance(elapsed);
-        updateFixture();
+        const cycling = motionEnabled && ((colorCycle.enabled && lightOn) || !!accents?.cycling);
+        if (colorCycle.enabled) applyEmission(colorCycle.advance(elapsed, lightOn && motionEnabled));
+        accents?.advanceColors(elapsed, motionEnabled);
+        if (!options.desktop) { physics.advance(elapsed); updateFixture(); }
         updateHoverCursor();
         const hoverMoving = stickerHover.advance(elapsed);
         const pressMoving = stickerPress.advance(elapsed);
         content.project(camera);
-        rendering.render(settings.brightness > 0);
+        rendering.render(lightOn && settings.brightness > 0);
+        if (options.desktop) publishPageIllumination(container, accents?.illumination ?? []);
         // Consumers can capture the canvas before WebGL discards its drawing buffer.
         container.dispatchEvent(new Event('study-render'));
-        if (physics.awake || hoverMoving || pressMoving) invalidate();
+        if ((!options.desktop && physics.awake) || hoverMoving || pressMoving || cycling) invalidate();
         else lastTime = 0;
       } catch (error) {
         console.error('Unable to render the light study.', error);
@@ -214,15 +222,17 @@ export function createLightingScene(container: HTMLElement): LightingScene {
     });
   }
 
-  function applySettings() {
-    const color = new THREE.Color(lightColor(settings));
-    const level = settings.brightness / 100;
+  function applyEmission(color: THREE.Color) {
+    const level = lightOn ? settings.brightness / 100 : 0;
     light.color.copy(color);
     light.intensity = LIGHTING.intensity * level;
     for (const material of filamentMaterials) {
-      material.emissive.copy(color);
-      material.emissiveIntensity = LIGHTING.filamentEmission * level;
+      setFilamentEmission(material, color, level);
     }
+  }
+
+  function applySettings() {
+    applyEmission(colorCycle.enabled ? colorCycle.color : new THREE.Color(lightColor(settings)));
     // The distance is measured from the light to the wall, not from the glass surface.
     wallRoot.position.z = light.getWorldPosition(new THREE.Vector3()).z - settings.wallDistance;
     wallMaterial.color.set(settings.wallColor);
@@ -239,6 +249,7 @@ export function createLightingScene(container: HTMLElement): LightingScene {
     rendering.setSize(width, height, pixelRatio);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
+    accents?.layout(width, height);
     applyLayout();
     invalidate();
   }
@@ -249,6 +260,7 @@ export function createLightingScene(container: HTMLElement): LightingScene {
     if (!width || !height) return;
     if (heading) fitToRect(heading, headingPoints, layout.heading, camera, width, height, 'left');
     fitToRect(artwork, artworkPoints, layout.artwork, camera, width, height, 'center');
+    if (options.desktop) return;
     // Desktop hangs 64 CSS pixels left of center; phones keep the bulb over
     // the portrait, with the existing grab size and vertical placement.
     const ppm = pixelsPerMetre(camera, height, 0);
@@ -256,8 +268,10 @@ export function createLightingScene(container: HTMLElement): LightingScene {
     const scale = bulbPixels / (VIEW.bulbHeight * ppm);
     fixtureGroup.scale.setScalar(scale);
     fixtureGroup.position.set(
-      layout.mobile ? (layout.artwork.left + layout.artwork.width / 2 - width / 2) / ppm : -64 / ppm,
-      (height / 2 - (layout.artwork.top + layout.artwork.height * 0.3)) / ppm - 0.2 * scale,
+      layout.fixture ? (layout.fixture.x - width / 2) / ppm
+        : layout.mobile ? (layout.artwork.left + layout.artwork.width / 2 - width / 2) / ppm : -64 / ppm,
+      layout.fixture ? (height / 2 - layout.fixture.y) / ppm - (CORD.anchor.y - CORD.length) * scale
+        : (height / 2 - (layout.artwork.top + layout.artwork.height * 0.3)) / ppm - 0.2 * scale,
       0,
     );
     const ceilingY = ((height / 2 + 2) / ppm - fixtureGroup.position.y) / scale;
@@ -332,84 +346,20 @@ export function createLightingScene(container: HTMLElement): LightingScene {
   resize();
   applySettings();
 
-  const ready = new GLTFLoader().loadAsync(`/assets/about-light-study/models/edison/scene.gltf`).then((gltf) => {
-    if (disposed) {
-      disposeObjects(gltf.scene);
-      return;
-    }
-    const model = gltf.scene;
-    model.name = 'edison-bulb';
-    // The supplied model is upright after its glTF root transform. Turn it cap-up.
-    model.rotation.z = Math.PI;
-    model.updateMatrixWorld(true);
-    const bounds = new THREE.Box3().setFromObject(model);
-    const height = bounds.max.y - bounds.min.y;
-    model.scale.setScalar(VIEW.bulbHeight / height);
-    model.updateMatrixWorld(true);
-    bounds.setFromObject(model);
-    const center = bounds.getCenter(new THREE.Vector3());
-    model.position.set(-center.x, VIEW.bulbTop - VIEW.socketTop - bounds.max.y, -center.z);
-
-    let filament: THREE.Mesh | undefined;
-    const oldMaterials = new Set<THREE.Material>();
-    model.traverse((object) => {
-      if (!(object instanceof THREE.Mesh)) return;
-      object.castShadow = false;
-      object.receiveShadow = false;
-      const original = object.material as THREE.MeshStandardMaterial;
-      oldMaterials.add(original);
-      if (original.name === 'glass') {
-        object.material = new THREE.MeshPhysicalMaterial({
-          name: 'bulb-glass', color: '#fff7e9', metalness: 0, roughness: GLASS.roughness,
-          transmission: GLASS.transmission, ior: GLASS.ior,
-          envMapIntensity: GLASS.environmentIntensity, side: THREE.FrontSide,
-        });
-        glassMaterials.push(object.material);
-        rendering.registerGlass(object as THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhysicalMaterial>, fixture);
-      } else if (original.name === 'glass-thicker') {
-        // Nested transmission isn't supported by the forward transmission pass.
-        // Keep the inner support softly transparent instead.
-        object.material = new THREE.MeshPhysicalMaterial({
-          name: 'inner-glass', color: '#d9d3c8', roughness: 0.1,
-          transparent: true, opacity: 0.16, depthWrite: false,
-          envMapIntensity: 0.3,
-        });
-      } else {
-        const material = original.clone();
-        object.material = material;
-        if (original.name === 'glow') {
-          material.color.set('#191310');
-          material.roughness = 0.45;
-          material.metalness = 0;
-          filamentMaterials.push(material);
-          filament = object;
-        } else if (original.name === 'gold') {
-          // The screw base is enclosed by the socket, not exposed decorative metal.
-          object.visible = false;
-          material.color.set('#927040');
-          material.metalness = 0.85;
-          material.roughness = 0.3;
-          object.castShadow = true;
-        } else {
-          material.color.set(original.name === 'black' ? '#141211' : '#3c3430');
-          material.roughness = 0.38;
-          material.metalness = 0.6;
-        }
-      }
-    });
-    oldMaterials.forEach((material) => material.dispose());
-    // Measure the filament while the model is still in fixture-local space.
-    // A newly parented model can otherwise inherit a stale fixture world matrix
-    // when its cached assets finish loading before the first rendered frame.
-    model.updateMatrixWorld(true);
-    if (filament) {
-      new THREE.Box3().setFromObject(filament).getCenter(light.position);
-    }
-    fixture.add(model);
+  const ready = options.desktop ? Promise.resolve() : loadEdisonBulb(mesh => { if (!disposed) rendering.registerGlass(mesh, fixture); }).then(bulb => {
+    if (disposed) { bulb.dispose(); return; }
+    filamentMaterials.push(...bulb.filamentMaterials);
+    glassMaterials.push(...bulb.glassMaterials);
+    light.position.copy(bulb.lightPosition);
+    fixture.add(bulb.object);
     fixture.updateWorldMatrix(true, true);
     applySettings();
   });
 
+  function toggleLight() {
+    if (disposed || options.desktop) return;
+    lightOn = !lightOn; applySettings(); changed();
+  }
   function changed() { container.dispatchEvent(new Event('study-change')); }
   function selectItem(id: string | null) {
     selectedId = id && content.nodes.has(id) ? id : null;
@@ -420,7 +370,7 @@ export function createLightingScene(container: HTMLElement): LightingScene {
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   const dragPlane = new THREE.Plane();
-  let drag: { pointerId: number; id: string | null; offset: THREE.Vector3 } | null = null;
+  let drag: { pointerId: number; id: string | null; offset: THREE.Vector3; startX: number; startY: number; moved: boolean } | null = null;
   let hoverPosition: Pick<PointerEvent, 'clientX' | 'clientY'> | null = null;
   function pointOnPlane(event: Pick<PointerEvent, 'clientX' | 'clientY'>, z: number) {
     const rect = container.getBoundingClientRect();
@@ -434,7 +384,7 @@ export function createLightingScene(container: HTMLElement): LightingScene {
   // a bulb grab. Recheck during motion, without introducing an idle render loop.
   function pickObject(event: Pick<PointerEvent, 'clientX' | 'clientY'>) {
     pointOnPlane(event, 0);
-    const targets: THREE.Object3D[] = [fixture];
+    const targets: THREE.Object3D[] = options.desktop ? [] : [fixture];
     if (arrangeMode) targets.push(...[...content.nodes.values()].map((node) => node.root));
     const hit = raycaster.intersectObjects(targets, true).find((hit) => hit.object.visible);
     let object: THREE.Object3D | null = hit?.object ?? null;
@@ -459,7 +409,7 @@ export function createLightingScene(container: HTMLElement): LightingScene {
     lastTime = 0; invalidate(); changed();
   }
   container.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || drag || !event.isPrimary) return;
+    if (!active || event.button !== 0 || drag || !event.isPrimary) return;
     if (!arrangeMode && (event.target as Element).closest('.scene-html')) return;
     const object = pickObject(event);
     if (!object) { if (arrangeMode) selectItem(null); return; }
@@ -467,7 +417,7 @@ export function createLightingScene(container: HTMLElement): LightingScene {
     const position = object.getWorldPosition(new THREE.Vector3());
     const point = pointOnPlane(event, position.z);
     if (!point) return;
-    drag = { pointerId: event.pointerId, id, offset: position.sub(point) };
+    drag = { pointerId: event.pointerId, id, offset: position.sub(point), startX: event.clientX, startY: event.clientY, moved: false };
     if (id === null) physics.beginDrag(event.timeStamp);
     else selectItem(id);
     container.setPointerCapture(event.pointerId);
@@ -480,6 +430,10 @@ export function createLightingScene(container: HTMLElement): LightingScene {
       updateHoverCursor();
     }
     if (!drag || event.pointerId !== drag.pointerId) return;
+    // Once a gesture crosses six CSS pixels it remains a pull, even if it
+    // returns to its starting point. A stationary click only toggles the bulb.
+    drag.moved ||= Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 6;
+    if (drag.id === null && !drag.moved) return;
     const node = drag.id ? content.nodes.get(drag.id) : null;
     const z = node ? node.root.getWorldPosition(new THREE.Vector3()).z : 0;
     const point = pointOnPlane(event, z);
@@ -498,7 +452,12 @@ export function createLightingScene(container: HTMLElement): LightingScene {
   // Capture loss is not cancellation: Chrome can report it before pointerup,
   // with buttons already zero. Complete the release once and preserve the swing.
   // Listen for pointerup at window level too, in case capture ended outside us.
-  window.addEventListener('pointerup', (event) => { if (drag?.pointerId === event.pointerId) finishDrag(false, event.timeStamp); }, { capture: true, signal: events.signal });
+  window.addEventListener('pointerup', (event) => {
+    if (drag?.pointerId !== event.pointerId) return;
+    const clicked = drag.id === null && !drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) <= 6;
+    finishDrag(false, event.timeStamp);
+    if (clicked) toggleLight();
+  }, { capture: true, signal: events.signal });
   container.addEventListener('pointercancel', (event) => { if (drag?.pointerId === event.pointerId) finishDrag(true, event.timeStamp); }, { signal: events.signal });
   container.addEventListener('lostpointercapture', (event) => { if (drag?.pointerId === event.pointerId) finishDrag(false, event.timeStamp); }, { signal: events.signal });
 
@@ -511,7 +470,7 @@ export function createLightingScene(container: HTMLElement): LightingScene {
   const stickerHover = createStickerHover(container, renderer.domElement, camera, content, () => !arrangeMode, invalidate);
   const stickerPress = createStickerPress(container, renderer.domElement, content, () => !arrangeMode, (event) => {
     pointOnPlane(event, 0);
-    const targets = [fixture, ...[...content.nodes.values()].map((node) => node.root)];
+    const targets = [...(options.desktop ? [] : [fixture]), ...[...content.nodes.values()].map((node) => node.root)];
     for (const hit of raycaster.intersectObjects(targets, true)) {
       const mesh = hit.object as THREE.Mesh;
       let visible = true;
@@ -560,6 +519,9 @@ export function createLightingScene(container: HTMLElement): LightingScene {
       prepareLayout();
     },
     get settings() { return { ...settings }; },
+    get lightOn() { return lightOn; },
+    toggleLight,
+    setColorCycle(colors) { colorCycle.setPalette(colors); accents?.setPalette(colors); applySettings(); },
     updateSettings(patch) {
       if (disposed) return { ...settings };
       settings = updateSettings(settings, patch);
@@ -576,8 +538,13 @@ export function createLightingScene(container: HTMLElement): LightingScene {
     },
     invalidate,
     setLayout(value) { layout = value; resize(); },
-    setTheme(wallColor, textColor, housingColor, cordColor, glassColor) {
+    setTheme(wallColor, textColor, housingColor, cordColor, glassColor, theme = 'dark') {
       settings = updateSettings(settings, { wallColor });
+      ambient.intensity = LIGHTING_THEMES[theme].ambient;
+      // OutputPass reads this directly; no extra shader pass or CSS saturation layer.
+      renderer.toneMapping = LIGHTING_THEMES[theme].toneMapping === 'neutral'
+        ? THREE.NeutralToneMapping : THREE.ACESFilmicToneMapping;
+      accents?.setTheme(theme);
       socketMaterial.color.set(housingColor);
       cableMaterial.color.set(cordColor);
       for (const material of glassMaterials) material.color.set(glassColor);
@@ -588,6 +555,7 @@ export function createLightingScene(container: HTMLElement): LightingScene {
     },
     setActive(value) {
       active = value;
+      accents?.setActive(value);
       physics.pause(); lastTime = 0;
       if (!active) { cancelAnimationFrame(frame); frame = 0; stickerPress.reset(); finishDrag(true); }
       else invalidate();
@@ -596,6 +564,7 @@ export function createLightingScene(container: HTMLElement): LightingScene {
       if (disposed) return;
       disposed = true;
       events.abort();
+      accents?.dispose();
       stickerInteraction.dispose();
       stickerHover.dispose();
       stickerPress.dispose();
@@ -617,6 +586,7 @@ export function createLightingScene(container: HTMLElement): LightingScene {
       renderer.dispose();
       renderer.forceContextLoss();
       renderer.domElement.remove();
+      if (options.desktop) publishPageIllumination(container, []);
       scene.clear();
     },
   };

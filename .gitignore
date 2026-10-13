@@ -25,3 +25,4 @@ tmp-proto-build/
 wrangler.preview.local.toml
 .terminalgraph/
 tmp-work-visual/
+.originkit/

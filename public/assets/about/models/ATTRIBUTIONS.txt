@@ -1,0 +1,34 @@
+Formula 1 logo by Zachery_Singh (https://sketchfab.com/Zachery_Singh)
+Source: https://sketchfab.com/3d-models/formula-1-logo-0d629cc1aba6459ebafb8f52b6403c0d
+License: CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+Changes: Textures resized to 512px; dense meshes simplified with a 0.3% error limit; scaled and arranged for interest previews.
+
+Toyota Nameplate by Black Snow (https://sketchfab.com/BlackSnow02)
+Source: https://sketchfab.com/3d-models/toyota-nameplate-36037bdc7841419ea765a6737f5af0f3
+License: CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+Changes: Textures resized to 512px; dense meshes simplified with a 0.3% error limit; scaled and arranged for interest previews.
+
+Apple HomePod by abdullahyeahyea (https://sketchfab.com/abdullahyeahyea)
+Source: https://sketchfab.com/3d-models/apple-homepod-05d2a22d20c54466a618c141409faf61
+License: CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+Changes: Textures resized to 512px; dense meshes simplified with a 0.3% error limit; scaled and arranged for interest previews. Black and white HomePods retained for theme switching.
+
+Bitcoin by object (https://sketchfab.com/titaniumammas69)
+Source: https://sketchfab.com/3d-models/bitcoin-6a95986c5b744757913550f3fc447024
+License: CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+Changes: Textures resized to 512px; dense meshes simplified with a 0.3% error limit; scaled and arranged for interest previews.
+
+$100 Dolllar Cash by alaemdk (https://sketchfab.com/alaemdk)
+Source: https://sketchfab.com/3d-models/100-dolllar-cash-daf93eba63f246d6956d945f29876089
+License: CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+Changes: Textures resized to 512px; dense meshes simplified with a 0.3% error limit; scaled and arranged for interest previews.
+
+Xbox Elite Controller by Rusfort (https://sketchfab.com/Rusfort)
+Source: https://sketchfab.com/3d-models/xbox-elite-controller-32aad0ff25f7446b8afe649ea3cc9e43
+License: CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+Changes: Textures resized to 512px; dense meshes simplified with a 0.3% error limit; scaled and arranged for interest previews.
+
+Super nintendo controller by quick_loop (https://sketchfab.com/so_O)
+Source: https://sketchfab.com/3d-models/super-nintendo-controller-223e79dd5cbd4dc4b038c49abceef2c1
+License: CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+Changes: Textures resized to 512px; dense meshes simplified with a 0.3% error limit; scaled and arranged for interest previews. Cable and plug omitted.

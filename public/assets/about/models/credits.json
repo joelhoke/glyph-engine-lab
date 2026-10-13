@@ -1,0 +1,72 @@
+[
+  {
+    "title": "Formula 1 logo",
+    "author": "Zachery_Singh",
+    "authorUrl": "https://sketchfab.com/Zachery_Singh",
+    "sourceUrl": "https://sketchfab.com/3d-models/formula-1-logo-0d629cc1aba6459ebafb8f52b6403c0d",
+    "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+    "licenseLabel": "CC-BY-4.0",
+    "usedFor": "Cars & motorsport",
+    "modifications": "Textures resized to 512px; dense meshes simplified with a 0.3% error limit; scaled and arranged for interest previews."
+  },
+  {
+    "title": "Toyota Nameplate",
+    "author": "Black Snow",
+    "authorUrl": "https://sketchfab.com/BlackSnow02",
+    "sourceUrl": "https://sketchfab.com/3d-models/toyota-nameplate-36037bdc7841419ea765a6737f5af0f3",
+    "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+    "licenseLabel": "CC-BY-4.0",
+    "usedFor": "Cars & motorsport",
+    "modifications": "Textures resized to 512px; dense meshes simplified with a 0.3% error limit; scaled and arranged for interest previews."
+  },
+  {
+    "title": "Apple HomePod",
+    "author": "abdullahyeahyea",
+    "authorUrl": "https://sketchfab.com/abdullahyeahyea",
+    "sourceUrl": "https://sketchfab.com/3d-models/apple-homepod-05d2a22d20c54466a618c141409faf61",
+    "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+    "licenseLabel": "CC-BY-4.0",
+    "usedFor": "Smart home",
+    "modifications": "Textures resized to 512px; dense meshes simplified with a 0.3% error limit; scaled and arranged for interest previews. Black and white HomePods retained for theme switching."
+  },
+  {
+    "title": "Bitcoin",
+    "author": "object",
+    "authorUrl": "https://sketchfab.com/titaniumammas69",
+    "sourceUrl": "https://sketchfab.com/3d-models/bitcoin-6a95986c5b744757913550f3fc447024",
+    "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+    "licenseLabel": "CC-BY-4.0",
+    "usedFor": "Personal finance",
+    "modifications": "Textures resized to 512px; dense meshes simplified with a 0.3% error limit; scaled and arranged for interest previews."
+  },
+  {
+    "title": "$100 Dolllar Cash",
+    "author": "alaemdk",
+    "authorUrl": "https://sketchfab.com/alaemdk",
+    "sourceUrl": "https://sketchfab.com/3d-models/100-dolllar-cash-daf93eba63f246d6956d945f29876089",
+    "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+    "licenseLabel": "CC-BY-4.0",
+    "usedFor": "Personal finance",
+    "modifications": "Textures resized to 512px; dense meshes simplified with a 0.3% error limit; scaled and arranged for interest previews."
+  },
+  {
+    "title": "Xbox Elite Controller",
+    "author": "Rusfort",
+    "authorUrl": "https://sketchfab.com/Rusfort",
+    "sourceUrl": "https://sketchfab.com/3d-models/xbox-elite-controller-32aad0ff25f7446b8afe649ea3cc9e43",
+    "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+    "licenseLabel": "CC-BY-4.0",
+    "usedFor": "Creative media",
+    "modifications": "Textures resized to 512px; dense meshes simplified with a 0.3% error limit; scaled and arranged for interest previews."
+  },
+  {
+    "title": "Super nintendo controller",
+    "author": "quick_loop",
+    "authorUrl": "https://sketchfab.com/so_O",
+    "sourceUrl": "https://sketchfab.com/3d-models/super-nintendo-controller-223e79dd5cbd4dc4b038c49abceef2c1",
+    "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+    "licenseLabel": "CC-BY-4.0",
+    "usedFor": "Creative media",
+    "modifications": "Textures resized to 512px; dense meshes simplified with a 0.3% error limit; scaled and arranged for interest previews. Cable and plug omitted."
+  }
+]

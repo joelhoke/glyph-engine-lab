@@ -7,7 +7,8 @@ import {
   createAnalyticsClient,
   readConsent,
 } from '../engine/analytics'
-import { MODEL_CREDITS, PORTRAIT_CREDIT } from '../content/site'
+import CreditsContent from './CreditsContent'
+import TabList from './TabList'
 import './AnalyticsConsent.css'
 
 type AnalyticsConsentProps = {
@@ -17,7 +18,7 @@ type AnalyticsConsentProps = {
 
 type PanelView = 'privacy' | 'feedback' | 'credits'
 
-const PANEL_VIEWS: PanelView[] = ['privacy', 'feedback', 'credits']
+const PANEL_VIEWS = [{ id: 'privacy', label: 'Privacy' }, { id: 'feedback', label: 'Feedback' }, { id: 'credits', label: 'Credits' }] as const
 
 const MESSAGE_MIN = 10
 const MESSAGE_MAX = 2000
@@ -179,9 +180,6 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
   const [view, setView] = useState<PanelView>('privacy')
   const fabRef = useRef<HTMLButtonElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
-  const privacyTabRef = useRef<HTMLButtonElement | null>(null)
-  const feedbackTabRef = useRef<HTMLButtonElement | null>(null)
-  const creditsTabRef = useRef<HTMLButtonElement | null>(null)
 
   const baseId = useId()
   const panelId = `${baseId}-panel`
@@ -213,13 +211,7 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
   // Move focus into the panel when it opens.
   useEffect(() => {
     if (!panelOpen) return
-    const tab =
-      view === 'privacy'
-        ? privacyTabRef.current
-        : view === 'feedback'
-          ? feedbackTabRef.current
-          : creditsTabRef.current
-    tab?.focus()
+    panelRef.current?.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]')?.focus()
   }, [panelOpen, view])
 
   if (!mounted) return null
@@ -253,16 +245,6 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
       closePanel()
       return
     }
-    // Arrow-key support across the tab list (roving tabindex).
-    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-      const target = event.target as HTMLElement
-      if (target.getAttribute('role') !== 'tab') return
-      event.preventDefault()
-      const index = PANEL_VIEWS.indexOf(view)
-      const step = event.key === 'ArrowRight' ? 1 : -1
-      const next = PANEL_VIEWS[(index + step + PANEL_VIEWS.length) % PANEL_VIEWS.length]
-      setView(next)
-    }
   }
 
   return (
@@ -290,47 +272,8 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
           onKeyDown={onPanelKeyDown}
         >
           <div className="privacy-panel-header">
-            <div className="privacy-tabs" role="tablist" aria-label="Privacy, feedback, and credits views">
-              <button
-                ref={privacyTabRef}
-                id={privacyTabId}
-                type="button"
-                role="tab"
-                className="privacy-tab"
-                aria-selected={view === 'privacy'}
-                aria-controls={privacyPanelId}
-                tabIndex={view === 'privacy' ? 0 : -1}
-                onClick={() => setView('privacy')}
-              >
-                Privacy
-              </button>
-              <button
-                ref={feedbackTabRef}
-                id={feedbackTabId}
-                type="button"
-                role="tab"
-                className="privacy-tab"
-                aria-selected={view === 'feedback'}
-                aria-controls={feedbackPanelId}
-                tabIndex={view === 'feedback' ? 0 : -1}
-                onClick={() => setView('feedback')}
-              >
-                Feedback
-              </button>
-              <button
-                ref={creditsTabRef}
-                id={creditsTabId}
-                type="button"
-                role="tab"
-                className="privacy-tab"
-                aria-selected={view === 'credits'}
-                aria-controls={creditsPanelId}
-                tabIndex={view === 'credits' ? 0 : -1}
-                onClick={() => setView('credits')}
-              >
-                Credits
-              </button>
-            </div>
+            <TabList items={PANEL_VIEWS} selected={view} onSelect={setView} baseId={baseId}
+              label="Privacy, feedback, and credits views" className="privacy-tabs" tabClassName="privacy-tab" />
             <button
               type="button"
               className="privacy-panel-close"
@@ -406,30 +349,7 @@ export default function AnalyticsConsent({ onClient }: AnalyticsConsentProps) {
               aria-labelledby={creditsTabId}
               className="privacy-tabpanel"
             >
-              <p className="consent-copy">
-                The homepage uses these licensed 3D models — thanks to
-                their authors for sharing them.
-              </p>
-              <ul className="credits-list">
-                {MODEL_CREDITS.map((credit) => (
-                  <li key={credit.title}>
-                    <a href={credit.sourceUrl} target="_blank" rel="noopener noreferrer">
-                      {credit.title}
-                    </a>{' '}
-                    by{' '}
-                    <a href={credit.authorUrl} target="_blank" rel="noopener noreferrer">
-                      {credit.author}
-                    </a>{' '}
-                    ·{' '}
-                    <a href={credit.licenseUrl} target="_blank" rel="noopener noreferrer">
-                      {credit.licenseLabel ?? 'CC-BY-4.0'}
-                    </a>{' '}
-                    · {credit.usedFor}
-                    <div className="credits-modifications">Adapted for this site: {credit.modifications}</div>
-                  </li>
-                ))}
-              </ul>
-              <p className="consent-copy">{PORTRAIT_CREDIT}</p>
+              <CreditsContent />
             </div>
           )}
         </div>

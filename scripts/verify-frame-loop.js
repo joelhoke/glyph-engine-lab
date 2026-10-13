@@ -104,6 +104,24 @@ function makeLoop({ parked = { value: false }, keepRunning = { value: true } } =
   assert(env.frames() === 3 && env.raf.pendingCount() === 1, 'continuous loop reschedules each frame')
 }
 
+// A transition completion can invalidate synchronously from inside frame().
+{
+  const raf = fakeRaf()
+  let frames = 0
+  const loop = createFrameLoop({
+    frame: () => { frames += 1; loop.renderOnce(); loop.resume() },
+    keepRunning: () => true, isParked: () => false,
+    requestFrame: raf.request, cancelFrame: raf.cancel,
+  })
+  loop.renderOnce()
+  for (let i = 0; i < 8; i++) raf.step(i * 33)
+  assert(frames === 8 && raf.pendingCount() === 1, 'in-frame transition invalidations never multiply rendering loops')
+  loop.park()
+  assert(raf.pendingCount() === 0, 'park cancels all work after in-frame invalidation')
+  loop.resume(); raf.step(300); loop.dispose()
+  assert(raf.pendingCount() === 0, 'dispose leaves no orphaned callbacks after in-frame invalidation')
+}
+
 // --- Suspend / resume ---------------------------------------------------------
 {
   const env = makeLoop()

@@ -9,7 +9,7 @@ import type { SiteDestination } from '../../engine/homeNavigation'
  * always match what the coordinator would navigate to.
  */
 export type NavigationItem = {
-  id: 'home' | ExperienceSceneKey | 'gallery'
+  id: 'home' | ExperienceSceneKey | 'gallery' | 'about'
   label: string
   destination: SiteDestination
 }
@@ -19,6 +19,7 @@ export const SITE_NAVIGATION: NavigationItem[] = [
   { id: 'work', label: 'Work', destination: { kind: 'work' } },
   { id: 'vibe', label: 'Vibe', destination: { kind: 'scene', key: 'vibe' } },
   { id: 'gallery', label: 'Gallery', destination: { kind: 'route', href: '/gallery' } },
+  { id: 'about', label: 'About me', destination: { kind: 'route', href: '/about' } },
 ]
 
 /** Display order shared by the homepage and gallery menus. */
@@ -27,4 +28,5 @@ export const SITE_MENU_ORDER: NavigationItem['id'][] = [
   'work',
   'vibe',
   'gallery',
+  'about',
 ]

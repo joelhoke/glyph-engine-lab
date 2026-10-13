@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { listedStacks } from '../../functions/lib/prototypesManifest'
+import CARS from '../../public/assets/about/garage/catalog.json'
 import GalleryHeader from '../../components/gallery/GalleryHeader'
 import StackCard from '../../components/gallery/StackCard'
 import CreationsStackCard from '../../components/gallery/CreationsStackCard'
@@ -38,6 +39,11 @@ export default function GalleryPage() {
           played in place.
         </p>
         <ul className={styles.cardGrid}>
+          <li><a href="/gallery/cars" className={styles.card}><span className={styles.cardBody}>
+            <span className={styles.cardTitle}>Car gallery</span>
+            <span className={styles.cardSummary}>A rolling collection. Cycle through the cars on a shared road, with moving wheels and interactive lights.</span>
+            <span className={styles.cardMeta}>{CARS.length} cars</span>
+          </span></a></li>
           {stacks.map((stack) => (
             <li key={stack.slug}>
               <StackCard stack={stack} />

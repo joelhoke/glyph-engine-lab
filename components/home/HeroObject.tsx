@@ -1,6 +1,8 @@
 'use client'
 
 import { ComponentType, useEffect, useState } from 'react'
+import { useReducedMotion } from '../../engine/useReducedMotion'
+export { useReducedMotion } from '../../engine/useReducedMotion'
 import type { HeroContent } from '../../content/home'
 import HomeMedia from './HomeMedia'
 import { HERO_THREE_RENDERERS } from './renderers/HeroThreeObject'
@@ -34,18 +36,6 @@ export type HeroRendererProps = {
 export type HeroRenderers = Record<string, ComponentType<HeroRendererProps>>
 
 export const DEFAULT_HERO_RENDERERS: HeroRenderers = { ...HERO_THREE_RENDERERS }
-
-export function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false)
-  useEffect(() => {
-    const query = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const update = () => setReduced(query.matches)
-    update()
-    query.addEventListener('change', update)
-    return () => query.removeEventListener('change', update)
-  }, [])
-  return reduced
-}
 
 type HeroCustomContent = Extract<HeroContent, { kind: 'custom' }>
 

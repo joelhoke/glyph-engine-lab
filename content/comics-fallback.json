@@ -1,0 +1,61 @@
+{
+  "username": "Idiosarcasm",
+  "releaseDate": "2026-09-17",
+  "fetchedAt": null,
+  "comics": [
+    {
+      "name": "Absolute Cassandra Cain: The Shadow's Hand #1",
+      "publisher": "DC Comics",
+      "url": "https://leagueofcomicgeeks.com/comic/9567504/absolute-cassandra-cain-the-shadows-hand-1",
+      "cover": "https://s3.amazonaws.com/comicgeeks/comics/covers/large-9567504.jpg?1788527616"
+    },
+    {
+      "name": "Absolute Green Arrow #5  Cover C Sebasti\u00e1n Fiumara Variant",
+      "publisher": "DC Comics",
+      "url": "https://leagueofcomicgeeks.com/comic/1153213/absolute-green-arrow-5?variant=2445946",
+      "cover": "https://s3.amazonaws.com/comicgeeks/comics/covers/large-2445946.jpg?1789174083"
+    },
+    {
+      "name": "Avengers: Armageddon #4",
+      "publisher": "Marvel Comics",
+      "url": "https://leagueofcomicgeeks.com/comic/6658111/avengers-armageddon-4",
+      "cover": "https://s3.amazonaws.com/comicgeeks/comics/covers/large-6658111.jpg?1789226294"
+    },
+    {
+      "name": "The Big Shakedown #1",
+      "publisher": "Dark Horse Comics",
+      "url": "https://leagueofcomicgeeks.com/comic/2033428/the-big-shakedown-1",
+      "cover": "https://s3.amazonaws.com/comicgeeks/comics/covers/large-2033428.jpg?1779440482"
+    },
+    {
+      "name": "DC x Sonic the Hedgehog: The Metal Legion #5",
+      "publisher": "DC Comics",
+      "url": "https://leagueofcomicgeeks.com/comic/6973953/dc-x-sonic-the-hedgehog-the-metal-legion-5",
+      "cover": "https://s3.amazonaws.com/comicgeeks/comics/covers/large-6973953.jpg?1787693934"
+    },
+    {
+      "name": "Deathstroke: The Terminator #7",
+      "publisher": "DC Comics",
+      "url": "https://leagueofcomicgeeks.com/comic/4180296/deathstroke-the-terminator-7",
+      "cover": "https://s3.amazonaws.com/comicgeeks/comics/covers/large-4180296.jpg?1789155554"
+    },
+    {
+      "name": "Detective Comics #1113",
+      "publisher": "DC Comics",
+      "url": "https://leagueofcomicgeeks.com/comic/2449306/detective-comics-1113",
+      "cover": "https://s3.amazonaws.com/comicgeeks/comics/covers/large-2449306.jpg?1789149997"
+    },
+    {
+      "name": "DNX #1",
+      "publisher": "Marvel Comics",
+      "url": "https://leagueofcomicgeeks.com/comic/5831996/dnx-1",
+      "cover": "https://s3.amazonaws.com/comicgeeks/comics/covers/large-5831996.jpg?1789185063"
+    },
+    {
+      "name": "Marc Spector: Moon Knight #8",
+      "publisher": "Marvel Comics",
+      "url": "https://leagueofcomicgeeks.com/comic/8487392/marc-spector-moon-knight-8",
+      "cover": "https://s3.amazonaws.com/comicgeeks/comics/covers/large-8487392.jpg?1789238572"
+    }
+  ]
+}

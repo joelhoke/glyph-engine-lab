@@ -1,0 +1,8 @@
+{
+  "name": "jh-comic-refresh",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.13.0" },
+  "scripts": { "refresh": "node refresh.mjs", "check": "node refresh.mjs --dry-run" },
+  "dependencies": { "comicgeeks": "1.2.0", "@aws-sdk/client-s3": "^3.0.0" }
+}

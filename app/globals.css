@@ -32,6 +32,7 @@
   --color-canvas: #090c12;
   --color-surface: #0e1620;
   --color-section-blue: #101826;
+  --color-about-surface: var(--color-page);
   --color-text: #f7fbff;
   --color-text-muted: #c5d4ea;
   --color-text-faint: #8aa4c5;
@@ -107,6 +108,7 @@
     --color-canvas: #f4f6f9;
     --color-surface: #ffffff;
     --color-section-blue: #dce7f3;
+    --color-about-surface: var(--color-section-blue);
     --color-text: #101826;
     --color-text-muted: #44536a;
     --color-text-faint: #5c6c82;
@@ -319,8 +321,8 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
 /* The home portrait and object previews already form its initial composition.
    Keep the canvas recovery branding from flashing underneath them. The layout's
    noscript navigation still explains the disabled-JavaScript case. */
-.portfolio-shell[data-view='intro'] .canvas-fallback > * { display: none; }
-.portfolio-shell[data-view='intro'] .canvas-fallback { background: var(--color-page); }
+.scene-viewport--landing .canvas-fallback > * { display: none; }
+.scene-viewport--landing .canvas-fallback { background: var(--color-page); }
 .portfolio-shell {
   position: relative;
   /* 100vh fallback, then dynamic viewport height so mobile browser-chrome
@@ -541,6 +543,9 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   max-width: 34rem;
 }
 .home-hero-dock-zone { display: none; }
+.home-hero-fibre { position: absolute; z-index: -1; padding: 0; margin: 0; list-style: none; pointer-events: none; opacity: .72; mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent); }
+.home-hero-fibre[hidden] { display: none; }
+
 .home-hero-label {
   display: none;
   position: absolute;
@@ -554,6 +559,8 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   transform-origin: 50% 0;
 }
 .home-hero-label[data-visible='true'] { display: block; }
+/* Interest docks reveal labels only on hover/focus, including touch devices. */
+.home-hero-label[data-hover-only='true']:not([data-visible='true']) { display: none; }
 .home-hero-label-pixels {
   position: relative;
   display: block;
@@ -990,8 +997,8 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   .home-hero-composition {
     --hero-fan-top: 370px;
     --hero-portrait-top: 12px;
-    --hero-outer-offset: 165px;
-    --hero-inner-offset: 82px;
+    --hero-outer-offset: var(--mobile-dock-outer-offset, 165px);
+    --hero-inner-offset: var(--mobile-dock-inner-offset, 82px);
     position: absolute;
     display: block;
     top: 0;
@@ -1003,7 +1010,7 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   }
   .home-hero .home-hero-portrait-position { position: absolute; }
   .home-hero .home-hero-slots { display: block; padding: 0; margin: 0; }
-  .home-hero .home-hero-slot-position { width: 150px; }
+  .home-hero .home-hero-slot-position { width: var(--mobile-dock-object-size, 150px); }
   .home-hero .home-hero-hand { max-width: none; }
   .home-hero .home-hero-hand-slot {
     --hand-rest-turn: 0deg;
@@ -1023,68 +1030,7 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
   .home-hero .home-hero-slot-link:hover,
   .home-hero .home-hero-slot-link:hover .home-hero-custom { transform: none; }
   .home-hero .home-hero-label { display: none; }
-  .home-hero-mobile-arrow {
-    position: absolute;
-    /* Align with the head's midpoint in the scaled 700 × 660 composition. */
-    top: 29%;
-    transform: translateY(-50%);
-    display: grid;
-    place-items: center;
-    width: 44px;
-    height: 44px;
-    z-index: 4;
-    padding: 0;
-    border: 1px solid var(--color-border-subtle);
-    border-radius: 50%;
-    background: var(--color-surface-panel-soft);
-    color: var(--color-text);
-    cursor: pointer;
-    pointer-events: auto;
-  }
-  .home-hero-mobile-arrow--previous { left: max(0px, env(safe-area-inset-left, 0px)); }
-  .home-hero-mobile-arrow--next { right: max(0px, env(safe-area-inset-right, 0px)); }
-  .home-hero-mobile-controls {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    position: relative;
-    z-index: 3;
-    pointer-events: auto;
-    padding-inline: 1rem;
-  }
-  .home-hero-mobile-label { min-height: 48px; }
-  .home-hero-mobile-label a {
-    position: relative;
-    display: block;
-    min-height: 48px;
-    min-width: 180px;
-    color: var(--color-text);
-    text-decoration: none;
-  }
-  .home-hero-mobile-label .home-hero-label-pixels {
-    display: grid;
-    place-items: center;
-    min-height: 48px;
-    padding: 12px 20px;
-    font-size: 16px;
-  }
-  .home-hero-mobile-label .home-hero-label-pixels::before { pointer-events: none; }
-  .home-hero-label-timer {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 2px;
-    background: var(--color-accent);
-    opacity: 0.5;
-    pointer-events: none;
-    transform: scaleX(0);
-    transform-origin: left center;
-  }
-  .home-hero-mobile-controls a:focus-visible {
-    outline: 2px solid var(--color-accent);
-    outline-offset: 5px;
-  }
+
 }
 
 /* Match mobileCompositionScale before hydration; the ResizeObserver still
@@ -1096,25 +1042,6 @@ canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%
     }
   }
 }
-/* Touch uses the same pixel reveal as desktop, with a full-size label link.
-   Reduced-motion users retain the shared static label treatment. */
-@media (max-width: 767px) and (prefers-reduced-motion: no-preference) {
-  .home-hero-label-timer[data-running='true'] {
-    animation-name: hero-label-countdown;
-    animation-timing-function: linear;
-    animation-fill-mode: forwards;
-  }
-  .home-hero-mobile-label .home-hero-label-pixels { animation: hero-label-reveal 240ms steps(6, end) both; }
-  .home-hero-mobile-label .home-hero-label-pixels::before {
-    display: block;
-    animation: hero-label-pixels 240ms steps(4, end) both;
-  }
-}
-@keyframes hero-label-countdown {
-  from { transform: scaleX(0); }
-  to { transform: scaleX(1); }
-}
-
 /* Media wrapper: the aspect-ratio box is stable whether the slot carries a
    real image or the branded placeholder — swapping assets later never moves
    layout. */

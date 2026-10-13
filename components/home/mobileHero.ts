@@ -99,9 +99,12 @@ export function bindMobileHeroTouch(
   }
 }
 
+export function nextDockSlot<Slot extends string>(current: Slot | null, step: number, slots: readonly Slot[]): Slot {
+  const index = current === null ? Math.floor(slots.length / 2) : slots.indexOf(current)
+  return slots[(index + step + slots.length) % slots.length]
+}
 export function nextMobileSlot(current: HeroSlotId | null, step: number): HeroSlotId {
-  const index = current === null ? 2 : DOCK_SLOTS.indexOf(current)
-  return DOCK_SLOTS[(index + step + DOCK_SLOTS.length) % DOCK_SLOTS.length]
+  return nextDockSlot(current, step, DOCK_SLOTS)
 }
 
 export function mobileDockWeights(selected: HeroSlotId | null): number[] {
@@ -109,14 +112,29 @@ export function mobileDockWeights(selected: HeroSlotId | null): number[] {
 }
 
 export function mobileCompositionScale(width: number): number {
-  return Math.min(1, Math.max(0, width - 24) / 700)
+  return Math.min(1, Math.max(0, width - 24) / MOBILE_DOCK_GEOMETRY.width)
 }
 
 export function mobileSlotAction(input: {
-  mobile: boolean; selected: HeroSlotId | null; slot: HeroSlotId; dragged: boolean
+  mobile: boolean; selected: string | null; slot: string; dragged: boolean
   detail: number; button: number; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean
 }): 'navigate' | 'select' | 'ignore' {
   if (!input.mobile || input.detail === 0 || input.button !== 0 || input.metaKey || input.ctrlKey || input.shiftKey || input.altKey) return 'navigate'
   if (input.dragged) return 'ignore'
   return input.selected === input.slot ? 'navigate' : 'select'
+}
+
+/** Canonical dimensions of the homepage mobile object fan. */
+export const MOBILE_DOCK_GEOMETRY = { width: 700, object: 150, outer: 165, inner: 82 } as const
+export function mobileDockAnchor(width: number, index: number, count: number, extraGap = 0) {
+  const offsets = [-MOBILE_DOCK_GEOMETRY.outer, -MOBILE_DOCK_GEOMETRY.inner, 0, MOBILE_DOCK_GEOMETRY.inner, MOBILE_DOCK_GEOMETRY.outer]
+  const offset = count === 5 ? offsets[index] : (index - (count - 1) / 2) * MOBILE_DOCK_GEOMETRY.inner
+  const scale = mobileCompositionScale(width + 24)
+  const spread = mobileDockSpacing(1.12) * scale
+  const middle = (count - 1) / 2
+  const edgeOffset = count === 5 ? MOBILE_DOCK_GEOMETRY.outer : middle * MOBILE_DOCK_GEOMETRY.inner
+  const halfObject = Math.max(44, MOBILE_DOCK_GEOMETRY.object * scale * mobileDockScale(1)) / 2
+  // Add screen-space separation while keeping the magnified edge icons visible.
+  const gap = Math.min(extraGap, Math.max(0, ((width + 24) / 2 - halfObject - edgeOffset * spread) / Math.max(1, middle)))
+  return width / 2 + offset * spread + (index - middle) * gap
 }

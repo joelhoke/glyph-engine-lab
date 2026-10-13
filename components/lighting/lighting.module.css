@@ -1,0 +1,21 @@
+.surface { --light-wall: var(--color-about-surface); --light-glass: #fff7e9; position: absolute; inset: 0; touch-action: none; overflow: hidden; }
+.surface > canvas { display: block; width: 100%; height: 100%; }
+.surface:global(.is-bulb-hovered) { cursor: grab; }
+.surface:global(.is-dragging) { cursor: grabbing; }
+.surface :global(.content-overlay) { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.surface [hidden] { display: none !important; }
+.surface :global(.sr-only) { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.desktop { pointer-events: none; z-index: 1; opacity: 0; transition: opacity 300ms ease; }
+.desktop[data-status=ready] { opacity: 1; }
+.desktop[data-status=error] { pointer-events: none; }
+@media (prefers-color-scheme: light) { .surface { --light-glass: #b5bfcc; } }
+@media (prefers-reduced-motion: reduce) { .desktop { transition: none; } }
+
+/* The bulb is the pointer target; keyboard users get the same switch on focus. */
+.toggle { position: absolute; top: 4rem; right: 1rem; z-index: 5; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.toggle:focus-visible { width: auto; height: auto; padding: .6rem .8rem; margin: 0; clip-path: none; color: var(--color-text); background: var(--color-page); border: 1px solid var(--color-accent); border-radius: 6px; outline: 2px solid var(--color-accent); outline-offset: 3px; }
+
+/* Compact native controls follow the spotlight models; surrounding space stays clickable. */
+.surface [data-accent-control] { position: absolute; z-index: 2; padding: 0; margin: 0; border: 0; border-radius: 8px; background: transparent; pointer-events: auto; touch-action: none; cursor: grab; transform-origin: center; -webkit-tap-highlight-color: transparent; }
+.surface [data-accent-control][data-dragging] { cursor: grabbing; }
+.surface [data-accent-control]:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }

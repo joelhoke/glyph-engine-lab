@@ -57,7 +57,9 @@ export function createFrameLoop(options: FrameLoopOptions): FrameLoop {
     if (disposed || options.isParked()) return
     options.frame(now)
     if (disposed || options.isParked() || !options.keepRunning()) return
-    pending = requestFrame(tick)
+    // frame() may synchronously invalidate (for example, a car transition).
+    // Keep that scheduled frame instead of overwriting its handle and forking.
+    if (pending === null) pending = requestFrame(tick)
   }
 
   const renderOnce = () => {

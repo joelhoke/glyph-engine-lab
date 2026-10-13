@@ -15,7 +15,7 @@ execFileSync(path.join(root, 'node_modules/.bin/tsc'), [
   'components/home/renderers/phoneModelKeys.ts',
   'components/home/renderers/phoneKeyFeedback.ts',
   'components/home/renderers/screenProjection.ts',
-  '--outDir', out, '--module', 'commonjs', '--target', 'es2020', '--skipLibCheck',
+  '--outDir', out, '--module', 'commonjs', '--target', 'es2020', '--skipLibCheck', '--resolveJsonModule', '--esModuleInterop',
 ], { cwd: root, stdio: 'inherit' })
 const { dockWeights, dockPosition } = require(path.join(out, 'components/home/heroDock.js'))
 const { createPhoneHinge } = require(path.join(out, 'components/home/renderers/phoneHinge.js'))
@@ -27,6 +27,18 @@ const { phoneModelKeyAtUv, PHONE_MODEL_KEYS } = require(path.join(out, 'componen
 const { phoneScreenCorners } = require(path.join(out, 'components/home/renderers/phoneScreenGeometry.js'))
 const { screenProjection } = require(path.join(out, 'components/home/renderers/screenProjection.js'))
 const { PHONE_SECTION_POSES } = require(path.join(out, 'components/home/renderers/phoneSectionPose.js'))
+const { magnificationPosition, magnificationWeights } = require(path.join(out, 'engine/dockMagnification.js'))
+for (const count of [1, 5, 6]) {
+  assert.equal(magnificationPosition(-10000, 640, 120, count), 0)
+  assert.equal(magnificationPosition(10000, 640, 120, count), count - 1)
+  assert.deepEqual(magnificationWeights(null, count), Array(count).fill(0))
+  for (let index = 0; index < count; index++) {
+    const weights = magnificationWeights(index, count)
+    assert.equal(weights[index], 1)
+    assert(weights.every(weight => Number.isFinite(weight) && weight >= 0 && weight <= 1))
+    if (index > 0 && index < count - 1) assert.equal(weights[index - 1], weights[index + 1])
+  }
+}
 assert.deepEqual(dockWeights(null), [0, 0, 0, 0, 0])
 assert.equal(dockPosition(640, 640, 120), 2)
 assert.equal(dockPosition(-10000, 640, 120), 0)

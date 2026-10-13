@@ -1,4 +1,6 @@
 import { COLLABORATE_CONTACT } from './collaborate'
+import garageCredits from '../scripts/garage/credits.json'
+import interestModelCredits from '../public/assets/about/models/credits.json'
 
 /**
  * Site-level identity and recruiter links. Single source for the persistent
@@ -34,9 +36,9 @@ export const PORTRAIT_CREDIT = 'Portrait sprites from Joel Hoke’s SpriteSample
 export type ModelCredit = {
   title: string
   author: string
-  authorUrl: string
-  sourceUrl: string
-  licenseUrl: string
+  authorUrl?: string
+  sourceUrl?: string
+  licenseUrl?: string
   licenseLabel?: string
   /** Where the model appears on the site. */
   usedFor: string
@@ -50,13 +52,15 @@ export type ModelCredit = {
  * feedback panel's Credits tab — the license requires naming the author.
  */
 export const MODEL_CREDITS: ModelCredit[] = [
+  ...interestModelCredits,
+  ...garageCredits,
   {
     title: 'Edison Light Bulb',
     author: 'Fishboe',
     authorUrl: 'https://sketchfab.com/ministephen',
     sourceUrl: 'https://sketchfab.com/3d-models/edison-light-bulb-aeb0e4832f04463280510e550e2cdbd5',
     licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
-    usedFor: 'About me',
+    usedFor: 'Homepage lighting and About Smart home',
     modifications: 'Reoriented with custom glass and lighting, a blue housing and cord, and interactive hanging physics.',
   },
   {
@@ -119,4 +123,21 @@ export const MODEL_CREDITS: ModelCredit[] = [
     usedFor: 'Introduction',
     modifications: 'Recolored with an added opening cover and a watercolor welcome page supplied by Joel Hoke.',
   },
+]
+
+
+/** Non-model acknowledgments belong to the same site-wide credits surface. */
+export const OTHER_CREDITS: ModelCredit[] = [
+  { title: 'Fibre Arc', author: 'Originkit', authorUrl: 'https://www.originkit.dev', sourceUrl: 'https://www.originkit.dev/components/fibre-arc', licenseUrl: 'https://www.originkit.dev/docs/licensing', licenseLabel: 'Originkit component license', usedFor: 'Homepage accordion and About arc', modifications: 'Transparent composition, site palette, shared pointer input, geometry helper and visibility-aware animation.' },
+  { title: 'Three.js', author: 'Three.js authors', sourceUrl: 'https://threejs.org/', licenseUrl: '/assets/about/garage/THREE-LICENSE.txt', licenseLabel: 'MIT', usedFor: 'Interactive 3D scenes', modifications: 'Used as the rendering library; license notice retained with the generated garage runtime.' },
+  { title: 'Departure Mono', author: 'Helena Zhang', authorUrl: 'https://helenazhang.com', sourceUrl: 'https://departuremono.com', licenseUrl: '/fonts/DepartureMono-OFL-LICENSE.txt', licenseLabel: 'SIL OFL 1.1', usedFor: 'Site typography', modifications: 'Self-hosted WOFF2 font.' },
+  { title: 'Cabin', author: 'The Cabin Project Authors', sourceUrl: 'https://github.com/impallari/Cabin', licenseUrl: '/assets/about-light-study/fonts/Cabin-OFL.txt', licenseLabel: 'SIL OFL 1.1', usedFor: 'Homepage 3D typography', modifications: 'Converted to a local Three.js typeface at bold weight.' },
+  { title: 'Helvetiker', author: 'MAGENTA Ltd.', sourceUrl: 'https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', licenseUrl: '/assets/about-light-study/fonts/LICENSE.txt', licenseLabel: 'Bundled font license', usedFor: 'Light-study typeface assets', modifications: 'Bundled typeface; original license retained.' },
+  { title: 'Lightbox', author: 'Joel Hoke', sourceUrl: 'https://github.com/joelhoke/Lightbox', licenseLabel: 'Author-owned project', usedFor: 'Shared lighting and peelable stickers', modifications: 'Site integration of the lighting renderer, bulb physics and sticker surface; full sticker removal added.' },
+  { title: 'Comic covers and pull-list data', author: 'Respective creators and publishers; League of Comic Geeks', sourceUrl: 'https://leagueofcomicgeeks.com/profile/Idiosarcasm', licenseLabel: 'Artwork remains with its rights holders', usedFor: 'Creative Media', modifications: 'Linked cover previews, three-book fan and personal pull-list shelf. This acknowledgment does not relicense the artwork.' },
+  { title: 'Movie collection artwork', author: 'Respective film studios and rights holders', licenseLabel: 'Copyright retained by the respective rights holders', usedFor: 'Creative Media movie collection', modifications: 'Titles from Joel’s purchased Apple TV library; portrait artwork from Apple’s public movie catalog, normalized to WebP. Personal collection display; this acknowledgment does not grant a reuse license.' },
+  { title: 'Game collection artwork', author: 'Respective game publishers and rights holders', sourceUrl: 'https://www.xbox.com/games', licenseLabel: 'Copyright retained by the respective rights holders', usedFor: 'Creative Media game collection', modifications: 'Portrait covers from Microsoft’s public Store catalog, normalized to WebP for Joel’s recent Xbox games. Source product IDs and artwork URLs are recorded locally. This acknowledgment does not grant a reuse license.' },
+  { title: 'Album artwork', author: 'Respective artists, labels and rights holders', sourceUrl: 'https://music.apple.com/', licenseLabel: 'Copyright retained by the respective rights holders', usedFor: 'Creative Media album collection', modifications: 'Apple Music catalog artwork displayed with album and artist names and links to Apple Music. This acknowledgment does not relicense the artwork.' },
+  { title: 'Toyota 4Runner body', author: 'Purchased asset supplied by Joel Hoke', licenseLabel: 'Purchased license; no attribution required per owner', usedFor: 'Cars & motorsport', modifications: 'Personal 4Runner build, model refinements and interactive lights. The adapted SUV Niva rack is credited separately.' },
+  { title: 'Lancia Stratos 1974', author: 'Source author pending confirmation', licenseLabel: 'Source and license not yet confirmed', usedFor: 'Local Cars preview; inclusion under review', modifications: 'Textures resized, transparent glass separated for display, and interactive scene framing.' },
 ]

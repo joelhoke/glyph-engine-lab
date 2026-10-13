@@ -1,0 +1,9 @@
+McLaren MP4/5 || Formula 1 by dark_igorek (https://sketchfab.com/dark_igorek)
+Source: https://sketchfab.com/3d-models/mclaren-mp45-formula-1-3059d4532ecd48ca8da41e1cac971f22
+License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+Changes: Textures resized to 1024px; centered and framed for a driving scene with dynamic site lighting and animated authored wheel assemblies. Authored geometry and materials retained.
+
+SUV Niva — roof rack by zhe_kan (https://sketchfab.com/zhe_kan)
+Source: https://sketchfab.com/3d-models/suv-niva-90884cd47cbd44d5a2777e53f533df9c
+License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+Changes: Roof basket extracted, resized and fitted to the 4Runner roof rails; lower mounts and a front fairing added. Combined with the separately purchased 4Runner body and personal modifications. Original geometry retained.

@@ -1,0 +1,30 @@
+name: Refresh comic pull list
+on:
+  schedule:
+    - cron: '17 16 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: comic-pull-list-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: vars.ABOUT_COMICS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: scripts/comics/package-lock.json
+      - run: npm ci --prefix scripts/comics
+      - run: npm run refresh --prefix scripts/comics
+        env:
+          R2_ACCOUNT_ID: ${{ vars.CF_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.ABOUT_R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.ABOUT_R2_SECRET_ACCESS_KEY }}

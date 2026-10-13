@@ -9,7 +9,7 @@ try {
   execFileSync(path.join(root, 'node_modules/.bin/tsc'), [
     'components/home/mobileHero.ts', 'components/home/HomeHero.tsx', 'engine/homeNavigation.ts',
     '--outDir', out, '--module', 'commonjs', '--target', 'es2020', '--jsx', 'react-jsx',
-    '--esModuleInterop', '--skipLibCheck',
+    '--esModuleInterop', '--skipLibCheck', '--resolveJsonModule',
   ], { cwd: root, stdio: 'inherit' })
   const { bindMobileHeroTouch, mobileSwipeStep, nextMobileSlot, mobileDockWeights, mobileDockScale, mobileDockSpacing, mobileCompositionScale, mobileSlotAction, createMobileCarouselClock, MOBILE_INITIAL_SLOT } = require(path.join(out, 'components/home/mobileHero.js'))
   const { HOME_CONTENT, HOME_SECTIONS } = require(path.join(out, 'content/home.js'))
@@ -142,6 +142,9 @@ try {
 
   const React = require('react')
   const { renderToStaticMarkup } = require('react-dom/server')
+  // Node renders markup only; parse the shared stylesheet separately below.
+  fs.copyFileSync(path.join(root, 'components/MobileDockControls.css'), path.join(out, 'components/MobileDockControls.css'))
+  require.extensions['.css'] = () => {}
   const HomeHero = require(path.join(out, 'components/home/HomeHero.js')).default
   const html = renderToStaticMarkup(React.createElement(HomeHero, {
     slots: HOME_CONTENT.heroSlots, renderers: {}, introduction: HOME_CONTENT.introduction, onSectionLink() {},
@@ -161,6 +164,7 @@ try {
   // Parse stylesheet syntax using the same PostCSS parser bundled by Next.
   const postcss = require('postcss')
   postcss.parse(fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8'))
+  postcss.parse(fs.readFileSync(path.join(root, 'components/MobileDockControls.css'), 'utf8'))
   console.log('PASS: swipe intent, wraparound, selection/navigation, 90–144% scale, mobile fit, About routing, accessible notebook and CSS syntax')
 } finally {
   fs.rmSync(out, { recursive: true, force: true })

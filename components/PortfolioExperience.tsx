@@ -1,8 +1,8 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import SceneCanvas, { SceneCanvasHandle, SceneTargetRegion } from './SceneCanvas'
-import CanvasFallback from './CanvasFallback'
+import type { SceneCanvasHandle, SceneTargetRegion } from './SceneCanvas'
+import SceneBackdrop from './SceneBackdrop'
 import SiteHeader from './SiteHeader'
 import ExperienceTransition, { useExperienceTransition } from './ExperienceTransition'
 // Work and Collaborate subtrees load on demand (next/dynamic): the landing's
@@ -98,7 +98,7 @@ import {
   nextAmbientSceneId,
   resolveAmbientSceneId,
 } from '../engine/ambientScenes'
-import { LANDING_CANVAS_GRADIENT, ThemeName, resolveThemedSourceUrl } from '../engine/theme'
+import { ThemeName, resolveThemedSourceUrl } from '../engine/theme'
 import { useSystemTheme } from '../engine/useSystemTheme'
 import { resolvePlaygroundConfig } from '../engine/playgroundTheme'
 import { AnalyticsClient, AnalyticsEvent } from '../engine/analytics'
@@ -247,14 +247,6 @@ type SequenceController = {
 }
 
 const BASE_DOCUMENT_TITLE = 'joel hoke design'
-
-// Clear keeps the slow drifting motes over the existing gradient and glyph
-// field. It is fixed from the first frame, with no live weather request.
-const DEFAULT_HERO_AMBIENT = {
-  ...buildSceneAmbientConfig('clear'),
-  interactionStrength: 0.6,
-  backdropOpacity: 0,
-}
 
 // On-demand tab experiences. ssr:false is safe here: the static export always
 // prerenders the landing (hash routing resolves client-side), and the
@@ -3157,10 +3149,8 @@ export default function PortfolioExperience({ galleryProjects = [] }: { galleryP
   // the built-in monogram. (The animated Black-hole provider is retained in
   // engine/animatedSource.ts but is not a selectable production option —
   // nothing here can construct it.)
-  const sceneSource = useMemo<SceneSourceSelection>(() => {
-    if (displayed === 'intro') {
-      return { kind: 'responsive-landing' }
-    }
+  const sceneSource = useMemo<SceneSourceSelection | undefined>(() => {
+    if (displayed === 'intro') return undefined // SceneBackdrop owns responsive hero selection.
     if (displayed === 'work') {
       if (!workDescriptor.sourceUrl) return { kind: 'builtin' }
       // Theme-aware source (feature/light-dark): a slide/story may carry an
@@ -3193,19 +3183,6 @@ export default function PortfolioExperience({ galleryProjects = [] }: { galleryP
   const scenePlayground = useMemo<PlaygroundConfig>(() => {
     if (displayed === 'work') return resolveScenePlayground(workDescriptor, theme)
     if (displayed === 'collaborate') return resolveScenePlayground(collaborateDescriptor, theme)
-    if (displayed === 'intro') {
-      return {
-        ...playgroundConfig,
-        backgroundColor1: LANDING_CANVAS_GRADIENT[theme].color1,
-        backgroundColor2: LANDING_CANVAS_GRADIENT[theme].color2,
-        // The landing field spells the site URL and takes its colors from the
-        // recolored source field (the themed landing gradient, applied in
-        // SceneCanvas) — never the ROYGBV image-gradient palette.
-        glyphText: 'joelhoke.me.',
-        glyphColorMode: 'source-colors',
-        ambient: DEFAULT_HERO_AMBIENT,
-      }
-    }
     return playgroundConfig
   }, [displayed, workDescriptor, collaborateDescriptor, playgroundConfig, theme])
 
@@ -3310,11 +3287,8 @@ export default function PortfolioExperience({ galleryProjects = [] }: { galleryP
           document background. CanvasFallback's artwork is scoped to this
           wrapper. The SceneCanvas instance keeps a stable React tree position
           across mode changes — never keyed by mode, never duplicated. */}
-      <div className="scene-viewport" ref={sceneViewportRef}>
-        {/* Static branded layer behind the canvas: visible only while the
-            canvas has not painted (no JS / no 2D context). */}
-        <CanvasFallback />
-        <SceneCanvas
+      <SceneBackdrop
+        viewportRef={sceneViewportRef}
         ref={sceneCanvasRef}
         theme={theme}
         tuningMode={tuningMode}
@@ -3368,7 +3342,6 @@ export default function PortfolioExperience({ galleryProjects = [] }: { galleryP
           }
         }}
       />
-      </div>
       {/* Persistent frame (homepage-redesign phase 5): always rendered — on
           the landing and inside every section — the home mark and the menu
           are one click away from anywhere. Sits above the canvas (z-index

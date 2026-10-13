@@ -11,6 +11,13 @@ export const LIGHTING = {
   bloom: { strength: 0.32, radius: 0.35, threshold: 1.1 },
 } as const;
 
+export type LightingTheme = 'light' | 'dark';
+/** Light mode is a pale room lit by color, with subdued neutral fill. */
+export const LIGHTING_THEMES = {
+  dark: { ambient: LIGHTING.ambient, accentIntensity: LIGHTING.intensity * 6, toneMapping: 'filmic' },
+  light: { ambient: LIGHTING.ambient, accentIntensity: LIGHTING.intensity * 2, toneMapping: 'neutral' },
+} as const;
+
 export const VIEW = {
   cameraZ: 1.45, fieldOfView: 40, maxPixelRatio: 2, shadowSize: 1024,
   bulbHeight: 0.2, bulbTop: 0.3, socketTop: 0.34, socketBottom: 0.249,

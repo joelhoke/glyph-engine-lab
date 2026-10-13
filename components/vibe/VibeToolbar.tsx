@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { BorderBeam } from 'border-beam'
+import { listenForOutsidePointer } from '../../engine/outsidePointer'
 import { PlaygroundConfig } from '../../engine/playgroundConfig'
 import { PaintStatus, PaintToolConfig } from '../../engine/paint'
 import { PondConfig } from '../../engine/pondConfig'
@@ -224,16 +225,7 @@ export default function VibeToolbar({
 
   useEffect(() => {
     if (!selectedTool) return
-    const handlePointerDown = (event: MouseEvent | PointerEvent) => {
-      const target = event.target as Node | null
-      const panel = panelRef.current
-      const button = activeCategoryButton
-      if (button && button.contains(target as Node)) return
-      if (panel && panel.contains(target as Node)) return
-      closePanel()
-    }
-    document.addEventListener('pointerdown', handlePointerDown)
-    return () => document.removeEventListener('pointerdown', handlePointerDown)
+    return listenForOutsidePointer(() => [panelRef.current, activeCategoryButton], closePanel)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTool, activeCategoryButton])
 
@@ -263,17 +255,14 @@ export default function VibeToolbar({
       event.stopPropagation()
       closeShareChooser()
     }
-    const handlePointerDown = (event: MouseEvent | PointerEvent) => {
-      const target = event.target as Node | null
-      if (shareChooserRef.current?.contains(target as Node)) return
-      if (utilityButtonRefs.current.share?.contains(target as Node)) return
-      setShareChooserOpen(false)
-    }
+    const stopOutside = listenForOutsidePointer(
+      () => [shareChooserRef.current, utilityButtonRefs.current.share],
+      () => setShareChooserOpen(false),
+    )
     document.addEventListener('keydown', handleKeyDown)
-    document.addEventListener('pointerdown', handlePointerDown)
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
-      document.removeEventListener('pointerdown', handlePointerDown)
+      stopOutside()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shareChooserOpen])

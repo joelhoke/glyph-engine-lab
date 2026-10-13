@@ -1,0 +1,5 @@
+Generated from the existing vehicle playground source and original vehicle GLBs.
+Rebuild: node scripts/prepare-about-garage.mjs /path/to/can
+The source renderer owns loading, model corrections, vehicle lighting, and camera framing.
+Original 4Runner geometry, materials, wheel nodes and lamp emitters are retained without simplification. All authored lamp metadata is retained; About omits unused high-beam sources at runtime. Gallery exposes the original light controls.
+The site adapter adds transparent composition, a locked camera, capped road motion, shared lighting, a five-flash welcome, and lifecycle cleanup.

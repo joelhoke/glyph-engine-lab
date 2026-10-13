@@ -1,0 +1,135 @@
+[
+  {
+    "id": "apple-music-bbf5e024fa52c192",
+    "title": "Los Dúo",
+    "source": "Juan Gabriel",
+    "note": "Apple Music",
+    "image": {
+      "src": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/35/96/d3/3596d3f7-c4fc-b8c1-101c-489720754132/21UM1IM46050.rgb.jpg/600x600bb.jpg",
+      "alt": "Los Dúo album cover",
+      "width": 600,
+      "height": 600
+    }
+  },
+  {
+    "id": "apple-music-13ebe0f27569c9e0",
+    "title": "Otero War",
+    "source": "Caveman",
+    "note": "Apple Music",
+    "image": {
+      "src": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/52/2a/05/522a0575-df7a-86c7-8b2d-6bd49f0f1ac2/00886445801873_Cover.jpg/600x600bb.jpg",
+      "alt": "Otero War album cover",
+      "width": 600,
+      "height": 600
+    },
+    "url": "https://music.apple.com/us/album/otero-war/1504729751"
+  },
+  {
+    "id": "apple-music-85103196b18a4d38",
+    "title": "Some Kind Of Trouble",
+    "source": "James Blunt",
+    "note": "Apple Music",
+    "image": {
+      "src": "https://is1-ssl.mzstatic.com/image/thumb/Music4/v4/95/08/ae/9508ae11-8a08-2908-2a83-f989f50b64de/075678833038.jpg/600x600bb.jpg",
+      "alt": "Some Kind Of Trouble album cover",
+      "width": 600,
+      "height": 600
+    }
+  },
+  {
+    "id": "apple-music-a59793d88ff4bb37",
+    "title": "Blink-182",
+    "source": "Blink-182",
+    "note": "Apple Music",
+    "url": "https://music.apple.com/us/album/blink-182/1442997224",
+    "image": {
+      "src": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/e3/9d/c5/e39dc58d-faa8-e707-8f94-42840aaa7a0c/16UMGIM35665.rgb.jpg/600x600bb.jpg",
+      "alt": "Blink-182 album cover",
+      "width": 600,
+      "height": 600
+    }
+  },
+  {
+    "id": "apple-music-acda5f4c84ff7445",
+    "title": "Every Hero Needs A Villain",
+    "source": "CZARFACE",
+    "note": "Apple Music",
+    "image": {
+      "src": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/b1/a3/3d/b1a33df9-e703-00f1-e5ca-757b9804445b/853044003526.jpg/600x600bb.jpg",
+      "alt": "Every Hero Needs A Villain album cover",
+      "width": 600,
+      "height": 600
+    },
+    "url": "https://music.apple.com/us/album/every-hero-needs-a-villain/982711017"
+  },
+  {
+    "id": "apple-music-53069dda8a915035",
+    "title": "Boston",
+    "source": "Boston",
+    "note": "Apple Music",
+    "url": "https://music.apple.com/us/album/boston/913902091",
+    "image": {
+      "src": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/e3/08/9a/e3089ac9-a820-5ee9-64be-39500ad8a5e2/886444824972.jpg/600x600bb.jpg",
+      "alt": "Boston album cover",
+      "width": 600,
+      "height": 600
+    }
+  },
+  {
+    "id": "apple-music-924cb5caa8d7e415",
+    "title": "Peace Is The Mission",
+    "source": "Major Lazer",
+    "note": "Apple Music",
+    "url": "https://music.apple.com/us/album/peace-is-the-mission/1694819032",
+    "image": {
+      "src": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/b9/80/28/b98028a2-1567-1247-6813-d167ef8c99dd/653738277321_Cover.jpg/600x600bb.jpg",
+      "alt": "Peace Is The Mission album cover",
+      "width": 600,
+      "height": 600
+    }
+  },
+  {
+    "id": "apple-music-5ad4ea1fdf658719",
+    "title": "Knew You Were Waiting: The Best Of Aretha Franklin 1980-1998",
+    "source": "Aretha Franklin",
+    "note": "Apple Music",
+    "image": {
+      "src": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/25/8a/37/258a3776-401c-811b-fd2e-7851bdcdfd8a/886448815679.jpg/600x600bb.jpg",
+      "alt": "Knew You Were Waiting: The Best Of Aretha Franklin 1980-1998 album cover",
+      "width": 600,
+      "height": 600
+    },
+    "url": "https://music.apple.com/us/album/knew-you-were-waiting-the-best-of-aretha-franklin-1980-1998/1536203020"
+  },
+  {
+    "id": "apple-music-c72f2bc0a6f92db7",
+    "title": "Kau Ka Pe'a",
+    "source": "Kalani Pe'a",
+    "note": "Apple Music",
+    "url": "https://music.apple.com/us/album/kau-ka-pea/1758001400",
+    "image": {
+      "src": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/68/44/9d/68449d95-5f9a-2957-a108-f0d4f8ab8700/9225.jpg/600x600bb.jpg",
+      "alt": "Kau Ka Pe'a album cover",
+      "width": 600,
+      "height": 600
+    }
+  },
+  {
+    "id": "apple-music-7ce5bcbcac68c61c",
+    "title": "Jus' Cruzin'",
+    "source": "Ledward Kaapana",
+    "note": "Apple Music"
+  },
+  {
+    "id": "apple-music-6139410c8e4b6ef4",
+    "title": "Louis Armstrong: Hot Fives & Sevens - Vol. 4",
+    "source": "Louis Armstrong",
+    "note": "Apple Music"
+  },
+  {
+    "id": "apple-music-a0e7479c6795f297",
+    "title": "Hot Fives & Sevens, Vol. 3",
+    "source": "Louis Armstrong",
+    "note": "Apple Music"
+  }
+]

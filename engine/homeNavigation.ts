@@ -23,7 +23,7 @@ export type SiteDestination =
   | { kind: 'home'; section?: HomeSectionId }
   | { kind: 'work'; storyId?: string }
   | { kind: 'scene'; key: Exclude<ExperienceSceneKey, 'work'> }
-  | { kind: 'route'; href: '/gallery' }
+  | { kind: 'route'; href: '/gallery' | '/about' }
 
 export function destinationHref(target: SiteDestination): string {
   switch (target.kind) {

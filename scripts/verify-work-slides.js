@@ -542,8 +542,8 @@ assert(
   'SceneSourceSelection carries the stable responsive-landing variant',
 )
 assert(
-  portfolioSource.includes("return { kind: 'responsive-landing' }"),
-  'PortfolioExperience passes the responsive landing source on every landing render',
+  portfolioSource.includes('<SceneBackdrop') && fs.readFileSync(path.join(projectRoot, 'components', 'SceneBackdrop.tsx'), 'utf8').includes("{ kind: 'responsive-landing' }"),
+  'PortfolioExperience uses the shared backdrop with responsive landing source selection',
 )
 assert(
   !portfolioSource.includes('viewportWidth'),
