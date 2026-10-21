@@ -153,7 +153,8 @@ export const CREATION_INSERT_SQL =
 // Session-keyed autosave: one row per browser session, updated in place as the
 // visitor keeps editing, so the archived snapshot always reflects the latest
 // work. created_at is bumped on every update — it records the LAST action and
-// keeps the row fresh against the FIFO cap; `listed` is never touched here.
+// keeps the row fresh against the FIFO cap. Every replacement returns to the
+// moderation queue: approval belongs to the reviewed content, not the session.
 export const CREATION_SESSION_INSERT_SQL =
   'INSERT INTO creations (id, kind, state, config_hash, thumb_key, media_key, source_key, listed, created_at, session_id) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)'
 
@@ -161,7 +162,7 @@ export const CREATION_SELECT_BY_SESSION_SQL =
   'SELECT id, thumb_key, source_key FROM creations WHERE session_id = ? LIMIT 1'
 
 export const CREATION_UPDATE_SQL =
-  'UPDATE creations SET state = ?, config_hash = ?, thumb_key = COALESCE(?, thumb_key), source_key = COALESCE(?, source_key), created_at = ? WHERE id = ?'
+  'UPDATE creations SET state = ?, config_hash = ?, thumb_key = COALESCE(?, thumb_key), source_key = COALESCE(?, source_key), created_at = ?, listed = 0 WHERE id = ?'
 
 export const CREATION_EVICT_SELECT_SQL = `SELECT thumb_key, media_key, source_key FROM creations WHERE id NOT IN (SELECT id FROM creations ORDER BY created_at DESC LIMIT ${CREATIONS_CAP})`
 
