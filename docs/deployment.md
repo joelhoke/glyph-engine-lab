@@ -4,6 +4,28 @@ Production origin: **https://joelhoke.me** · Static export via
 `output: 'export'` → `npm run build` emits `out/` · Pages project:
 `glyph-engine-lab` (see `wrangler.toml`).
 
+## October 2026 security runtime requirements
+
+Use `nvm install && nvm use` to select **Node 22.23.4** from `.nvmrc`, then
+`npm ci` and `npm run build`. The tested build uses npm 10.9.9 bundled with
+that Node release. Supported alternatives are patched Node 24.22.1+ within
+24.x and 26.12.1+ within 26.x. `.npmrc` enforces package engines during
+installation, and install/dev/build hooks reject older runtimes.
+
+Cloudflare Pages supports `.nvmrc` for build selection. Check both production
+and preview dashboard settings: remove an obsolete `NODE_VERSION` override
+or set it to `22.23.4`, and confirm the selected version in the build log.
+Do not put `NODE_VERSION` in Wrangler `[vars]`: those are Function variables,
+not build-runtime selection. The GitHub security workflow selects `.nvmrc`
+and performs install, audit, regression tests, build, and type checks without
+deployment credentials. Require that check in branch protection if desired.
+
+Pages serves a static export; API requests and the retention cron execute in
+Cloudflare Workers, not the standard Node runtime. Compatibility dates remain
+unchanged because they select behavior, not a Node security-patch version.
+See [the October security assessment](security-audit-2026-10-21.md) for
+reachability, validation, remaining risks, and deployment actions.
+
 ## The raw-HTML failure: investigation and fix
 
 **Symptom.** Through the development tunnel and early Pages previews the page
@@ -204,8 +226,8 @@ Range support (seekable `<video>`) and immutable year-long caching.
 Rows are inserted **`listed = 0` (held for review)** and promoted manually —
 there is no auto-publish. **Autosaves carry a `sessionId`** (client-generated
 UUID per page load): the first save inserts the session's one row and later
-saves UPDATE it in place (`created_at` bumps to the last action, `listed` is
-untouched), so the archived snapshot always reflects the visitor's latest work.
+saves UPDATE it in place (`created_at` bumps to the last action, `listed` resets
+to 0 for fresh moderation), so the archived snapshot reflects the visitor's latest work.
 Exports (`image`/`clip`, no `sessionId`) stay insert-only, and a duplicate
 `config_hash` short-circuits with `200 { ok: true, duplicate: true }`. A global
 **FIFO cap of 100 rows** is enforced on writes: the oldest rows are deleted and
@@ -479,8 +501,9 @@ regression checklist for any model, prompt, profile, or pack change:
 
 This section supersedes older instructions above that rely solely on WAF
 limits or dashboard-managed bindings. The project uses `wrangler.toml` as
-its binding source of truth. Current build requires Node 22.13+ (`.nvmrc`
-selects Node 22), Next 16.3.5 and React 19.3.0. `npm run build` deliberately
+its binding source of truth. At that time the build required Node 22.13+,
+Next 16.3.5 and React 19.3.0; the October requirements above supersede those
+versions. `npm run build` deliberately
 uses Webpack to retain the existing configuration.
 
 ### Required before deploying this working tree

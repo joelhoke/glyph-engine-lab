@@ -42,6 +42,8 @@ const {
   CREATION_SESSION_INSERT_SQL,
   CREATION_SELECT_BY_SESSION_SQL,
   CREATION_UPDATE_SQL,
+  CREATIONS_LIST_SQL,
+  CREATION_STATE_SQL,
   CREATION_EVICT_SELECT_SQL,
   CREATION_EVICT_DELETE_SQL,
   isValidCreationId,
@@ -288,6 +290,7 @@ function makeDb(options = {}) {
                   if (thumb_key != null) row.thumb_key = thumb_key
                   if (source_key != null) row.source_key = source_key
                   row.created_at = created_at
+                  row.listed = 0
                 }
               } else if (sql === CREATION_EVICT_DELETE_SQL) {
                 const sorted = [...rows].sort((a, b) => b.created_at - a.created_at)
@@ -439,10 +442,10 @@ async function upsertSuite() {
   )
   assert(db.rows[0].thumb_key === `thumb/${ID}.jpg`, 'new thumb key stored')
 
-  // Moderation state survives updates.
+  // A visitor's replacement content must pass moderation again.
   db.rows[0].listed = 1
   await upsertSessionCreation(db, makeCreation(), SESSION, NOW + 180)
-  assert(db.rows[0].listed === 1, 'update never touches the listed flag')
+  assert(db.rows[0].listed === 0, 'updated content returns to the moderation queue')
 
   // No cross-visitor hash dedupe for session saves: the same config hash from
   // a DIFFERENT session still gets its own row.
@@ -552,9 +555,46 @@ async function moderationSuite() {
   )
 }
 
+// Use the real SQLite schema and production SQL, rather than the in-memory
+// mock, to verify that approval cannot survive a visitor replacing content.
+async function moderationSqlSuite() {
+  const { DatabaseSync } = require('node:sqlite')
+  const sqlite = new DatabaseSync(':memory:')
+  try {
+    for (const name of ['0003_create_creations.sql', '0004_creations_session_id.sql']) {
+      sqlite.exec(fs.readFileSync(path.join(projectRoot, 'migrations', name), 'utf8'))
+    }
+    const db = { prepare(sql) {
+      const statement = sqlite.prepare(sql)
+      const bound = (args = []) => ({
+        bind: (...values) => bound(values),
+        async first() { return statement.get(...args) || null },
+        async all() { return { results: statement.all(...args) } },
+        async run() { return statement.run(...args) },
+      })
+      return bound()
+    } }
+    const session = crypto.randomUUID()
+    const original = makeCreation({ kind: 'auto' })
+    assert((await upsertSessionCreation(db, original, session, NOW)).ok, 'SQLite: initial autosave succeeds')
+    sqlite.prepare('UPDATE creations SET listed = 1 WHERE id = ?').run(original.id)
+    assert(sqlite.prepare(CREATIONS_LIST_SQL).all().length === 1, 'SQLite: approved content is public')
+    const replacement = makeCreation({ state: JSON.stringify({ version: 1, nodes: ['unreviewed'] }) })
+    assert((await upsertSessionCreation(db, replacement, session, NOW + 1)).ok, 'SQLite: visitor can continue editing')
+    const row = sqlite.prepare('SELECT state, listed FROM creations WHERE id = ?').get(original.id)
+    assert(row.state === replacement.state, 'SQLite: replacement content is saved')
+    assert(row.listed === 0, 'SQLite: replacement requires fresh moderation')
+    assert(sqlite.prepare(CREATIONS_LIST_SQL).all().length === 0, 'SQLite: replacement is absent from public gallery')
+    assert(!sqlite.prepare(CREATION_STATE_SQL).get(original.id), 'SQLite: replacement state is not publicly readable')
+  } finally {
+    sqlite.close()
+  }
+}
+
 insertSuite()
   .then(() => upsertSuite())
   .then(() => moderationSuite())
+  .then(() => moderationSqlSuite())
   .then(() => {
     if (failures > 0) {
       console.error(`\n${failures} verification(s) failed.`)
