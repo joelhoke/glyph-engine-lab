@@ -26,6 +26,11 @@ unchanged because they select behavior, not a Node security-patch version.
 See [the October security assessment](security-audit-2026-10-21.md) for
 reachability, validation, remaining risks, and deployment actions.
 
+The October 26 gallery release updates Next.js from 16.3.8 to 16.4.3 after
+the release audit flagged GHSA-2464-fhr4-w9xw, GHSA-p3m5-59mp-jv5r, and
+GHSA-673q-mjm6-r5xr. The static export and deployment configuration remain
+unchanged; the updated dependency and lockfile clear the package audit.
+
 ## The raw-HTML failure: investigation and fix
 
 **Symptom.** Through the development tunnel and early Pages previews the page
