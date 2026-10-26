@@ -252,3 +252,19 @@ public layer.
 - Reuses later: doorway card component for Gallery/stack cards.
 - No conflicts: prototypes live under `/p/`, `/s/`, `/gallery`; the single-page
   experience at `/` is untouched.
+
+## Standalone gallery additions — October 2026
+
+`content/galleryHighlights.ts` owns the Droplet and Vehicle playground entries for both `/gallery` and the homepage carousel. `GalleryCard` shares the existing card layout with prototype/stack cards. Droplet's card uses a captured home screen and opens `/gallery/droplet`. That route reuses `HostedPrototypeViewer` and embeds the real animated Home at `https://droplet.digital/preview`. The gallery index itself never loads the game renderer.
+
+The companion Droplet branch `feature/portfolio-preview` adds `/preview` and allowlisted `?screen=campaign|endurance|continue|records|settings|customize` links. Preview menu activations navigate the top window to the corresponding full-site screen. Only this trusted external viewer enables user-activated top navigation and feedback popups; other demo sandboxes are unchanged. Droplet's preview has a dedicated portfolio-only framing policy; its normal Home remains same-origin-only. Deploy the companion Droplet change before publishing the portfolio link.
+
+For paired local review, serve the Droplet release at `http://127.0.0.1:4174`, build this site with `DROPLET_PREVIEW_ORIGIN=http://127.0.0.1:4174 npm run build`, and serve `out` on port 8788. Run `node scripts/verify-droplet-preview.cjs` to verify cross-origin click-throughs and keyboard destinations in the real viewer. Leave that environment override unset for production builds.
+
+`/gallery/cars` reuses the generated vehicle runtime, models, controls and sequence modules from the pushed About checkpoint `459b2f1`, without adding the unfinished About page. The exhibit includes the purchased/customized 4Runner and the CC BY McLaren MP4/5. Credits for the McLaren and the 4Runner's adapted roof basket are included in the existing Credits panel and adjacent asset notices. The archived source catalog also lists Lancia, but the page excludes it and its model is not published because the source/license remains unresolved in the About handoff.
+
+The existing runtime and model files retain their `/assets/about/garage/` paths so a later About integration can share them. `scripts/prepare-about-garage.mjs /path/to/can` documents regeneration from the original car project; that source project is not required to run or build this checkout. The saved runtime remains byte-for-byte from the checkpoint. Regenerating the full source catalog also produces Lancia; keep that unpublished unless its provenance is resolved. The shared frame scheduler includes the checkpoint's in-frame invalidation fix to prevent duplicate loops during vehicle transitions.
+
+Regenerate gallery thumbnails with `node scripts/capture-gallery-previews.mjs droplet` and, with the local preview running, `node scripts/capture-gallery-previews.mjs cars`. Captures are actual browser renders converted to 1200×675 WebP. Set `CHROME_PATH` or `GALLERY_PREVIEW_URL` when needed. Rebuild after captures so the static export contains them.
+
+Verification: `node scripts/verify-frame-loop.js`, `node scripts/verify-garage-sequence.mjs`, `npm run typecheck`, `npm run build`, then `node scripts/verify-gallery-highlights.cjs` against the local Pages preview. The browser check covers lazy model loading, vehicle changes, view/light controls, reduced motion, responsive layouts, shared homepage entries and the failed-renderer fallback. Heavy assets load only on the vehicle route, and only the selected car is retained. Menu opening and hidden tabs park rendering.

@@ -1,6 +1,5 @@
-import Link from 'next/link'
 import type { PrototypeStack } from '../../functions/lib/prototypesManifest'
-import styles from './gallery.module.css'
+import GalleryCard from './GalleryCard'
 
 /**
  * Gallery index card for a listed stack (docs/prototypes-plan.md — one
@@ -13,24 +12,7 @@ import styles from './gallery.module.css'
 export default function StackCard({ stack }: { stack: PrototypeStack }) {
   const lead = stack.prototypes[0]
   const href = stack.prototypes.length === 1 && lead ? `/p/${stack.slug}/${lead.slug}` : `/p/${stack.slug}`
-  return (
-    <Link href={href} className={styles.card}>
-      {lead ? (
-        <img
-          className={styles.cardThumb}
-          src={lead.publicThumbnail ?? `/p/${stack.slug}/${lead.slug}/${lead.thumb}`}
-          alt=""
-          loading="lazy"
-        />
-      ) : null}
-      <span className={styles.cardBody}>
-        <span className={styles.cardTitle}>{stack.title}</span>
-        {stack.framing ? <span className={styles.cardSummary}>{stack.framing}</span> : null}
-        <span className={styles.cardMeta}>
-          {stack.prototypes.length}{' '}
-          {stack.prototypes.length === 1 ? 'prototype' : 'prototypes'}
-        </span>
-      </span>
-    </Link>
-  )
+  return <GalleryCard href={href} title={stack.title} summary={stack.framing}
+    thumbnail={lead ? lead.publicThumbnail ?? `/p/${stack.slug}/${lead.slug}/${lead.thumb}` : undefined}
+    meta={`${stack.prototypes.length} ${stack.prototypes.length === 1 ? 'prototype' : 'prototypes'}`} />
 }

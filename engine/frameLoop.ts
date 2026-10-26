@@ -57,7 +57,8 @@ export function createFrameLoop(options: FrameLoopOptions): FrameLoop {
     if (disposed || options.isParked()) return
     options.frame(now)
     if (disposed || options.isParked() || !options.keepRunning()) return
-    pending = requestFrame(tick)
+    // A transition may synchronously invalidate during its frame callback.
+    if (pending === null) pending = requestFrame(tick)
   }
 
   const renderOnce = () => {

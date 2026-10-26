@@ -10,6 +10,8 @@ type HostedPrototypeViewerProps = {
   backHref: string
   backLabel: string
   caption?: ReactNode
+  /** Trusted external previews may leave the frame after a visitor clicks. */
+  allowExternalNavigation?: boolean
   /** Back returns to the previous in-site screen via browser history when one
       exists (restoring its exact view and scroll position); backHref remains
       the fallback for direct visits. */
@@ -23,6 +25,7 @@ export default function HostedPrototypeViewer({
   backHref,
   backLabel,
   caption,
+  allowExternalNavigation = false,
   backViaHistory = false,
 }: HostedPrototypeViewerProps) {
   return (
@@ -44,7 +47,9 @@ export default function HostedPrototypeViewer({
         <iframe
           className={styles.viewerFrame}
           src={src}
-          sandbox="allow-scripts allow-same-origin"
+          sandbox={allowExternalNavigation
+            ? 'allow-scripts allow-same-origin allow-top-navigation-by-user-activation allow-popups allow-popups-to-escape-sandbox'
+            : 'allow-scripts allow-same-origin'}
           title={title}
         />
         {caption ? <p className={styles.viewerCaption}>{caption}</p> : null}

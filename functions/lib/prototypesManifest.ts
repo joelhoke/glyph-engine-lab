@@ -99,11 +99,9 @@ export const STACKS: PrototypeStack[] = [
     title: 'Microsoft Global Operations',
     access: {
       mode: 'password',
-      // Hash for the shared password (scripts/prototype-password.mjs);
-      // plaintext never enters the repo. Bump tokenVersion to revoke every
-      // outstanding cookie for this stack.
-      passwordHash: 'pbkdf2$100000$F7Rv4T03-0wjgCurbubykfK1ZhNLh4S42kSFJ5jrfVk$ZrWwH_CX82oBs-ZEjck4irRzAmIYccPh53SP-HFjioM',
-      tokenVersion: 1,
+      passwordHash: UNIVERSAL_PROTOTYPE_PASSWORD_HASH,
+      // Revoke grants issued with the older, stack-specific password.
+      tokenVersion: 2,
     },
     listed: true,
     framing:
@@ -145,26 +143,6 @@ export const STACKS: PrototypeStack[] = [
         title: 'Logo studio',
         summary:
           'The JH monogram extruded and lit like a studio product shot — drag to orbit, scroll to zoom.',
-        thumb: 'thumb.jpg',
-      },
-    ],
-  },
-  {
-    slug: 'joelops',
-    title: 'Microsoft Global Operations',
-    access: {
-      mode: 'password',
-      passwordHash: UNIVERSAL_PROTOTYPE_PASSWORD_HASH,
-      // Password rotation also revokes previously issued access cookies.
-      tokenVersion: 2,
-    },
-    listed: true,
-    prototypes: [
-      {
-        slug: 'demo',
-        title: 'Microsoft Global Operations',
-        summary:
-          'Explore dashboards, work orders, maps, alarms, faults, and Copilot-assisted facilities workflows.',
         thumb: 'thumb.jpg',
       },
     ],

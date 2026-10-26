@@ -1,4 +1,5 @@
 import { COLLABORATE_CONTACT } from './collaborate'
+import garageCredits from '../public/assets/about/garage/credits.json'
 
 /**
  * Site-level identity and recruiter links. Single source for the persistent
@@ -50,6 +51,7 @@ export type ModelCredit = {
  * feedback panel's Credits tab — the license requires naming the author.
  */
 export const MODEL_CREDITS: ModelCredit[] = [
+  ...garageCredits.map(credit => ({ ...credit, usedFor: 'Vehicle playground' })),
   {
     title: 'Edison Light Bulb',
     author: 'Fishboe',

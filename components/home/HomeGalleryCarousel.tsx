@@ -116,7 +116,7 @@ export default function HomeGalleryCarousel({ projects, introduction, action, po
                 <span className="home-project-meta">{String(index + 1).padStart(2, '0')} / {project.collection}</span>
                 <span className="home-project-title">{project.title}</span>
                 <span className="home-project-summary">{project.summary}</span>
-                <span className="home-project-access">{project.requiresPassword ? 'Open project · Password required' : 'Open project'}</span>
+                <span className="home-project-access">{project.requiresPassword ? 'Open project · Password required' : project.href.startsWith('https://') ? `Play at ${new URL(project.href).hostname} ↗` : 'Open project'}</span>
               </span>
             </a>
           </li>

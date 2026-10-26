@@ -1,6 +1,5 @@
-import Link from 'next/link'
 import type { PrototypeEntry, PrototypeStack } from '../../functions/lib/prototypesManifest'
-import styles from './gallery.module.css'
+import GalleryCard from './GalleryCard'
 
 /**
  * Option card on a stack page: thumbnail, title, tier label, one-line
@@ -13,19 +12,7 @@ export default function PrototypeCard({
   stack: PrototypeStack
   prototype: PrototypeEntry
 }) {
-  return (
-    <Link href={`/p/${stack.slug}/${prototype.slug}`} className={styles.card}>
-      <img
-        className={styles.cardThumb}
-        src={prototype.publicThumbnail ?? `/p/${stack.slug}/${prototype.slug}/${prototype.thumb}`}
-        alt=""
-        loading="lazy"
-      />
-      <span className={styles.cardBody}>
-        {prototype.tier ? <span className={styles.cardTier}>{prototype.tier}</span> : null}
-        <span className={styles.cardTitle}>{prototype.title}</span>
-        <span className={styles.cardSummary}>{prototype.summary}</span>
-      </span>
-    </Link>
-  )
+  return <GalleryCard href={`/p/${stack.slug}/${prototype.slug}`} title={prototype.title}
+    summary={prototype.summary} tier={prototype.tier}
+    thumbnail={prototype.publicThumbnail ?? `/p/${stack.slug}/${prototype.slug}/${prototype.thumb}`} />
 }

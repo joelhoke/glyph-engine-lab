@@ -165,6 +165,18 @@ function makeLoop({ parked = { value: false }, keepRunning = { value: true } } =
   assert(env.raf.pendingCount() === 0 && env.frames() === 0, 'a disposed loop never schedules again')
 }
 
+// A vehicle transition can invalidate while its current frame is running.
+{
+  const raf = fakeRaf()
+  const loop = createFrameLoop({ frame: () => loop.renderOnce(), keepRunning: () => true,
+    isParked: () => false, requestFrame: raf.request, cancelFrame: raf.cancel })
+  loop.renderOnce()
+  for (let i = 0; i < 10; i++) raf.step(i * 16)
+  assert(raf.pendingCount() === 1, 'in-frame invalidation never forks a second animation loop')
+  loop.dispose()
+  assert(raf.pendingCount() === 0, 'disposing a reentrant loop cancels all scheduled work')
+}
+
 // --- SceneCanvas source invariants ---------------------------------------------
 {
   const source = fs.readFileSync(path.join(projectRoot, 'components', 'SceneCanvas.tsx'), 'utf8')

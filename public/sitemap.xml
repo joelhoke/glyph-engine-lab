@@ -2,6 +2,8 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://joelhoke.me/</loc></url>
   <url><loc>https://joelhoke.me/gallery</loc></url>
+  <url><loc>https://joelhoke.me/gallery/cars</loc></url>
+  <url><loc>https://joelhoke.me/gallery/droplet</loc></url>
   <url><loc>https://joelhoke.me/privacy</loc></url>
   <url><loc>https://joelhoke.me/terms</loc></url>
 </urlset>

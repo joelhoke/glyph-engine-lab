@@ -3,6 +3,8 @@ import { listedStacks } from '../../functions/lib/prototypesManifest'
 import GalleryHeader from '../../components/gallery/GalleryHeader'
 import StackCard from '../../components/gallery/StackCard'
 import CreationsStackCard from '../../components/gallery/CreationsStackCard'
+import GalleryCard from '../../components/gallery/GalleryCard'
+import { GALLERY_HIGHLIGHTS } from '../../content/galleryHighlights'
 import styles from '../../components/gallery/gallery.module.css'
 
 export const metadata: Metadata = {
@@ -34,10 +36,13 @@ export default function GalleryPage() {
       <main id="main-content" className={styles.main}>
         <h1 className={styles.title}>Gallery</h1>
         <p className={styles.intro}>
-          Explorations and experiments — small interactive prototypes, hosted here and
-          played in place.
+          Explorations and experiments — games, interactive scenes, and prototypes to play with.
         </p>
         <ul className={styles.cardGrid}>
+          {GALLERY_HIGHLIGHTS.map(project => <li key={project.id}>
+            <GalleryCard href={project.href} thumbnail={project.thumbnail} title={project.title}
+              summary={project.summary} tier={project.collection} meta={project.action} />
+          </li>)}
           {stacks.map((stack) => (
             <li key={stack.slug}>
               <StackCard stack={stack} />
