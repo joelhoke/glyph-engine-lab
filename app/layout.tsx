@@ -82,10 +82,10 @@ export const metadata: Metadata = {
     type: 'website',
     images: [
       {
-        url: '/assets/og-1200x630.png',
+        url: '/assets/og-home-hero-1200x630.jpg',
         width: 1200,
         height: 630,
-        alt: 'joel hoke design — selected work, motion and type experiments',
+        alt: 'Joel Hoke’s landing page hero: a blue portrait and floating creative tools above open hands.',
       },
     ],
   },
@@ -93,7 +93,10 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
-    images: ['/assets/og-1200x630.png'],
+    images: [{
+      url: '/assets/og-home-hero-1200x630.jpg',
+      alt: 'Joel Hoke’s landing page hero: a blue portrait and floating creative tools above open hands.',
+    }],
   },
   icons: {
     icon: { url: '/favicon-32x32.png', type: 'image/png', sizes: '32x32' },
