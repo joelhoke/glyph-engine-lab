@@ -145,9 +145,9 @@ export const HOME_CONTENT: HomeContent = {
   statement: [
     { text: 'Designing thoughtful experiences where people, business, and technology meet.' },
     { text: 'Seven years at Microsoft,', tone: 'accent' },
-    { text: 'from employee experience to agentic operations tools.' },
-    { text: 'Looking for the next' },
-    { text: 'interesting problem.', tone: 'accent' },
+    { text: 'spanning employee experience and agentic operations.' },
+    { text: 'Evolving by design—and ready for' },
+    { text: 'what comes next.', tone: 'accent' },
   ],
   // Five hero slots in fan order (left to right): Work, Vibe, Introduction,
   // Collaborate, Gallery. The object destinations render the

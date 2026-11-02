@@ -1,0 +1,51 @@
+/* Extra vertical room adds roughly 20% to the statement's passage, letting
+   the existing scroll-driven flower sequence unfold over a taller section. */
+.home-statement-scene { position: relative; isolation: isolate; overflow: hidden; padding-block: clamp(2.25rem, 3.33vw, 3rem); }
+.home-statement-scene .home-statement { position: relative; z-index: 2; }
+.home-statement-flower { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.home-statement-flower::after {
+  content: ''; position: absolute; inset: 0; z-index: 1;
+  background: linear-gradient(90deg, var(--color-page) 5%, color-mix(in srgb, var(--color-page) 88%, transparent) 40%, color-mix(in srgb, var(--color-page) 62%, transparent) 100%);
+}
+.home-flower-poster, .home-flower-renderer {
+  position: absolute; top: 50%; right: calc(var(--flower-desktop-size) * var(--flower-desktop-right));
+  width: var(--flower-desktop-size); height: var(--flower-desktop-size); transform: translateY(-50%);
+}
+.home-flower-renderer canvas { width: 100%; height: 100%; display: block; }
+.home-flower-renderer { opacity: 0; }
+[data-flower-ready='true'] .home-flower-renderer { opacity: 1; }
+[data-flower-ready='true'] .home-flower-poster { opacity: 0; }
+.home-highlights { pointer-events: auto; padding-top: 2.5rem; padding-bottom: 4.5rem; }
+.home-highlight-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-top: 1.5rem; }
+.home-highlight-heading h2 { font: 700 clamp(2rem, 4vw, 3.4rem)/1.08 var(--font-display); letter-spacing: -0.02em; margin: 0; }
+.home-highlight-heading p { color: var(--color-text-muted); font-size: 0.72rem; line-height: 1.6; margin: 0; }
+.home-highlight-frame { position: relative; isolation: isolate; aspect-ratio: var(--highlight-landscape-ratio); background: var(--color-surface); border-radius: 12px; overflow: hidden; }
+.home-highlight-frame video, .home-highlight-frame picture, .home-highlight-frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+.home-highlights button { font: inherit; color: var(--color-text); cursor: pointer; border: 1px solid var(--color-border); background: var(--color-surface); border-radius: 999px; min-height: 44px; min-width: 44px; padding: 0.6rem 1rem; }
+.home-highlights button:hover { background: var(--color-action-bg-hover); }
+.home-highlights :is(button, input, a):focus-visible, .home-highlights:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 4px; }
+.home-highlight-frame .home-highlight-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); box-shadow: 0 4px 24px var(--color-shadow); white-space: nowrap; }
+.home-highlight-play span { margin-right: 0.5rem; }
+.home-highlight-controls { display: flex; align-items: center; gap: 1rem; margin-top: 0.65rem; font-size: 0.7rem; }
+.home-highlight-seek { flex: 1; display: flex; align-items: center; min-height: 44px; }
+.home-highlight-seek input { width: 100%; accent-color: var(--color-accent); cursor: pointer; }
+.home-highlight-time { color: var(--color-text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.home-highlight-navigation { display: flex; justify-content: center; align-items: center; gap: 0.65rem; margin-top: 1.25rem; }
+.home-highlight-navigation [aria-current='true'] { color: var(--color-on-accent); background: var(--color-accent); }
+.home-highlight-destination { display: inline-block; margin-top: 1rem; color: var(--color-accent); }
+.home-highlights .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@media (min-width: 768px) {
+  /* Reduce the inner recap width by 20%, retaining its gutters and centering. */
+  .home-highlights.home-section-inner {
+    width: calc(80% + var(--home-content-gutter) * 0.4);
+    max-width: calc(var(--home-content-width) * 0.8 + var(--home-content-gutter) * 0.4);
+  }
+}
+@media (max-width: 767px) {
+  .home-flower-poster, .home-flower-renderer { width: var(--flower-phone-size); height: var(--flower-phone-size); right: calc(var(--flower-phone-size) * var(--flower-phone-right)); }
+  .home-statement-flower::after { background: linear-gradient(90deg, var(--color-page), color-mix(in srgb, var(--color-page) 90%, transparent) 40%, color-mix(in srgb, var(--color-page) 75%, transparent)); }
+  .home-highlight-heading { display: block; }
+  .home-highlight-heading p { margin-top: 0.7rem; }
+  .home-highlight-frame { aspect-ratio: var(--highlight-portrait-ratio); }
+  .home-highlight-controls { gap: 0.65rem; }
+}

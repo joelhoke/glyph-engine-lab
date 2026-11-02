@@ -5,6 +5,8 @@ import StackCard from '../../components/gallery/StackCard'
 import CreationsStackCard from '../../components/gallery/CreationsStackCard'
 import GalleryCard from '../../components/gallery/GalleryCard'
 import { GALLERY_HIGHLIGHTS } from '../../content/galleryHighlights'
+import PlaygroundCard from '../../components/gallery/PlaygroundCard'
+import { GALLERY_PLAYGROUNDS } from '../../content/galleryPlaygrounds'
 import styles from '../../components/gallery/gallery.module.css'
 
 export const metadata: Metadata = {
@@ -39,6 +41,9 @@ export default function GalleryPage() {
           Explorations and experiments — games, interactive scenes, and prototypes to play with.
         </p>
         <ul className={styles.cardGrid}>
+          {GALLERY_PLAYGROUNDS.map(playground => <li key={playground.id}>
+            <PlaygroundCard playground={playground} />
+          </li>)}
           {GALLERY_HIGHLIGHTS.map(project => <li key={project.id}>
             <GalleryCard href={project.href} thumbnail={project.thumbnail} title={project.title}
               summary={project.summary} tier={project.collection} meta={project.action} />

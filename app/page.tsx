@@ -2,6 +2,7 @@ import PortfolioExperience from '../components/PortfolioExperience'
 import { listedStacks } from '../functions/lib/prototypesManifest'
 import type { HomeGalleryProject } from '../components/home/galleryProjects'
 import { GALLERY_HIGHLIGHTS } from '../content/galleryHighlights'
+import { GALLERY_PLAYGROUNDS } from '../content/galleryPlaygrounds'
 
 export default function Home() {
   // Explicit projection: never serialize access hashes or unlisted stacks
@@ -17,5 +18,5 @@ export default function Home() {
       requiresPassword: stack.access.mode !== 'public',
     })),
   )
-  return <PortfolioExperience galleryProjects={[...GALLERY_HIGHLIGHTS, ...galleryProjects]} />
+  return <PortfolioExperience galleryProjects={[...GALLERY_PLAYGROUNDS, ...GALLERY_HIGHLIGHTS, ...galleryProjects]} />
 }
