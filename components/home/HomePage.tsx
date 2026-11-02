@@ -6,6 +6,9 @@ import { HOME_CONTENT, HOME_SECTIONS, HomeSectionId } from '../../content/home'
 import { RECRUITER_LINKS, SITE_IDENTITY } from '../../content/site'
 import HomeHero from './HomeHero'
 import HomeSection from './HomeSection'
+import StatementFlower from './StatementFlower'
+import HomeHighlights from './HomeHighlights'
+import './HomeHighlights.css'
 import { DEFAULT_HERO_RENDERERS, HeroRenderers } from './HeroObject'
 import type { HomeGalleryProject } from './galleryProjects'
 import type { HomeGuideBridge } from './HomePhoneChat'
@@ -61,6 +64,7 @@ export default function HomePage({
       />
       {/* Oversized Cabin statement directly below the hero; emphasis spans use
           the theme accent/warm tokens (editable in content/home.ts). */}
+      <StatementFlower enabled={sectionsEnabled}>
       <p className="home-statement">
         {content.statement.map((part, index) => (
           <span
@@ -71,6 +75,8 @@ export default function HomePage({
           </span>
         ))}
       </p>
+      </StatementFlower>
+      <HomeHighlights enabled={sectionsEnabled} />
       {HOME_SECTIONS.map((id) => (
         <HomeSection key={id} id={id} section={content.sections[id]} enabled={sectionsEnabled}
           galleryProjects={galleryProjects} guide={guide} />

@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 
 /** Load nearby models once; animate only while visible and the page is open. */
-export function useSectionVisibility(enabled: boolean) {
-  const ref = useRef<HTMLElement>(null)
+export function useSectionVisibility<T extends HTMLElement = HTMLElement>(enabled: boolean) {
+  const ref = useRef<T>(null)
   const [near, setNear] = useState(false)
   const [visible, setVisible] = useState(false)
   const [documentVisible, setDocumentVisible] = useState(true)

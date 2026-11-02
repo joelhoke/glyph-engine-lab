@@ -112,6 +112,8 @@
   border-bottom: 1px solid var(--color-border-subtle);
 }
 
+.playgroundThumb { object-fit: contain; }
+
 .cardBody {
   display: flex;
   flex: 1;

@@ -3,6 +3,8 @@ import { listedStacks } from '../../functions/lib/prototypesManifest'
 import GalleryHeader from '../../components/gallery/GalleryHeader'
 import StackCard from '../../components/gallery/StackCard'
 import CreationsStackCard from '../../components/gallery/CreationsStackCard'
+import PlaygroundCard from '../../components/gallery/PlaygroundCard'
+import { GALLERY_PLAYGROUNDS } from '../../content/galleryPlaygrounds'
 import styles from '../../components/gallery/gallery.module.css'
 
 export const metadata: Metadata = {
@@ -38,6 +40,9 @@ export default function GalleryPage() {
           played in place.
         </p>
         <ul className={styles.cardGrid}>
+          {GALLERY_PLAYGROUNDS.map(playground => <li key={playground.id}>
+            <PlaygroundCard playground={playground} />
+          </li>)}
           {stacks.map((stack) => (
             <li key={stack.slug}>
               <StackCard stack={stack} />

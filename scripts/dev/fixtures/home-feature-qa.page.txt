@@ -1,0 +1,22 @@
+'use client'
+import { useEffect, useRef, useState } from 'react'
+import HomeHighlights from '../../components/home/HomeHighlights'
+import StatementFlower from '../../components/home/StatementFlower'
+import { HOME_HIGHLIGHTS } from '../../content/homeHighlights'
+import { HOME_CONTENT } from '../../content/home'
+import { createFlowerRenderer } from '../../components/home/flower/renderer'
+import '../../components/home/HomeHighlights.css'
+const items = [HOME_HIGHLIGHTS[0], { ...HOME_HIGHLIGHTS[0], id: 'image', title: 'Image test', media: 'image' as const, sources: Object.fromEntries(Object.entries(HOME_HIGHLIGHTS[0].sources).map(([k,v])=>[k,{...v,src:v.poster}])) as typeof HOME_HIGHLIGHTS[0]['sources'] }, {...HOME_HIGHLIGHTS[0], id:'video-2', title:'Second video'}]
+export default function QA() {
+ const host=useRef<HTMLDivElement>(null)
+ const [enabled,setEnabled]=useState(true)
+ useEffect(()=>{if(!host.current)return;const r=createFlowerRenderer(host.current,()=>{document.body.dataset.shaderError='true'});r.resize();r.render(0,0);Object.assign(window,{flowerQA:r});return()=>r.dispose()},[])
+ return <main style={{background:'var(--color-page)',color:'var(--color-text)'}}>
+ <button id="gate" style={{position:'fixed',top:0,left:0,zIndex:100}} onClick={()=>setEnabled(v=>!v)}>Toggle gate</button>
+ <div id="raw-flower" ref={host} style={{width:720,height:720}} />
+ <div style={{height:900}} />
+ <StatementFlower enabled={enabled}><p className="home-statement">{HOME_CONTENT.statement.map(p=>p.text).join(' ')}</p></StatementFlower>
+ <HomeHighlights enabled={enabled} items={items}/>
+ <div style={{height:1600}} />
+ </main>
+}
