@@ -35,6 +35,28 @@ try {
     }
   }
   assert.equal(galleryLoopOffset(10, 0), 0)
+  // WebKit reports integer scrollLeft values even when the measured loop
+  // origin is fractional. Settling that rounded position must not wrap again.
+  for (const period of [5304.6, 5304.375, 2991.3]) {
+    for (const copiesBefore of [2, 3, 4]) {
+      const origin = period * copiesBefore
+      for (const round of [Math.floor, Math.round, Math.ceil]) {
+        const resting = round(origin)
+        assert(Math.abs(galleryLoopOffset(resting, period, copiesBefore) - resting) <= 1,
+          'a rounded loop origin must stay settled')
+        for (const offset of [origin - period, origin + period, origin - 40, origin + period + 40]) {
+          let recentered = round(galleryLoopOffset(offset, period, copiesBefore))
+          // Rounding at the far boundary may require one more wrap, but it
+          // must converge rather than alternate between duplicate copies.
+          recentered = round(galleryLoopOffset(recentered, period, copiesBefore))
+          assert(Math.abs(galleryLoopOffset(recentered, period, copiesBefore) - recentered) <= 1,
+            'recentring must converge when the browser rounds scrollLeft')
+        }
+      }
+      assert(galleryLoopOffset(origin - 2, period, copiesBefore) > origin + period - 3,
+        'backward scrolling beyond the rounding tolerance must still wrap')
+    }
+  }
   const projects = Array.from({ length: 6 }, (_, index) => ({
     id: `project-${index}`, title: `Project ${index}`, collection: 'Gallery',
     summary: 'Example', href: `/p/example/${index}`, thumbnail: '/example.png',
