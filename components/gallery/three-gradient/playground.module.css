@@ -72,3 +72,12 @@
   .workspace[data-animation-mode='scroll'] .viewport { height: clamp(20rem, 56svh, 32rem); }
   .swatch > span:last-child { font-size: 0.6rem; }
 }
+
+.shell[data-embedded=true] { padding: 0; }
+.shell[data-embedded=true] .heading { display: none; }
+.shell[data-embedded=true] .main { padding: 1rem 1rem 4.5rem; max-width: none; }
+.shell[data-embedded=true] .controls, .shell[data-embedded=true] .stage { top: 1rem; }
+.shell[data-embedded=true] .controls { max-height: calc(100svh - 2rem); }
+.shell[data-embedded=true] .viewport { height: clamp(17rem, calc(100svh - 10rem), 50rem); }
+@media (max-width: 800px) { .shell[data-embedded=true] .controls { max-height: none; } }
+.shell[data-embedded=true] .footer { display: none; }

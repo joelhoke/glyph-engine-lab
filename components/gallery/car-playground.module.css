@@ -39,3 +39,12 @@
   .vehicleNav { gap: .65rem; }
   .vehicleNav p { min-width: 10rem; }
 }
+
+.shell[data-embedded=true] { min-height: 0; }
+.shell[data-embedded=true] .main { min-height: 0; height: 100dvh; }
+.shell[data-embedded=true] .stage { inset: 0; }
+.shell[data-embedded=true] .heading { display: none; }
+.shell[data-embedded=true] .garageTools { top: 1rem; right: 1rem; bottom: auto; max-height: calc(100dvh - 10rem); }
+@media (max-width: 600px) {
+  .shell[data-embedded=true] .vehicleNav { bottom: 4.5rem; }
+}

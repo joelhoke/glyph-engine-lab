@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import SiteHeader from '../../SiteHeader'
+import { useGalleryEmbed } from '../useGalleryEmbed'
 import { useReducedMotion } from '../../home/useReducedMotion'
 import { useSectionVisibility } from '../../home/useSectionVisibility'
 import type { createFlowerRenderer } from '../../home/flower/renderer'
@@ -13,6 +14,7 @@ import { advanceFlowerProgress, flowerPositionLabel, playgroundFlowerProgress, s
 import styles from './playground.module.css'
 
 export default function GradientPlayground() {
+  const embedded = useGalleryEmbed()
   const [gradient, setGradient] = useState<FlowerGradientSettings>(() => ({ ...defaults.gradient, palette: [...defaults.gradient.palette] }))
   const [mode, setMode] = useState<AnimationMode>('time')
   const [seconds, setSeconds] = useState<number>(defaults.travelSeconds)
@@ -116,8 +118,8 @@ export default function GradientPlayground() {
   }
   const update = <K extends keyof FlowerGradientSettings>(key: K, value: FlowerGradientSettings[K]) => setGradient(current => ({ ...current, [key]: value }))
 
-  return <div className={styles.shell}>
-    <SiteHeader active="gallery" onMenuOpenChange={setMenuOpen} />
+  return <div className={styles.shell} data-embedded={embedded}>
+    {!embedded && <SiteHeader active="gallery" onMenuOpenChange={setMenuOpen} />}
     <main id="main-content" className={styles.main}>
       <header className={styles.heading}>
         <Link href="/gallery" className={styles.back}>← Gallery</Link>

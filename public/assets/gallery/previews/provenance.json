@@ -1,0 +1,24 @@
+{
+  "created": "2026-11-06",
+  "format": "Silent H.264 MP4, 960 by 720, 24 fps; WebP first-frame posters. Sources scale to cover and crop to 4:3, with no added letterboxing.",
+  "buildScript": "scripts/build-gallery-previews.mjs",
+  "captureRecipe": "Capture 48 frames of each running public demo. Supply them as <captureRoot>/<id>/frame-000.png through frame-047.png. PNG and JPEG bytes are accepted. An optional crop.json records x, y, width, height in source pixels. The build script plays captures forward and backward at 12 captured frames per second, yielding an eight-second loop.",
+  "sources": {
+    "three-gradient": "Local /gallery/three-gradient, cropped to the flower viewport",
+    "droplet": "https://droplet.digital/preview — public animated home screen",
+    "cars": "Local /gallery/cars — original vehicle renderer with Auto rotate enabled, cropped to the vehicle",
+    "cars-dark": "Public garage runtime with night lighting and Auto rotate enabled — actual dark scene capture",
+    "orbit-toy": "prototypes/type-lab/orbit-toy — running public canvas demo",
+    "glass-playground": "prototypes/type-lab/glass-playground — running public scene",
+    "logo-studio": "prototypes/type-lab/logo-studio — running public scene",
+    "global-operations-demo": "public/assets/work/global-operations-thumbnail.webp — existing public teaser only",
+    "global-operations-demo-dark": "public/assets/work/global-operations-thumbnail-dark.webp — dedicated dark promotional artwork generated from the existing public blurred teaser; not a protected application capture. Prompt and provenance: docs/gallery-thumbnail-review.md",
+    "golden-age-mild": "prototypes/golden-age-collectables/mild/thumb.jpg — existing gallery teaser only",
+    "golden-age-medium": "prototypes/golden-age-collectables/medium/thumb.jpg — existing gallery teaser only",
+    "global-operations-story": "Existing public case-study images: live-campus portfolio, building, and room",
+    "employee-experience": "Existing public case-study images: MyHub+Viva, Viva Connections dashboard, and Viva Connections",
+    "global-compensation": "Existing public case-study images: Total Rewards overview, employee, and manager",
+    "october-2026": "public/assets/home/highlights/october-2026-landscape.mp4 — six-second excerpt starting at eight seconds"
+  },
+  "access": "No gated project content was recorded. Protected-project clips animate only the existing gallery teaser artwork. Source capture frames are temporary; final clips and posters are included with the branch changes."
+}

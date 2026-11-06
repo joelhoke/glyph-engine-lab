@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import SiteHeader from '../SiteHeader'
 import AnalyticsConsent from '../AnalyticsConsent'
 import { useReducedMotion } from '../../engine/useReducedMotion'
+import { useSystemTheme } from '../../engine/useSystemTheme'
+import { useGalleryEmbed } from './useGalleryEmbed'
 import { createFrameLoop } from '../../engine/frameLoop'
 import catalog from '../../public/assets/about/garage/catalog.json'
 import garageBuild from '../../public/assets/about/garage/revision.json'
@@ -18,6 +20,8 @@ const poster = GALLERY_HIGHLIGHTS.find(project => project.id === 'cars')!.thumbn
 const ignoreAnalyticsClient = () => {}
 
 export default function CarGallery() {
+  const embedded = useGalleryEmbed()
+  const theme = useSystemTheme()
   const reducedMotion = useReducedMotion()
   const [menuOpen, setMenuOpen] = useState(false)
   const [state, setState] = useState<GarageState>({ busy: true, hasLights: false, lightsOn: false })
@@ -25,7 +29,7 @@ export default function CarGallery() {
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const mount = useRef<HTMLDivElement>(null), status = useRef<HTMLDivElement>(null), engine = useRef<Garage | null>(null)
-  const current = useRef({ menuOpen, reducedMotion }); current.current = { menuOpen, reducedMotion }
+  const current = useRef({ menuOpen, reducedMotion, theme }); current.current = { menuOpen, reducedMotion, theme }
 
   useEffect(() => {
     let disposed = false
@@ -41,18 +45,20 @@ export default function CarGallery() {
           if (!value.busy) setFailed(!value.vehicles?.length)
         }, 'gallery')
       engine.current = garage
+      garage.setNight(current.current.theme === 'dark')
       garage.setActive(!current.current.menuOpen, current.current.reducedMotion)
     }).catch(() => { if (!disposed) setFailed(true) })
     return () => { disposed = true; engine.current?.dispose(); engine.current = null }
   }, [attempt])
   useEffect(() => { engine.current?.setActive(!menuOpen, reducedMotion) }, [menuOpen, reducedMotion])
+  useEffect(() => { engine.current?.setNight(theme === 'dark') }, [theme])
 
   const move = (direction: number) => {
     const next = (index + direction + cars.length) % cars.length
     if (engine.current?.load(cars[next].id)) { setFailed(false); setIndex(next) }
   }
-  return <div className={styles.shell} data-night={!!state.night}>
-    <SiteHeader active="gallery" onMenuOpenChange={setMenuOpen} />
+  return <div className={styles.shell} data-night={theme === 'dark'} data-embedded={embedded}>
+    {!embedded && <SiteHeader active="gallery" onMenuOpenChange={setMenuOpen} />}
     <main id="main-content" className={styles.main} inert={menuOpen}>
       <header className={styles.heading} data-gallery-ui>
         <a href="/gallery">← Gallery</a>
@@ -74,6 +80,6 @@ export default function CarGallery() {
         <button type="button" aria-label="Next vehicle" disabled={state.busy || failed} onClick={() => move(1)}>→</button>
       </nav>
     </main>
-    <AnalyticsConsent onClient={ignoreAnalyticsClient} />
+    {!embedded && <AnalyticsConsent onClient={ignoreAnalyticsClient} />}
   </div>
 }

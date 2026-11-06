@@ -4,6 +4,7 @@ import { RefObject, useEffect, useRef, useState } from 'react'
 import { getWorkMedia, WorkMedia, WorkMediaImage, WorkStory } from '../../content/work'
 import { AnalyticsEvent, outboundHost } from '../../engine/analytics'
 import WorkMediaLightbox, { CaptionActionLink } from './WorkMediaLightbox'
+import ProjectThumbnail from '../ProjectThumbnail'
 
 type WorkStoryProps = {
   story: WorkStory
@@ -471,6 +472,11 @@ function GalleryThumb({
   item: WorkMedia
   onOpen: (trigger: HTMLElement) => void
 }) {
+  if (item.kind === 'image' && item.href) {
+    return <a className="work-gallery-thumb" href={item.href} aria-label={item.caption ?? item.alt}>
+      <ProjectThumbnail src={item.thumbnail ?? item.src} href={item.href} title={item.alt} />
+    </a>
+  }
   const label =
     item.kind === 'embed'
       ? `Play ${item.title}`
@@ -522,6 +528,9 @@ function InlineMedia({
   onOpenImage: (trigger: HTMLElement) => void
 }) {
   if (item.kind === 'image') {
+    const image = item.href
+      ? <ProjectThumbnail src={item.src} href={item.href} alt={item.alt} title={item.alt} aspectRatio={`${item.width} / ${item.height}`} />
+      : <img src={item.src} width={item.width} height={item.height} alt={item.alt} loading="lazy" />
     return (
       <figure
         className="work-inline-media work-inline-media--image"
@@ -531,21 +540,14 @@ function InlineMedia({
             : undefined
         }
       >
-        <button
+        {item.href ? <a className="work-inline-media-button" href={item.href} aria-label={item.caption ?? item.alt}>{image}</a> : <button
           type="button"
           className="work-inline-media-button"
           onClick={(event) => onOpenImage(event.currentTarget)}
           aria-label={`View ${item.caption ?? item.alt}`}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={item.src}
-            width={item.width}
-            height={item.height}
-            alt={item.alt}
-            loading="lazy"
-          />
-        </button>
+          {image}
+        </button>}
         {(item.caption || item.captionAction) && (
           <figcaption>
             {item.caption}

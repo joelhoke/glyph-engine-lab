@@ -372,3 +372,9 @@
   line-height: 1.8;
   color: var(--color-text-muted);
 }
+
+.shell[data-embedded=true] { height: 100dvh; min-height: 0; padding: 0; overflow: hidden; }
+.shell[data-embedded=true] .viewerMain { min-height: 0; padding: 0; gap: 0; }
+.shell[data-embedded=true] .viewerBar { display: none; }
+.shell[data-embedded=true] .viewerFrame { min-height: 0; border: 0; border-radius: 0; }
+.shell[data-embedded=true] .viewerCaption { padding: .65rem 4.5rem .65rem 1rem; font-size: .7rem; }

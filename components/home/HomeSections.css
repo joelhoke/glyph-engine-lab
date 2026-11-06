@@ -184,8 +184,8 @@
   /* Clip scaled image layers independently, without clipping carousel bleed. */
   isolation: isolate; contain: paint;
 }
-.home-project-image img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform 250ms ease; }
-.home-project:hover img { transform: scale(1.025); }
+.home-project-image img, .home-project-image video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform 250ms ease, opacity 160ms ease; }
+.home-project:hover img, .home-project:hover video { transform: scale(1.025); }
 .home-project-placeholder {
   position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between;
   padding: 2rem; background: repeating-linear-gradient(0deg, transparent 0 29px, #8abaff12 29px 30px),
@@ -325,8 +325,8 @@
   .home-gallery-heading .home-section-action { white-space: normal; font-size: 0.7rem; padding-inline: 0.75rem; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .home-project-image img, .home-vibe-preview { transition: none; }
-  .home-project:hover img { transform: none; }
+  .home-project-image img, .home-project-image video, .home-vibe-preview { transition: none; }
+  .home-project:hover img, .home-project:hover video { transform: none; }
 }
 
 .home-section--about { --about-wall: var(--color-page); --about-glass: #fff7e9; background: var(--about-wall); }

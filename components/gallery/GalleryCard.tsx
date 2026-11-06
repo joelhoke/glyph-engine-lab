@@ -1,13 +1,14 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import styles from './gallery.module.css'
+import ProjectThumbnail from '../ProjectThumbnail'
 
 /** One card shell for hosted prototypes, standalone experiences and external projects. */
 export default function GalleryCard({ href, thumbnail, title, summary, tier, meta }: {
   href: string; thumbnail?: string; title: string; summary?: string; tier?: string; meta?: ReactNode
 }) {
   const body = <>
-    {thumbnail && <img className={styles.cardThumb} src={thumbnail} alt="" loading="lazy" width={1200} height={675} />}
+    {thumbnail && <ProjectThumbnail className={styles.cardThumb} src={thumbnail} href={href} title={title} aspectRatio="16 / 9" />}
     <span className={styles.cardBody}>
       {tier && <span className={styles.cardTier}>{tier}</span>}
       <span className={styles.cardTitle}>{title}</span>

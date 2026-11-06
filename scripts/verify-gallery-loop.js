@@ -9,12 +9,15 @@ const root = path.resolve(__dirname, '..')
 const out = fs.mkdtempSync(path.join(root, 'tmp-verify-gallery-'))
 try {
   execFileSync(path.join(root, 'node_modules/.bin/tsc'), [
-    'components/home/HomeGalleryCarousel.tsx', 'components/home/galleryLoop.ts',
+    'components/home/HomeGalleryCarousel.tsx', 'components/home/galleryLoop.ts', 'next-env.d.ts',
     '--outDir', out, '--module', 'commonjs', '--target', 'es2020',
     '--jsx', 'react-jsx', '--esModuleInterop', '--skipLibCheck',
   ], { cwd: root, stdio: 'inherit' })
-  const { galleryLoopOffset } = require(path.join(out, 'galleryLoop.js'))
-  const Carousel = require(path.join(out, 'HomeGalleryCarousel.js')).default
+  // Node's static-markup test does not run Next's CSS loader.
+  fs.copyFileSync(path.join(root, 'components/ProjectThumbnail.module.css'), path.join(out, 'components/ProjectThumbnail.module.css'))
+  require.extensions['.css'] = module => { module.exports = {} }
+  const { galleryLoopOffset } = require(path.join(out, 'components/home/galleryLoop.js'))
+  const Carousel = require(path.join(out, 'components/home/HomeGalleryCarousel.js')).default
   // Fractional card sizes and gaps must preserve the same visible content
   // through arbitrarily many forward/backward loops, without accumulating drift.
   for (const step of [296, 333.25, 592]) {
@@ -65,6 +68,10 @@ try {
     projects: items, introduction: 'Gallery', action: 'Browse', portrait: null,
   }))
   const html = render(projects)
+  const themed = render([{ ...projects[0], href: '/gallery/cars', thumbnail: '/assets/gallery/vehicle-playground.webp' }])
+  assert(themed.includes('media="(prefers-color-scheme: light)"'), 'light poster must be selectable before hydration')
+  assert(themed.includes('src="/assets/gallery/previews/cars-dark.webp?v=3"'), 'dark poster is the default, matching the site theme')
+  assert(!themed.includes('<video'), 'server output must not preload motion clips')
   assert.equal((html.match(/class="home-project"/g) || []).length, 30)
   assert.equal((html.match(/tabindex="-1"/g) || []).length, 24, 'only one copy of each project enters the tab order')
   assert.equal((html.match(/<li[^>]*aria-hidden="true"/g) || []).length, 24, 'buffer slides stay out of the accessibility tree')

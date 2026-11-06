@@ -61,6 +61,8 @@ export type WorkMediaImage = {
   captionAction?: { href: string; label: string }
   /** Optional smaller preview src; defaults to src. */
   thumbnail?: string
+  /** Optional destination: the thumbnail navigates instead of opening a lightbox. */
+  href?: string
   /** Optional inline width as a percent of the content column (desktop only;
    *  mobile stays full width). Defaults to 100. */
   inlineWidth?: number
@@ -264,6 +266,10 @@ export const WORK_STORIES: WorkStory[] = [
         mediaPresentation: 'carousel',
       },
       {
+        heading: 'Interactive prototype',
+        mediaIds: ['global-operations-prototype'],
+      },
+      {
         heading: 'My contributions',
         items: [
           'Building Orchestrator UX, strategy, and conference keynote — work that contributed to Microsoft earning the 2026 Digie award for "Most Intelligent Corporate Headquarters".',
@@ -347,6 +353,18 @@ export const WORK_STORIES: WorkStory[] = [
         height: 1056,
         alt: 'Building Orchestrator campus dashboard showing a mapped East campus, operational metrics, onboarding actions, and a Copilot insight panel.',
         caption: 'Building orchestrator: Operations Lead Dashboard',
+      },
+      {
+        kind: 'image',
+        id: 'global-operations-prototype',
+        src: '/assets/work/global-operations-thumbnail.webp',
+        width: 1960,
+        height: 1120,
+        alt: 'Public teaser for the Microsoft Global Operations interactive prototype.',
+        caption: 'Explore the Global Operations prototype. Password required.',
+        href: '/p/joelops/demo',
+        captionAction: { href: '/p/joelops/demo', label: 'Open prototype' },
+        inlineWidth: 60,
       },
     ],
     // Microsoft project: the field takes the sampled brand colors straight

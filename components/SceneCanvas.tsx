@@ -57,6 +57,7 @@ import {
   resolveGlyphSamplingScale,
 } from '../engine/glyphSize'
 import { applyRadialImpulse } from '../engine/impulse'
+import { stepGlyphParticle } from '../engine/glyphPhysics'
 import {
   RIPPLE_DEFAULTS,
   RippleStore,
@@ -3016,31 +3017,8 @@ function SceneCanvasInternal(
   }
 
   const simulateParticle = (p: Particle, pointer: ReturnType<typeof getPointerForFrame>) => {
-    // Apply mouse repel force if pointer is nearby (suppressed while painting).
-    // The pointer snapshot is hoisted to one sample per frame by the caller —
-    // resolving it per particle cost a fresh object + performance.now() call
-    // for every glyph on the field.
-    if (!activeStrokeRef.current && pointer.active && pointer.influence > 0) {
-      const dx = p.x - pointer.x
-      const dy = p.y - pointer.y
-      const distSq = dx * dx + dy * dy
-      // Effective radius: mouseR at rest; grown by the drag ease while the
-      // pointer is held (computed once per frame in the RAF loop).
-      const radius = effectiveMouseRRef.current || 0
-      if (distSq > 0 && distSq < radius * radius) {
-        const dist = Math.sqrt(distSq)
-        const repelStrength = (1 - dist / radius) * (particleRepelRef.current || 0.48) * pointer.influence
-        p.vx += (dx / dist) * repelStrength
-        p.vy += (dy / dist) * repelStrength
-      }
-    }
-
-    p.vx += (p.tx - p.x) * SPRING
-    p.vy += (p.ty - p.y) * SPRING
-    p.vx *= DAMP
-    p.vy *= DAMP
-    p.x += p.vx
-    p.y += p.vy
+    stepGlyphParticle(p, activeStrokeRef.current ? null : pointer,
+      effectiveMouseRRef.current || 0, particleRepelRef.current || 0.48)
   }
 
   // Reusable per-frame color context: mutated per glyph, never reallocated.

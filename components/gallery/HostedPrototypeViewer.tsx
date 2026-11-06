@@ -1,8 +1,11 @@
+'use client'
+
 import Link from 'next/link'
 import { ReactNode } from 'react'
 import GalleryHeader from './GalleryHeader'
 import ViewerBackLink from './ViewerBackLink'
 import styles from './gallery.module.css'
+import { useGalleryEmbed, bridgePrototypeEscape } from './useGalleryEmbed'
 
 type HostedPrototypeViewerProps = {
   title: string
@@ -28,9 +31,10 @@ export default function HostedPrototypeViewer({
   allowExternalNavigation = false,
   backViaHistory = false,
 }: HostedPrototypeViewerProps) {
+  const embedded = useGalleryEmbed()
   return (
-    <div className={styles.shell}>
-      <GalleryHeader />
+    <div className={styles.shell} data-embedded={embedded}>
+      {!embedded && <GalleryHeader />}
       <main id="main-content" className={styles.viewerMain}>
         <div className={styles.viewerBar}>
           <h1 className={styles.viewerTitle}>{title}</h1>
@@ -51,6 +55,8 @@ export default function HostedPrototypeViewer({
             ? 'allow-scripts allow-same-origin allow-top-navigation-by-user-activation allow-popups allow-popups-to-escape-sandbox'
             : 'allow-scripts allow-same-origin'}
           title={title}
+          allowFullScreen
+          onLoad={event => bridgePrototypeEscape(event.currentTarget)}
         />
         {caption ? <p className={styles.viewerCaption}>{caption}</p> : null}
       </main>

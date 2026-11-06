@@ -4,16 +4,12 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { HomeGalleryProject } from './galleryProjects'
 import { galleryLoopOffset } from './galleryLoop'
+import ProjectThumbnail from '../ProjectThumbnail'
 
 function ProjectImage({ project }: { project: HomeGalleryProject }) {
-  const [failed, setFailed] = useState(false)
   return (
     <span className="home-project-image">
-      <span className="home-project-placeholder" aria-hidden="true">
-        <span>{project.collection}</span><strong>{project.title}</strong>
-      </span>
-      {!failed && <img src={project.thumbnail} alt="" loading="lazy" decoding="async"
-        width={960} height={600} onError={() => setFailed(true)} />}
+      <ProjectThumbnail src={project.thumbnail} href={project.href} title={project.title} />
     </span>
   )
 }

@@ -104,6 +104,7 @@ function gateResponse(stackSlug: string, stackTitle: string, failed = false): Re
     <meta name="robots" content="noindex, nofollow" />
     <title>${stackTitle} — private prototype</title>
     <style>
+      * { box-sizing: border-box; }
       body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #090c12; color: #c5d4ea; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
       form { display: grid; gap: 1rem; width: min(90vw, 22rem); padding: 2rem; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; background: rgba(14,18,24,0.9); }
       h1 { margin: 0; font-size: 1rem; letter-spacing: 0.08em; color: #f5f7fb; }
@@ -113,6 +114,15 @@ function gateResponse(stackSlug: string, stackTitle: string, failed = false): Re
       button { font: inherit; padding: 0.65rem; border-radius: 999px; border: 1px solid #8abaff; background: transparent; color: #bcd7ff; cursor: pointer; }
       button:hover { background: rgba(138,186,255,0.12); }
       button:disabled { opacity: 0.6; cursor: wait; }
+      .cancel { text-align: center; font: inherit; font-size: .8rem; color: #bcd7ff; padding: .5rem; }
+      @media (prefers-color-scheme: light) {
+        body { background: #f4f6f9; color: #44536a; }
+        form { background: #fff; border-color: #c8cfdb; }
+        h1, input { color: #101826; }
+        input { border-color: #c8cfdb; background: #f4f6f9; }
+        button, .cancel { color: #0c5e7d; border-color: #0c5e7d; }
+        .error { color: #9a3412; }
+      }
     </style>
   </head>
   <body>
@@ -122,6 +132,7 @@ function gateResponse(stackSlug: string, stackTitle: string, failed = false): Re
       <p class="error" role="alert" aria-live="polite"${failed ? '' : ' hidden'}>${failed ? 'That password didn\u2019t work — try again, or ask Joel for a fresh one.' : ''}</p>
       <input type="password" name="password" autocomplete="current-password" required autofocus aria-label="Password" />
       <button type="submit">Unlock</button>
+      <a class="cancel" href="/gallery">Cancel</a>
     </form>
     <script>
       // Keep a Pages/WAF JSON response from replacing this small form with a
@@ -129,6 +140,29 @@ function gateResponse(stackSlug: string, stackTitle: string, failed = false): Re
       const form = document.querySelector('form')
       const error = form.querySelector('.error')
       const button = form.querySelector('button[type="submit"]')
+      const embedded = window.parent !== window && new URLSearchParams(location.search).get('gallery-embed') === '1'
+      const cancel = () => {
+        if (embedded) window.parent.postMessage({ type: 'gallery:close' }, location.origin)
+        else window.location.assign('/gallery')
+      }
+      const cancelLink = form.querySelector('.cancel')
+      // The gallery window already supplies its own close control.
+      if (embedded) cancelLink.remove()
+      else {
+        const cancelButton = document.createElement('button')
+        cancelButton.type = 'button'
+        cancelButton.className = 'cancel'
+        cancelButton.textContent = 'Cancel'
+        cancelLink.replaceWith(cancelButton)
+        cancelButton.addEventListener('click', cancel)
+      }
+      document.body.addEventListener('click', event => { if (event.target === document.body) cancel() })
+      window.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+          if (embedded) window.parent.postMessage({ type: 'gallery:escape' }, location.origin)
+          else cancel()
+        }
+      })
       form.addEventListener('submit', async (event) => {
         event.preventDefault()
         button.disabled = true
@@ -140,7 +174,9 @@ function gateResponse(stackSlug: string, stackTitle: string, failed = false): Re
             credentials: 'same-origin',
           })
           if (response.redirected) {
-            window.location.assign(response.url)
+            // Reload this exact viewer after the cookie is set, preserving the embedded window.
+            if (embedded) window.location.reload()
+            else window.location.assign(response.url)
             return
           }
           let message = response.status === 429

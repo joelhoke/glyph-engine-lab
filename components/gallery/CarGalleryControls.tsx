@@ -8,10 +8,6 @@ export default function CarGalleryControls({ engine, state, reducedMotion }: {
   engine: RefObject<Garage | null>; state: GarageState; reducedMotion: boolean
 }) {
   return <div className={styles.garageTools} data-gallery-ui>
-    <div role="group" aria-label="Scene lighting" className={styles.garageToolRow}>
-      <button type="button" aria-pressed={!state.night} onClick={() => engine.current?.setNight(false)}>Light</button>
-      <button type="button" aria-pressed={!!state.night} onClick={() => engine.current?.setNight(true)}>Dark</button>
-    </div>
     <details>
       <summary>Vehicle controls</summary>
       <p>Drag to rotate · Scroll or pinch to zoom</p>

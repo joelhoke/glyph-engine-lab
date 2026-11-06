@@ -3317,6 +3317,11 @@ html[data-deep-link] .experience-transition {
   max-width: 100%;
 }
 
+a.work-inline-media-button,
+a.work-gallery-thumb {
+  cursor: pointer;
+}
+
 /* Interactive-viewer affordance: a small pill over the poster marking it as
    an orbitable 3D model that opens in the lightbox. Non-interactive — the
    button underneath owns the click. */
