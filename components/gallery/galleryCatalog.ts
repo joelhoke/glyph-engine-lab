@@ -3,6 +3,7 @@ import { listedStacks } from '../../functions/lib/prototypesManifest'
 import { GALLERY_PLAYGROUNDS } from '../../content/galleryPlaygrounds'
 import { GALLERY_HIGHLIGHTS } from '../../content/galleryHighlights'
 import { HOME_HIGHLIGHTS } from '../../content/homeHighlights'
+import { getProjectPreview } from '../../content/projectPreviews'
 import type { GalleryItem } from './galleryTypes'
 
 const clips: Record<string, string> = {
@@ -17,10 +18,11 @@ const preview = (id: string) => clips[id] ? `/assets/gallery/previews/${clips[id
 const poster = (id: string, fallback: string) => clips[id] ? `/assets/gallery/previews/${clips[id]}.webp?v=2` : fallback
 
 export function buildGalleryCatalog(): GalleryItem[] {
-  const playgrounds: GalleryItem[] = [...GALLERY_PLAYGROUNDS, ...GALLERY_HIGHLIGHTS].map(p => ({
-    id: p.id, title: p.title, category: 'Interactive playground', poster: poster(p.id, p.thumbnail),
-    preview: preview(p.id), action: { kind: 'link', href: p.href },
-  }))
+  const playgrounds: GalleryItem[] = [...GALLERY_PLAYGROUNDS, ...GALLERY_HIGHLIGHTS].map(p => {
+    const media = getProjectPreview(p.href, p.thumbnail)
+    return { id: p.id, title: p.title, category: 'Interactive playground', poster: media?.poster ?? p.thumbnail,
+      preview: media?.video, action: { kind: 'link', href: p.href } }
+  })
   const prototypes: GalleryItem[] = listedStacks().flatMap(stack => stack.prototypes.map(p => {
     const id = `${stack.slug}/${p.slug}`
     return { id, title: stack.slug === 'golden-age-collectables' ? `${stack.title} — ${p.title}` : p.title,

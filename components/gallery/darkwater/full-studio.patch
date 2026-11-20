@@ -1,0 +1,111 @@
+--- a/src/studio/ui.js
++++ b/src/studio/ui.js
+@@ -3,6 +3,33 @@
+   wave: '<svg viewBox="0 0 32 24" fill="none"><path d="M2 8c4-8 8 8 14 0s10 8 14 0M2 16c4-8 8 8 14 0s10 8 14 0" stroke="currentColor" stroke-width="1.5"/></svg>',
+   eye: '<svg viewBox="0 0 24 24" fill="none"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" stroke="currentColor"/><circle cx="12" cy="12" r="3" stroke="currentColor"/></svg>',
+ };
++// Offer the same compact choices as the gallery while lists are small.
++function smallListChoices(select, label) {
++  select.parentElement.querySelector('[data-small-list]')?.remove();
++  const options = [...select.options].filter(option => option.value);
++  select.hidden = options.length > 0 && options.length <= 4;
++  if (!select.hidden) return;
++  const group = document.createElement('span');
++  group.className = 'looks inline-choices';
++  group.dataset.smallList = '';
++  group.setAttribute('role', 'group');
++  group.setAttribute('aria-label', label);
++  for (const option of options) {
++    const button = document.createElement('button');
++    button.type = 'button';
++    button.textContent = option.textContent;
++    button.dataset.choice = option.value;
++    button.setAttribute('aria-pressed', String(select.value === option.value));
++    button.onclick = event => {
++      event.preventDefault();
++      select.value = option.value;
++      select.dispatchEvent(new Event('change', { bubbles: true }));
++    };
++    group.append(button);
++  }
++  select.after(group);
++}
++
+ export class StudioUI {
+   tab = 'lights';
+   hidden = false;
+@@ -29,7 +56,7 @@
+           <div id="model-selection" hidden><select id="model-select" aria-label="Uploaded model"><option value="">Choose uploaded model</option></select><button id="remove-model" aria-label="Remove selected model and its copies" title="Remove model and its copies">Remove</button></div>
+           <div id="model-placement" hidden>
+             <button id="add-model" class="add-button">Add a copy</button>
+-            <label class="model-lighting">Lighting <select id="model-lighting" aria-label="Model lighting"><option value="studio">Studio lights</option><option value="original">As exported</option></select></label>
++            <div class="section-label">Model lighting</div><div class="looks inline-choices" role="group" aria-label="Model lighting"><button data-model-lighting="studio">Studio lights</button><button data-model-lighting="original">As exported</button></div>
+             <p id="model-lighting-note" class="model-note"></p>
+             <div class="model-adjustments"><label>Size <input id="model-size" aria-label="Model size" type="number" min="0.35" max="3" step="0.05" value="1.5"/> m</label><label>Turn <input id="model-angle" aria-label="Model rotation" type="number" min="-180" max="180" step="5" value="0"/> °</label></div>
+             <p class="model-note">Adjusts the latest copy · Drag to move in Interact</p>
+@@ -54,7 +81,7 @@
+     document.querySelector('#model-select').onchange=event=>{if(event.target.value)actions.shape(event.target.value);};
+     document.querySelector('#remove-model').onclick=()=>actions.removeModel();
+     document.querySelector('#add-model').onclick=()=>actions.addModel();
+-    document.querySelector('#model-lighting').onchange=e=>actions.modelLighting(e.target.value);
++    document.querySelectorAll('[data-model-lighting]').forEach(button => button.onclick = () => actions.modelLighting(button.dataset.modelLighting));
+     document.querySelector('#model-size').onchange=e=>actions.modelTransform('size',+e.target.value);
+     document.querySelector('#model-angle').onchange=e=>actions.modelTransform('angle',+e.target.value);
+     document.querySelector('#pause').onclick=()=>actions.pause();
+@@ -117,7 +144,7 @@
+       html+='<div class="section-break"></div>';
+       html+=`<label class="check-row">Submerged floor<input id="floor-visible" type="checkbox" ${this.settings.floorVisible?'checked':''}/></label><div class="section-label space">Quality</div>`;
+       html+=s('resolution','Render scale',0.5,1.5,0.05,'×');
+-      html+=`<label class="select-row">Caustic detail<select id="caustic-quality"><option value="256">Low · 256</option><option value="384">Balanced · 384</option><option value="512">High · 512</option></select></label><button id="profile" class="add-button">Measure performance</button><p id="profile-result" class="panel-note" aria-live="polite"></p><div class="performance"><span id="fps"></span><span id="render-size"></span></div>`;
++      html+=`<div class="section-label">Caustic detail</div><div class="looks inline-choices" role="group" aria-label="Caustic detail">${[[256,"Low"],[384,"Balanced"],[512,"High"]].map(([size,label])=>`<button data-quality="${size}" aria-pressed="${size===this.settings.causticQuality}">${label}</button>`).join("")}</div><button id="profile" class="add-button">Measure performance</button><p id="profile-result" class="panel-note" aria-live="polite"></p><div class="performance"><span id="fps"></span><span id="render-size"></span></div>`;
+     }
+     document.querySelector('#panel').innerHTML=html;
+     if(this.tab==='objects') {
+@@ -126,6 +153,7 @@
+       for(const object of state.objects)select.add(new Option(object.name,String(object.id)));
+       select.value=state.selected?String(state.selected.id):'';
+       select.onchange=()=>this.actions.selectObject(select.value?+select.value:null);
++      smallListChoices(select, 'Selected object');
+       document.querySelectorAll('[data-object-key]').forEach(input=>input.onchange=()=>{
+         if(input.value!=='' && Number.isFinite(+input.value))this.actions.objectPose({[input.dataset.objectKey]:+input.value});
+         this.syncObjects();
+@@ -156,7 +184,7 @@
+     document.querySelectorAll('[data-beam]').forEach(b=>b.onclick=()=>{Object.assign(this.lights.selected,b.dataset.beam==='spot'?{spread:32,focus:0.7,softness:0.3}:{spread:105,focus:0.05,softness:0.85});this.actions.change();this.renderPanel();});
+     document.querySelectorAll('[data-handle]').forEach(b=>b.onclick=()=>this.actions.handle(b.dataset.handle));
+     const floor=document.querySelector('#floor-visible'); if(floor)floor.onchange=()=>{this.settings.floorVisible=floor.checked;this.actions.change();};
+-    const quality=document.querySelector('#caustic-quality'); if(quality){quality.value=this.settings.causticQuality;quality.onchange=()=>{this.settings.causticQuality=+quality.value;this.actions.change('causticQuality');};}
++    document.querySelectorAll('[data-quality]').forEach(button => button.onclick = () => { this.settings.causticQuality = Number(button.dataset.quality); this.actions.change('causticQuality'); document.querySelectorAll('[data-quality]').forEach(choice => choice.setAttribute('aria-pressed',String(choice === button))); });
+   }
+   syncObjects() {
+     if(this.tab!=='objects')return;
+@@ -176,6 +204,7 @@
+     const select=document.querySelector('#model-select');
+     select.replaceChildren(new Option('Choose uploaded model',''));
+     for(const model of models)select.add(new Option(model.name,model.id));
++    smallListChoices(select, 'Uploaded model');
+     document.querySelector('#model-selection').hidden=models.length===0;
+     this.update();
+   }
+@@ -191,11 +220,12 @@
+     document.querySelector('#interaction-hint').hidden=s.mode!=='interact';
+     document.querySelectorAll('[data-shape]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.shape===s.shape)));
+     document.querySelector('#model-select').value=s.shape.startsWith('model-')?s.shape:'';
++    document.querySelectorAll('#model-selection [data-choice]').forEach(button => button.setAttribute('aria-pressed',String(button.dataset.choice === s.shape)));
+     const model=this.models?.find(m=>m.id===s.shape);
+     document.querySelector('#remove-model').disabled=!model;
+     document.querySelector('#model-placement').hidden=!model;
+     if(model) {
+-      document.querySelector('#model-lighting').value=model.lighting??'studio';
++      document.querySelectorAll('[data-model-lighting]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.modelLighting === (model.lighting ?? 'studio'))));
+       document.querySelector('#model-lighting-note').textContent=model.unlit?(model.lighting==='original'?'Unlit surfaces keep their exported appearance.':'Unlit surfaces respond to studio lights. Original textures stay intact.'):'Original surface finish, illuminated by studio lights.';
+       document.querySelector('#model-size').value=model.size??1.5;
+       document.querySelector('#model-angle').value=model.angle??0;
+--- a/src/studio/style.css
++++ b/src/studio/style.css
+@@ -57,3 +57,6 @@
+ .object-fields small{width:10px;color:#85798e}.object-actions{display:flex;justify-content:space-between}
+ #object-select{max-width:175px}#object-motion{margin-top:0}
+ @media(max-width:700px){.tabs{gap:12px;padding-left:12px;padding-right:12px}#object-select{max-width:140px}}
++
++.inline-choices { display: flex; position: static; margin-bottom: .8rem; }
++.inline-choices [aria-pressed=true] { color: white; background: #4a3d60; }

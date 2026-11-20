@@ -1,0 +1,30 @@
+<!doctype html>
+<!-- Built from joelhoke/DarkWater @ 0d207080ebb992e98d30d10369bd7b0243301ae9.
+     Apply components/gallery/darkwater/full-studio.patch to that checkout.
+     From the checkout, bundle src/studio/main.js with esbuild --bundle --minify
+     --splitting --format=esm --target=es2022 --entry-names=studio
+     --chunk-names=chunks/[name]-[hash] --legal-comments=eof --outdir=<this folder>.
+     Use the portfolio lockfile's Three.js version. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#090a0e">
+  <title>DarkWater — Full studio</title>
+  <link rel="stylesheet" href="./studio.css">
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module">
+    import './studio.js'
+    const home = document.querySelector('.brand')
+    if (home) {
+      home.href = '/gallery/darkwater'
+      home.setAttribute('aria-label', 'Return to DarkWater playground')
+    }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches && !window.darkWater?.settings.paused) {
+      window.darkWater?.actions.pause()
+    }
+  </script>
+</body>
+</html>

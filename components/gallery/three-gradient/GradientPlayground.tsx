@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import SiteHeader from '../../SiteHeader'
-import { useGalleryEmbed } from '../useGalleryEmbed'
 import { useReducedMotion } from '../../home/useReducedMotion'
 import { useSectionVisibility } from '../../home/useSectionVisibility'
 import type { createFlowerRenderer } from '../../home/flower/renderer'
@@ -11,7 +10,9 @@ import type { FlowerGradientSettings } from '../../home/flower/types'
 import { STATEMENT_FLOWER } from '../../../content/statementFlower'
 import { GRADIENT_PLAYGROUND as defaults, GRADIENT_TYPES } from '../../../content/gradientPlayground'
 import { advanceFlowerProgress, flowerPositionLabel, playgroundFlowerProgress, scrollFlowerProgress, type AnimationMode } from './motion'
-import styles from './playground.module.css'
+import { PaletteControl, PlaybackControls, RangeControl, SelectControl } from '../playground/Controls'
+import { useGalleryEmbed } from '../useGalleryEmbed'
+import styles from '../playground/playground.module.css'
 
 export default function GradientPlayground() {
   const embedded = useGalleryEmbed()
@@ -129,29 +130,16 @@ export default function GradientPlayground() {
       </header>
       <section className={styles.workspace} aria-label="Flower playground" data-animation-mode={mode}>
         <aside className={styles.controls} aria-label="Playground controls">
-          <fieldset disabled={failed} className={styles.palette}>
-            <legend>Color palette</legend>
-            <div className={styles.swatches}>
-              {gradient.palette.map((color, index) => <label key={index} className={styles.swatch}>
-                <span className={styles.srOnly}>Color {index + 1}</span>
-                <input type="color" value={color} onChange={event => update('palette', gradient.palette.map((value, i) => i === index ? event.target.value : value))} />
-                <span>{color.toUpperCase()}</span>
-              </label>)}
-            </div>
-          </fieldset>
+          <PaletteControl colors={gradient.palette} onChange={colors => update('palette', colors)} disabled={failed} />
           <fieldset disabled={failed} className={styles.settings}>
             <legend className={styles.srOnly}>Gradient and animation settings</legend>
-            <label>Gradient type
-              <select value={gradient.mode} onChange={event => update('mode', event.target.value as FlowerGradientSettings['mode'])}>
-                {GRADIENT_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
-              </select>
-            </label>
-            <label>Gradient application
-              <select value={gradient.scope} onChange={event => update('scope', event.target.value as FlowerGradientSettings['scope'])}>
-                <option value="element">Per element</option>
-                <option value="object">Whole object</option>
-              </select>
-            </label>
+            <SelectControl label="Gradient type" value={gradient.mode} onChange={value => update('mode', value as FlowerGradientSettings['mode'])}>
+              {GRADIENT_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+            </SelectControl>
+            <SelectControl label="Gradient application" value={gradient.scope} onChange={value => update('scope', value as FlowerGradientSettings['scope'])}>
+              <option value="element">Per element</option>
+              <option value="object">Whole object</option>
+            </SelectControl>
             <div className={styles.animationChoice} role="group" aria-label="Animation source">
               <span>Animate with</span>
               <div className={styles.segmented}>
@@ -166,16 +154,13 @@ export default function GradientPlayground() {
           <p className={styles.hint} id="gradient-animation-help">{mode === 'scroll'
             ? 'Scroll down through the flower to morph into Cherry blossom. Scroll up to return to Plumeria.'
             : 'Plumeria becomes Rose, Daisy, then Cherry blossom, before returning. Adjust the duration to slow down or speed up.'}</p>
-          <div className={styles.actions}>
-            <button type="button" disabled={!ready || failed} onClick={() => setIntent(running ? 'pause' : 'play')}>{running ? 'Pause animation' : 'Play animation'}</button>
-            <button type="button" disabled={failed} onClick={reset}>Reset</button>
-          </div>
+          <PlaybackControls running={running} onToggle={() => setIntent(running ? 'pause' : 'play')} onReset={reset} disabled={!ready || failed} />
           {reduced && !running && <p className={styles.hint}>Motion is paused for your preference. Use the position slider, or choose Play animation.</p>}
           <details className={styles.details}>
             <summary>Fine-tune the gradient</summary>
             <fieldset disabled={failed}>
               <legend className={styles.srOnly}>Fine-tune the gradient</legend>
-              <label>Scale <input type="range" min="0.3" max="3" step="0.05" value={gradient.scale} onChange={event => update('scale', Number(event.target.value))} /></label>
+              <RangeControl label="Scale" min={0.3} max={3} step={0.05} value={gradient.scale} onChange={value => update('scale', value)} />
               <label>Softness <input type="range" min="0" max="1" step="0.01" value={gradient.softness} onChange={event => update('softness', Number(event.target.value))} /></label>
               {gradient.mode === 'bands' && <label>Direction <input type="range" min="0" max="360" step="1" value={gradient.direction} aria-valuetext={`${gradient.direction} degrees`} onChange={event => update('direction', Number(event.target.value))} /></label>}
               <label>Noise amount <input type="range" min="0" max="1" step="0.01" value={gradient.noise} onChange={event => update('noise', Number(event.target.value))} /></label>

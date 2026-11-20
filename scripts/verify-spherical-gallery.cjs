@@ -118,7 +118,14 @@ try {
   for (let i = 0; i < 100; i++) { assert.equal(a(), b()); assert.notEqual(b(), c()); a() }
   assert.deepEqual(GALLERY_PALETTES.map(p => p.colors.length), [5, 5, 6, 5, 5, 6, 5])
   const catalog = buildGalleryCatalog()
-  assert.equal(catalog.length, 10); assert.equal(new Set(catalog.map(i => i.id)).size, 10)
+  const expected = [
+    'three-gradient', 'neon-trip', 'loonz', 'darkwater', 'gradient-bands', 'droplet', 'cars',
+    'joelops/demo', 'type-lab/orbit-toy', 'type-lab/glass-playground', 'type-lab/logo-studio',
+    'golden-age-collectables/mild', 'golden-age-collectables/medium', 'october-2026',
+  ]
+  const ids = catalog.map(item => item.id)
+  for (const id of expected) assert(ids.includes(id), `Missing gallery entry: ${id}`)
+  assert.equal(new Set(ids).size, ids.length, 'Each gallery entry must have a unique ID')
   assert.equal(catalog.filter(i => i.requiresPassword).length, 3)
   assert.equal(catalog.filter(i => i.category === 'Case study').length, 0)
   assert(!catalog.some(i => i.action.kind === 'link' && i.action.href.includes('#work/')))

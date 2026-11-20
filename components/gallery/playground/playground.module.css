@@ -73,6 +73,15 @@
   .swatch > span:last-child { font-size: 0.6rem; }
 }
 
+.interactiveCanvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.drawing { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+.settings input[type="text"] { width: 100%; min-height: 44px; padding: 0.6rem; color: var(--color-text); background: var(--color-page); border: 1px solid var(--color-input-border); border-radius: 8px; font: inherit; }
+
+@media (max-width: 767px) {
+  /* Drawing surfaces scroll naturally so they cannot cover their controls. */
+  .workspace:not([data-animation-mode]) .track { position: static; }
+}
+
 .shell[data-embedded=true] { padding: 0; }
 .shell[data-embedded=true] .heading { display: none; }
 .shell[data-embedded=true] .main { padding: 1rem 1rem 4.5rem; max-width: none; }
@@ -81,3 +90,14 @@
 .shell[data-embedded=true] .viewport { height: clamp(17rem, calc(100svh - 10rem), 50rem); }
 @media (max-width: 800px) { .shell[data-embedded=true] .controls { max-height: none; } }
 .shell[data-embedded=true] .footer { display: none; }
+
+@media (max-width: 767px) {
+  .shell[data-embedded=true] .workspace:not([data-animation-mode]) .viewport { height: clamp(13rem, 44svh, 26rem); }
+}
+
+.choiceGroup { grid-column: 1 / -1; display: grid; gap: .6rem; min-width: 0; }
+.choiceButtons { display: grid; gap: .35rem; }
+.choiceButtons[data-columns='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.choiceButtons[data-columns='3'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.choiceButtons button { display: grid; align-content: center; justify-items: center; gap: .35rem; padding: .45rem .25rem; line-height: 1.3; overflow-wrap: anywhere; }
+.settings select, .details select { color-scheme: light dark; }

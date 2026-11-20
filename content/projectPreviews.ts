@@ -1,10 +1,18 @@
 /** Public promotional media only. Never resolve protected prototype bundles here. */
 export type ProjectPreview = { poster: string; video?: string; darkPoster?: string; darkVideo?: string }
-const clip = (name: string) => `/assets/gallery/previews/${name}.mp4?v=3`
+const clip = (name: string, version = 3) => `/assets/gallery/previews/${name}.mp4?v=${version}`
 const poster = (name: string) => `/assets/gallery/previews/${name}.webp?v=3`
 const preview = (name: string): ProjectPreview => ({ poster: poster(name), video: clip(name) })
+const playgroundPreview = (name: string, version = 3): ProjectPreview => ({
+  poster: `/assets/gallery/${name}.webp?v=${version}`, darkPoster: `/assets/gallery/${name}-dark.webp?v=${version}`,
+  video: clip(name, version), darkVideo: clip(`${name}-dark`, version),
+})
 
 export const PROJECT_PREVIEWS: Record<string, ProjectPreview> = {
+  '/gallery/neon-trip': playgroundPreview('neon-trip'),
+  '/gallery/loonz': playgroundPreview('loonz', 4),
+  '/gallery/darkwater': playgroundPreview('darkwater'),
+  '/gallery/gradient-bands': playgroundPreview('gradient-bands'),
   '/gallery/cars': { ...preview('cars'), darkPoster: poster('cars-dark'), darkVideo: clip('cars-dark') },
   '/p/joelops/demo': {
     ...preview('global-operations-demo'),
