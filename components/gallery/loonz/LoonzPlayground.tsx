@@ -5,17 +5,26 @@ import PlaygroundShell from '../playground/PlaygroundShell'
 import { PaletteControl, PlaybackControls, RangeControl, SelectControl, UndoButton } from '../playground/Controls'
 import { Preview } from '../playground/Preview'
 import { usePlayground, type EngineFactory } from '../playground/usePlayground'
-import { useLightTheme } from '../playground/useLightTheme'
+import { LANDING_CANVAS_GRADIENT } from '../../../engine/theme'
+import { useSystemTheme } from '../../../engine/useSystemTheme'
 import { useUndoHistory } from '../playground/useUndoHistory'
 import styles from '../playground/playground.module.css'
 import DrawingSurface from './DrawingSurface'
-import { defaultScene, newBalloon, PALETTE, shape } from './engine/scene'
+import { DEFAULT_DRAWING_COLOR, defaultScene, newBalloon, shape } from './engine/scene'
 import type { PlaygroundRenderer } from './engine/renderer'
 import { MAX_BALLOONS, type Balloon, type SceneDocument, type Vec2 } from './engine/types'
 
 type Settings = { scene: SceneDocument; selected: string; mode: 'select' | 'orbit' | 'draw' }
-type Shape = Parameters<typeof shape>[0]
 type BalloonSetting = 'color' | 'scale' | 'inflation' | 'roughness'
+const shapeButtons = (['heart', 'circle', 'star', 'flower', 'blob'] as const).map(kind => {
+  const outline = shape(kind)
+  return {
+    kind,
+    label: kind[0].toUpperCase() + kind.slice(1),
+    outline,
+    iconPoints: outline.map(([x, y]) => `${(12 + 10 * x).toFixed(1)},${(12 - 10 * y).toFixed(1)}`).join(' '),
+  }
+})
 const initial = (): Settings => {
   const scene = defaultScene()
   return { scene, selected: scene.balloons[0].id, mode: 'draw' }
@@ -30,13 +39,12 @@ const toolHints = {
 export default function LoonzPlayground() {
   const [settings, setSettings] = useState(initial)
   const [customBackground, setCustomBackground] = useState<string | null>(null)
-  const [drawingColor, setDrawingColor] = useState(PALETTE[5])
-  const [kind, setKind] = useState<Shape>('heart')
+  const [drawingColor, setDrawingColor] = useState(DEFAULT_DRAWING_COLOR)
   const [notice, setNotice] = useState('')
   const rendererRef = useRef<PlaygroundRenderer | null>(null)
   const { record, undo, canUndo, clear } = useUndoHistory()
-  const light = useLightTheme()
-  const background = customBackground ?? (light ? '#f2d5e3' : '#322a40')
+  const theme = useSystemTheme()
+  const background = customBackground ?? LANDING_CANVAS_GRADIENT[theme].color2.toLowerCase()
   const displaySettings = useMemo(() => ({
     ...settings, scene: { ...settings.scene, background },
   }), [settings, background])
@@ -131,7 +139,8 @@ export default function LoonzPlayground() {
     }))
   }
 
-  function addBalloon(outline: Vec2[], placement?: Pick<Balloon, 'rotation' | 'scale' | 'position'>) {
+  function addBalloon(outline: Vec2[], placement?: Partial<Pick<Balloon, 'name' | 'rotation' | 'scale' | 'position'>>) {
+    if (full || !play.ready || play.error) return
     const balloon = {
       ...newBalloon(outline, settings.scene.balloons.length),
       ...placement,
@@ -165,13 +174,12 @@ export default function LoonzPlayground() {
     clear()
     setSettings(initial())
     setCustomBackground(null)
-    setDrawingColor(PALETTE[5])
-    setKind('heart')
+    setDrawingColor(DEFAULT_DRAWING_COLOR)
     setNotice('')
     play.reset()
   }
 
-  const atCapacity = `This composition has ${MAX_BALLOONS} balloons. Remove one to draw another.`
+  const atCapacity = `This composition has ${MAX_BALLOONS} balloons. Remove one to add another.`
   return <PlaygroundShell title="Loonz" description="Draw an outline and lift to inflate it into a foil balloon. Fill the canvas with your shapes, then grab one and give it a throw."
     onMenuOpenChange={play.setMenuOpen} controls={<>
       <div className={styles.settings}>
@@ -184,8 +192,21 @@ export default function LoonzPlayground() {
           <option value="orbit">Orbit camera</option>
         </SelectControl>
       </div>
+      <div role="group" aria-label="Add a balloon" className={styles.choiceGroup}>
+        <span>Add a balloon</span>
+        <div className={styles.choiceButtons} data-columns="3">
+          {shapeButtons.map(({ kind, label, outline, iconPoints }) => <button key={kind} type="button"
+            aria-label={`Add ${kind} balloon`} disabled={full || !play.ready || !!play.error}
+            onClick={() => addBalloon(outline, { name: `${label} ${String(settings.scene.balloons.length + 1).padStart(2, '0')}` })}>
+            <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
+              <polygon points={iconPoints} />
+            </svg>
+            {label}
+          </button>)}
+        </div>
+      </div>
       <UndoButton onUndo={undo} canUndo={canUndo} />
-      {settings.mode === 'draw' && <PaletteControl label="Drawing color" colors={[drawingColor]} onChange={([color]) => changeDrawingColor(color)} />}
+      <PaletteControl label="Drawing color" colors={[drawingColor]} onChange={([color]) => changeDrawingColor(color)} />
       <div className={styles.settings}>
         <RangeControl label="Float amount" value={settings.scene.physics.drift} onChange={changeDrift} />
       </div>
@@ -207,19 +228,6 @@ export default function LoonzPlayground() {
           <button type="button" onClick={removeBalloon}>Remove selected balloon</button>
         </fieldset>
       </details>}
-      <details className={styles.details}>
-        <summary>Use a preset shape</summary>
-        <fieldset className={styles.settings}>
-          <SelectControl label="New balloon shape" value={kind} onChange={value => {
-            if (value === kind) return
-            record(() => setKind(kind))
-            setKind(value as Shape)
-          }}>
-            {['heart', 'flower', 'blob', 'circle', 'star'].map(v => <option key={v} value={v}>{v[0].toUpperCase() + v.slice(1)}</option>)}
-          </SelectControl>
-          <button type="button" disabled={full || !play.ready || !!play.error} onClick={() => addBalloon(shape(kind))}>Add balloon</button>
-        </fieldset>
-      </details>
       <PaletteControl label="Background" colors={[background]} onChange={([color]) => changeBackground(color)} />
     </>}>
     <Preview {...play} viewport={play.ref} label="Interactive floating foil balloons" hint={full && settings.mode === 'draw' ? atCapacity : toolHints[settings.mode]}>

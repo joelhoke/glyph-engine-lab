@@ -125,8 +125,22 @@ async function verifyLoonz(page) {
   const undo = button(page, 'Undo')
   const drawingColor = palette(page, 'Drawing color')
   const defaultColor = await drawingColor.inputValue()
+  const presets = group(page, 'Add a balloon')
+  const shapeNames = ['heart', 'circle', 'star', 'flower', 'blob']
+  assert.deepEqual(await presets.getByRole('button').allTextContents(), ['Heart', 'Circle', 'Star', 'Flower', 'Blob'])
+  assert.equal(await presets.locator('details, select').count(), 0, 'Shape actions are immediately available')
   await assertPressed(page, 'Canvas tool', 'Draw a balloon')
-  assert.equal(await group(page, 'Selected balloon').getByRole('button').count(), 3, 'Three starter balloons')
+  const starterButtons = group(page, 'Selected balloon').getByRole('button')
+  const starters = await starterButtons.allTextContents()
+  assert.equal(starters.length, 4, 'Four starter balloons are exposed as buttons')
+  const selectedBeforeDrawing = await group(page, 'Selected balloon').locator('[aria-pressed=true]').innerText()
+  const foilColors = new Set()
+  for (const name of starters) {
+    await option(page, 'Selected balloon', name).click()
+    foilColors.add(await palette(page, 'Balloon color').inputValue())
+  }
+  assert.equal(foilColors.size, 4, 'Each starter has a distinct foil color')
+  await option(page, 'Selected balloon', selectedBeforeDrawing).click()
   assert(await undo.isDisabled(), 'Starting balloons and autonomous motion create no undo entries')
   await drawingColor.fill('#ff9966')
   const original = await canvas(page).screenshot()
@@ -134,23 +148,30 @@ async function verifyLoonz(page) {
     const angle = i * Math.PI / 24
     return [.23 + Math.cos(angle) * .09, .44 + Math.sin(angle) * .12]
   }))
-  await assertPressed(page, 'Selected balloon', 'Balloon 04')
+  const balloonList = combo(page, 'Selected balloon')
+  const balloonOptions = balloonList.locator('option:not([value=""])')
+  const selectedOption = balloonList.locator('option:checked')
+  assert.equal(await balloonOptions.count(), 5, 'Drawing a fifth balloon switches the buttons to a select')
+  assert(starters.includes(await balloonList.locator('option[value="starter-circle"]').innerText()), 'The circle is one of the four starters')
+  assert.equal(await selectedOption.innerText(), 'Balloon 05')
   await assertPressed(page, 'Canvas tool', 'Draw a balloon')
   assert(!original.equals(await canvas(page).screenshot()), 'The outline inflated into the composition')
   assert.equal(await palette(page, 'Balloon color').inputValue(), '#ff9966', 'Foil inherits the selected drawing color')
-  await page.locator('summary', { hasText: 'Use a preset shape' }).click()
-  await button(page, 'Add balloon').click()
-  assert.equal(await combo(page, 'Selected balloon').locator('option:not([value=""])').count(), 5, 'Long lists transition to a select')
+  await button(presets, 'Add heart balloon').click()
+  assert.equal(await balloonOptions.count(), 6)
+  assert.equal(await selectedOption.innerText(), 'Heart 06')
+  await assertPressed(page, 'Canvas tool', 'Draw a balloon')
   await page.locator('summary', { hasText: 'Fine-tune the balloon' }).click()
   const selectedColor = palette(page, 'Balloon color')
+  assert.equal(await selectedColor.inputValue(), '#ff9966', 'One-click presets inherit the drawing color')
   await selectedColor.fill('#3366aa')
   const size = page.getByRole('slider', exact('Size'))
   const oldSize = await size.inputValue()
   await size.fill('1.35')
   await button(page, 'Remove selected balloon').click()
-  assert.equal(await group(page, 'Selected balloon').getByRole('button').count(), 4)
+  assert.equal(await balloonOptions.count(), 5)
   await undo.click()
-  assert.equal(await combo(page, 'Selected balloon').locator('option:checked').innerText(), 'Balloon 05')
+  assert.equal(await selectedOption.innerText(), 'Heart 06')
   assert.equal(await selectedColor.inputValue(), '#3366aa', 'Undo deletion restores the edited balloon')
   assert.equal(await size.inputValue(), '1.35')
   await undo.click()
@@ -158,16 +179,18 @@ async function verifyLoonz(page) {
   await undo.click()
   assert.equal(await selectedColor.inputValue(), '#ff9966', 'Undo restores the previous foil color')
   await undo.click()
-  await assertPressed(page, 'Selected balloon', 'Balloon 04')
+  assert.equal(await selectedOption.innerText(), 'Balloon 05')
   await option(page, 'Canvas tool', 'Grab & throw').click()
   const beforeMove = await canvas(page).screenshot()
   await stroke(page, [[.23, .44], [.26, .46], [.29, .48], [.32, .55]])
+  assert.equal(await selectedOption.innerText(), 'Balloon 05', 'Dragging picks the drawn balloon')
   assert(!beforeMove.equals(await canvas(page).screenshot()), 'Dragging the drawn balloon changes its position')
   await undo.click()
   assert(beforeMove.equals(await canvas(page).screenshot()), 'Undo puts the balloon back where it was drawn')
   await assertPressed(page, 'Canvas tool', 'Grab & throw')
   await undo.click()
-  assert.equal(await group(page, 'Selected balloon').getByRole('button').count(), 3, 'Undo removes the drawn balloon')
+  assert.deepEqual(await starterButtons.allTextContents(), starters, 'Undo returns the four starters to buttons')
+  await assertPressed(page, 'Selected balloon', selectedBeforeDrawing)
   await option(page, 'Canvas tool', 'Draw a balloon').click()
   await undo.click()
   assert.equal(await drawingColor.inputValue(), defaultColor)
@@ -177,8 +200,11 @@ async function verifyLoonz(page) {
   await background.fill('#4c6683')
   await page.emulateMedia({ colorScheme: 'dark' })
   await undo.click()
-  assert.equal(await background.inputValue(), '#322a40', 'Undo restores the current theme background')
+  const sectionColor = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-section-blue').trim())
+  assert.equal(await background.inputValue(), await sectionColor(), 'Undo restores the dark site backdrop')
   await page.emulateMedia({ colorScheme: 'light' })
+  await page.waitForFunction(el => el.value === getComputedStyle(document.documentElement).getPropertyValue('--color-section-blue').trim(),
+    await background.elementHandle())
   const float = page.getByRole('slider', exact('Float amount'))
   const oldFloat = await float.inputValue()
   await float.fill('0.8')
@@ -187,6 +213,19 @@ async function verifyLoonz(page) {
   await float.fill('0.75')
   await reset(page)
   assert(await undo.isDisabled(), 'Reset clears the undo history')
+
+  await pause(page)
+  for (let i = 0; i < 8; i++) {
+    const name = shapeNames[i % shapeNames.length]
+    await button(presets, `Add ${name} balloon`).click()
+    assert.equal(await balloonOptions.count(), 5 + i, 'Each shape button adds one balloon')
+    assert.equal(await selectedOption.innerText(), `${name[0].toUpperCase() + name.slice(1)} ${String(5 + i).padStart(2, '0')}`)
+  }
+  assert.equal(await presets.locator('button:disabled').count(), 5, 'All presets respect the twelve-balloon limit')
+  for (let i = 0; i < 8; i++) await undo.click()
+  assert.deepEqual(await starterButtons.allTextContents(), starters)
+  assert.equal(await presets.locator('button:disabled').count(), 0)
+  assert(await undo.isDisabled(), 'One undo per preset returns to the starter composition')
 }
 
 async function verifyBands(page) {
@@ -338,30 +377,41 @@ async function verifyGallery(page) {
   await page.goto(`${base}/gallery`)
   const surface = page.getByRole('region', exact('Explore gallery'))
   await surface.waitFor()
+  assert.equal(await surface.getByText(/^[+↗]$/).count(), 0, 'Sphere tiles omit decorative corner icons')
   await surface.focus()
   const originalX = await surface.getAttribute('data-x')
   await surface.press('ArrowRight')
   await page.waitForFunction(x => document.querySelector('[aria-label="Explore gallery"]').dataset.x !== x, originalX)
   await button(page, 'Grid view').click()
   const grid = page.getByRole('list', exact('All gallery works'))
+  await grid.waitFor()
+  assert.equal(await grid.getByText(/^[+↗]$/).count(), 0, 'Grid tiles omit decorative corner icons')
   for (const theme of ['dark', 'light']) {
     await page.emulateMedia({ colorScheme: theme })
-    for (const [slug, title] of projects) {
+    for (const [slug, title] of [...projects, ['droplet', 'Droplet']]) {
       const tile = grid.locator(`a[href="/gallery/${slug}"]`)
       const name = theme === 'dark' ? `${slug}-dark` : slug
+      const posterPath = slug === 'droplet' ? '/assets/gallery/previews/droplet.webp' : `/assets/gallery/${name}.webp`
+      const videoPath = `/assets/gallery/previews/${slug === 'droplet' ? 'droplet-gameplay' : name}.mp4`
       await tile.hover()
-      await page.waitForFunction(({ slug, name }) => {
+      await page.waitForFunction(({ slug, posterPath, videoPath }) => {
         const tile = document.querySelector(`ul a[href="/gallery/${slug}"]`)
         const image = tile?.querySelector('img'), video = tile?.querySelector('video')
         return image?.complete && image.naturalWidth > 0 &&
-          new URL(image.currentSrc).pathname === `/assets/gallery/${name}.webp` &&
+          new URL(image.currentSrc).pathname === posterPath &&
           video?.readyState >= 2 && !video.paused && video.currentTime > 0.12 &&
-          new URL(video.currentSrc).pathname === `/assets/gallery/previews/${name}.mp4` &&
+          new URL(video.currentSrc).pathname === videoPath &&
           Number(getComputedStyle(video).opacity) > 0.9
-      }, { slug, name }, { timeout: 12000 })
+      }, { slug, posterPath, videoPath }, { timeout: 12000 })
       console.log(`PASS: ${title} ${theme} poster and visible hover clip`)
     }
   }
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  const droplet = grid.locator('a[href="/gallery/droplet"]')
+  await droplet.hover()
+  await droplet.locator('video').waitFor({ state: 'detached' })
+  assert(await droplet.locator('img').isVisible(), 'Droplet keeps its poster when motion is reduced')
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
   for (const [slug, title] of projects) {
     const tile = grid.locator(`a[href="/gallery/${slug}"]`)
     assert.equal(await tile.count(), 1, `Listed ${title} once`)
@@ -376,12 +426,11 @@ async function verifyGallery(page) {
     await ready(content)
     await content.locator('[data-embedded=true]').waitFor()
     if (slug === 'loonz') {
-      await content.locator('summary', { hasText: 'Use a preset shape' }).click()
-      const add = button(content, 'Add balloon')
+      const add = button(content, 'Add star balloon')
       await add.click()
-      await assertPressed(content, 'Selected balloon', 'Balloon 04')
+      assert.equal(await combo(content, 'Selected balloon').locator('option:checked').innerText(), 'Star 05')
       await add.press('Meta+z')
-      assert.equal(await group(content, 'Selected balloon').getByRole('button').count(), 3)
+      assert.equal(await group(content, 'Selected balloon').getByRole('button').count(), 4)
       assert(await button(content, 'Undo').isDisabled(), 'The gallery window handles its own undo shortcut')
     }
     await button(dialog, 'Close preview').click()

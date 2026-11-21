@@ -125,10 +125,10 @@ export class PlaygroundRenderer {
     };
     this.controls.addEventListener("end", this.onCamera);
     const studio = new THREE.Scene();
-    studio.background = new THREE.Color("#9b8d9a");
+    studio.background = new THREE.Color("#959da8");
     const room = new THREE.Mesh(
       new THREE.BoxGeometry(20, 16, 20),
-      new THREE.MeshBasicMaterial({ color: "#968b96", side: THREE.BackSide }),
+      new THREE.MeshBasicMaterial({ color: "#9098a3", side: THREE.BackSide }),
     );
     studio.add(room);
     const panel = (
@@ -152,8 +152,8 @@ export class PlaygroundRenderer {
     panel([-4, 4, 5], 3, 6, 5);
     panel([4, 2, 3], 1.2, 5, 4);
     panel([0, 7, 0], 7, 3, 5);
-    panel([0, -3, 5], 7, 1.3, 1.6, "#ffb8ce");
-    panel([-5, 0, -3], 2, 4, 2, "#d4dbff");
+    panel([0, -3, 5], 7, 1.3, 1.6, "#ffdbc7");
+    panel([-5, 0, -3], 2, 4, 2, "#d7e7fa");
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.environment = pmrem.fromScene(studio, 0.025);
     this.scene.environment = this.environment.texture;
@@ -164,7 +164,7 @@ export class PlaygroundRenderer {
       }
     });
     pmrem.dispose();
-    this.scene.add(new THREE.HemisphereLight("#ffffff", "#cd779d", 1.7));
+    this.scene.add(new THREE.HemisphereLight("#ffffff", "#92a4bb", 1.7));
     const light = new THREE.DirectionalLight("#fff7f2", 3);
     light.position.set(-3, 7, 5);
     light.castShadow = true;
@@ -179,7 +179,7 @@ export class PlaygroundRenderer {
     this.scene.add(light);
     this.floor = new THREE.Mesh(
       new THREE.PlaneGeometry(200, 200),
-      new THREE.ShadowMaterial({ color: "#57324d", opacity: 0.045 }),
+      new THREE.ShadowMaterial({ color: "#34445a", opacity: 0.045 }),
     );
     this.floor.rotation.x = -Math.PI / 2;
     this.floor.position.y = -1.4;
@@ -190,9 +190,9 @@ export class PlaygroundRenderer {
     shadowCanvas.height = 128;
     const context = shadowCanvas.getContext("2d")!;
     const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
-    gradient.addColorStop(0, "rgba(53,12,38,0.4)");
-    gradient.addColorStop(0.45, "rgba(53,12,38,0.16)");
-    gradient.addColorStop(1, "rgba(53,12,38,0)");
+    gradient.addColorStop(0, "rgba(24,42,64,0.4)");
+    gradient.addColorStop(0.45, "rgba(24,42,64,0.16)");
+    gradient.addColorStop(1, "rgba(24,42,64,0)");
     context.fillStyle = gradient;
     context.fillRect(0, 0, 128, 128);
     this.shadowTexture = new THREE.CanvasTexture(shadowCanvas);

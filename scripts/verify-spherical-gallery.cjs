@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 const assert = require('node:assert/strict')
+const { createHash } = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
@@ -12,6 +13,12 @@ try {
   const { buildGalleryCatalog } = require(path.join(out, 'components/gallery/galleryCatalog.js'))
   const { GALLERY_PALETTES } = require(path.join(out, 'content/galleryArtwork.js'))
   const { PROJECT_PREVIEWS, getProjectPreview } = require(path.join(out, 'content/projectPreviews.js'))
+  for (const asset of Object.values(PROJECT_PREVIEWS['/gallery/loonz'])) {
+    const url = new URL(asset, 'http://localhost')
+    const bytes = fs.readFileSync(path.join(root, 'public', url.pathname))
+    const revision = createHash('sha256').update(bytes).digest('hex').slice(0, 12)
+    assert.equal(url.searchParams.get('v'), revision, `Refresh the cache key for ${url.pathname}`)
+  }
   for (const [href, media] of Object.entries(PROJECT_PREVIEWS)) {
     for (const asset of Object.values(media)) assert(fs.existsSync(path.join(root, 'public', asset.split('?')[0])), `Missing themed asset for ${href}: ${asset}`)
     if (!media.darkPoster) continue

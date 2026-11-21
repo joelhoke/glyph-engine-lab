@@ -1,3 +1,4 @@
+import { CANVAS_THEMES, LANDING_CANVAS_GRADIENT } from "../../../../engine/theme";
 import { prepareOutline, validateOutline } from "./geometry";
 import {
   MAX_BALLOONS,
@@ -5,15 +6,15 @@ import {
   type SceneDocument,
   type Vec2,
 } from "./types";
-export const PALETTE = [
-  "#e9e5e7",
-  "#f54180",
-  "#e8ae38",
-  "#214bea",
-  "#9dc99a",
-  "#b08bdd",
-  "#ec7236",
-];
+const foil = {
+  silver: CANVAS_THEMES.dark.textMuted.toLowerCase(),
+  aqua: "#8fe3f5",
+  copper: "#f2b28a",
+  blue: "#528ed1",
+  teal: CANVAS_THEMES.light.accent.toLowerCase(),
+};
+const palette = Object.values(foil);
+export const DEFAULT_DRAWING_COLOR = foil.teal;
 export function shape(
   kind: "heart" | "flower" | "blob" | "circle" | "star",
 ): Vec2[] {
@@ -48,7 +49,7 @@ export function newBalloon(outline: Vec2[], index: number): Balloon {
     id: crypto.randomUUID(),
     name: `Balloon ${String(index + 1).padStart(2, "0")}`,
     outline,
-    color: PALETTE[index % PALETTE.length],
+    color: palette[index % palette.length],
     position: [0, 0.8, 1],
     rotation: [0, 0, 0],
     scale: 0.85,
@@ -68,26 +69,34 @@ export function defaultScene(): SceneDocument {
     {
       name: "Silver spark",
       kind: "star",
-      color: PALETTE[0],
-      p: [-0.78, 1.6, -0.28],
+      color: foil.silver,
+      p: [-0.76, 1.55, -0.24],
       s: 0.78,
       r: [5, -15, 17],
     },
     {
-      name: "Golden flower",
+      name: "Aqua flower",
       kind: "flower",
-      color: PALETTE[2],
-      p: [0.78, 1.52, -0.16],
+      color: foil.aqua,
+      p: [0.63, 1.57, -0.17],
       s: 0.82,
       r: [-8, -15, 20],
     },
     {
       name: "Love note",
       kind: "heart",
-      color: PALETTE[1],
-      p: [-0.12, 0.36, 0.35],
+      color: foil.copper,
+      p: [-0.59, 0.37, 0.3],
       s: 0.76,
       r: [5, -5, -12],
+    },
+    {
+      name: "Blue circle",
+      kind: "circle",
+      color: foil.blue,
+      p: [0.66, 0.43, 0.12],
+      s: 0.7,
+      r: [-6, 12, 8],
     },
   ];
   return {
@@ -102,7 +111,7 @@ export function defaultScene(): SceneDocument {
       scale: c.s,
       rotation: c.r,
     })),
-    background: "#e9adca",
+    background: LANDING_CANVAS_GRADIENT.dark.color2,
     aspect: "landscape",
     camera: { position: [0, 1.3, 9], target: [0, 0.95, 0] },
     physics: { drift: 0.55, attraction: 0.5, softness: 0.4 },

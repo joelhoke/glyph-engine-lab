@@ -5,7 +5,7 @@
   "captureRecipe": "Capture 48 frames of each running public demo. Supply them as <captureRoot>/<id>/frame-000.png through frame-047.png. PNG and JPEG bytes are accepted. An optional crop.json records x, y, width, height in source pixels. The build script plays captures forward and backward at 12 captured frames per second, yielding an eight-second loop.",
   "sources": {
     "three-gradient": "Local /gallery/three-gradient, cropped to the flower viewport",
-    "droplet": "https://droplet.digital/preview — public animated home screen",
+    "droplet": "The poster shows the home screen at https://droplet.digital/preview. The droplet-gameplay.mp4 hover clip records a live run of Campaign, Stage 1 (Beach) at https://droplet.digital/ with keyboard steering.",
     "cars": "Local /gallery/cars — original vehicle renderer with Auto rotate enabled, cropped to the vehicle",
     "cars-dark": "Public garage runtime with night lighting and Auto rotate enabled — actual dark scene capture",
     "orbit-toy": "prototypes/type-lab/orbit-toy — running public canvas demo",

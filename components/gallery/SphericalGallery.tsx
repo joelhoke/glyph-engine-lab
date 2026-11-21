@@ -100,7 +100,6 @@ export default function SphericalGallery({ items: initialItems }: { items: Galle
       <span className={styles.caption}>
         <span>{item?.category ?? 'Generative study'}{item?.requiresPassword ? ' · Password required' : ''}</span>
         <strong>{item?.title ?? palette?.name}</strong>
-        <span className={styles.openArrow} aria-hidden="true">{item?.action.kind === 'link' ? '↗' : '+'}</span>
       </span>
     </>
   }
